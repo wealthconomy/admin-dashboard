@@ -50,52 +50,52 @@ const stats = [
 
 const mockUsers = [
   {
-    name: "Simon Olabiran Odunayo",
-    email: "simon.olabiran@gmail.com",
+    name: "Simon Smith",
+    email: "simon.smith@wealthconomy.com",
     phone: "+234567889274",
     status: "Active",
     preference: "Mixed Wealth",
     date: "05:45, April 12, 2023",
   },
   {
-    name: "Simon Olabiran Odunayo",
-    email: "simon.olabiran@gmail.com",
-    phone: "+234567889274",
+    name: "Adewale Johnson",
+    email: "adewale.j@gmail.com",
+    phone: "+2348012345678",
     status: "Active",
     preference: "Impact Wealth",
-    date: "05:45, April 12, 2023",
+    date: "10:20, April 13, 2023",
   },
   {
-    name: "Simon Olabiran Odunayo",
-    email: "simon.olabiran@gmail.com",
-    phone: "+234567889274",
+    name: "Chinelo Okoro",
+    email: "c.okoro@outlook.com",
+    phone: "+2347098765432",
     status: "Active",
     preference: "Impact Wealth",
-    date: "05:45, April 12, 2023",
+    date: "14:15, April 14, 2023",
   },
   {
-    name: "Simon Olabiran Odunayo",
-    email: "simon.olabiran@gmail.com",
+    name: "Babatunde Lawal",
+    email: "blawal@wealthconomy.com",
     phone: "+234567889274",
     status: "Active",
     preference: "Impact Wealth",
-    date: "05:45, April 12, 2023",
+    date: "09:30, April 15, 2023",
   },
   {
-    name: "Simon Olabiran Odunayo",
-    email: "simon.olabiran@gmail.com",
-    phone: "+234567889274",
+    name: "Fatima Yusuf",
+    email: "fatima.y@live.com",
+    phone: "+2348123456789",
     status: "Active",
     preference: "Impact Wealth",
-    date: "05:45, April 12, 2023",
+    date: "11:00, April 16, 2023",
   },
   {
-    name: "Simon Olabiran Odunayo",
-    email: "simon.olabiran@gmail.com",
-    phone: "+234567889274",
+    name: "Emeka Obi",
+    email: "emeka.obi@gmail.com",
+    phone: "+2349012345678",
     status: "Active",
     preference: "Impact Wealth",
-    date: "05:45, April 12, 2023",
+    date: "16:45, April 17, 2023",
   },
 ];
 
@@ -108,7 +108,7 @@ export default function OverviewPage() {
   }, []);
 
   return (
-    <div className="space-y-10 group">
+    <div className="bg-white rounded-[20px] p-10 border border-border/50 shadow-sm w-full max-w-[1137px] min-h-[1000px] mx-auto space-y-10 group">
       <div>
         <h1 className="text-2xl font-bold font-outfit text-dark">
           Dashboard Overview
@@ -165,21 +165,12 @@ export default function OverviewPage() {
           <h2 className="text-xl font-bold font-outfit text-dark">
             Users Management
           </h2>
-          <div className="flex items-center gap-4">
-            <div className="relative w-full md:w-80">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate/40" />
-              <Input
-                placeholder="Search for Name, Email, Phone Number"
-                className="pl-9 bg-surface border-none rounded-xl text-sm py-5"
-              />
-            </div>
-            <Link
-              href="#"
-              className="text-primary text-sm font-semibold hover:underline hidden md:block"
-            >
-              Product management
-            </Link>
-          </div>
+          <Link
+            href="#"
+            className="text-primary text-sm font-semibold hover:underline hidden md:block"
+          >
+            Product management
+          </Link>
         </div>
 
         <div className="rounded-xl border border-transparent overflow-hidden">
