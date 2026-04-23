@@ -41,7 +41,7 @@ const stats = [
   },
   {
     title: "Total Users",
-    value: "2154",
+    value: "2,154",
     subtext: "",
     icon: UsersIcon,
     color: "bg-primary/10 text-primary",

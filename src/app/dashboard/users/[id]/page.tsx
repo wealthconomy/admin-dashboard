@@ -14,7 +14,6 @@ import {
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 
 const portfolioItems = [
   {
@@ -75,50 +74,49 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter();
 
   return (
-    <div className="space-y-6">
-      {/* User Header Card */}
-      <div className="bg-white rounded-[30px] p-8 border border-border flex items-center justify-between shadow-sm">
-        <div className="flex items-center gap-6">
-          <Avatar className="h-24 w-24 border-4 border-primary/5">
-            <AvatarImage src={`https://i.pravatar.cc/150?u=${params.id}`} />
-            <AvatarFallback className="bg-primary/5 text-primary text-2xl">
-              S
-            </AvatarFallback>
-          </Avatar>
-          <div>
-            <h1 className="text-2xl font-bold font-outfit text-dark">
-              Simon Smith
-            </h1>
-            <p className="text-slate text-sm font-medium">
-              {params.id || "ID5372527"}
-            </p>
+    <div className="bg-white rounded-[20px] p-10 border border-border/50 shadow-sm w-full max-w-[1137px] min-h-[1000px] mx-auto space-y-10">
+      {/* Back Navigation & User Header */}
+      <div className="space-y-6">
+        <div className="flex items-center justify-between w-full max-w-[1090px] h-[137px] bg-[#F8EEFE33] border-[0.5px] border-[#C5C5C5] rounded-[20px] pl-[20px] pr-[30px] gap-[10px] mx-auto transition-all">
+          <div className="flex items-center gap-[10px]">
+            <Avatar className="h-24 w-24 border-4 border-white shadow-sm">
+              <AvatarImage src={`https://i.pravatar.cc/150?u=${params.id}`} />
+              <AvatarFallback className="bg-primary/5 text-primary text-2xl font-bold">
+                S
+              </AvatarFallback>
+            </Avatar>
+            <div className="space-y-1">
+              <h1 className="text-2xl font-bold font-outfit text-dark tracking-tight">
+                Simon Smith
+              </h1>
+              <p className="text-slate text-sm font-medium opacity-70">
+                {params.id || "ID5372527"}
+              </p>
+            </div>
           </div>
-        </div>
-        <div className="flex items-center gap-4">
-          <Badge className="bg-blue-50 text-blue-500 hover:bg-blue-50 border-none px-4 py-2 rounded-xl gap-2 font-semibold">
-            <div className="w-4 h-4 bg-blue-500 rounded-full flex items-center justify-center">
+          <div className="flex items-center gap-4">
+            <Badge className="bg-[#E7F0FF] text-blue-500 hover:bg-[#E7F0FF] border-none px-4 py-4 rounded-xl gap-2 font-bold text-[10px] uppercase tracking-wider shadow-sm">
               <svg
-                className="w-2.5 h-2.5 text-white"
+                width="16"
+                height="16"
+                viewBox="0 0 20 20"
                 fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
               >
                 <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="4"
-                  d="M5 13l4 4L19 7"
-                ></path>
+                  d="M19.1663 10L17.133 7.675L17.4163 4.6L14.408 3.91667L12.833 1.25L9.99968 2.46667L7.16634 1.25L5.59134 3.90833L2.58301 4.58333L2.86634 7.66667L0.833008 10L2.86634 12.325L2.58301 15.4083L5.59134 16.0917L7.16634 18.75L9.99968 17.525L12.833 18.7417L14.408 16.0833L17.4163 15.4L17.133 12.325L19.1663 10ZM8.40801 13.9333L5.24134 10.7583L6.47468 9.525L8.40801 11.4667L13.283 6.575L14.5163 7.80833L8.40801 13.9333Z"
+                  fill="#1D84D9"
+                />
               </svg>
-            </div>
-            Verified
-          </Badge>
-          <button className="p-2.5 hover:bg-surface rounded-xl transition-all border border-border">
-            <FileText className="h-5 w-5 text-slate" />
-          </button>
-          <button className="p-2.5 hover:bg-surface rounded-xl transition-all border border-border">
-            <MoreVertical className="h-5 w-5 text-slate" />
-          </button>
+              Verified
+            </Badge>
+            <button className="p-2.5 hover:bg-white rounded-xl transition-all border border-[#C5C5C5] shadow-sm bg-white/50">
+              <FileText className="h-5 w-5 text-slate" />
+            </button>
+            <button className="p-2.5 hover:bg-white rounded-xl transition-all border border-[#C5C5C5] shadow-sm bg-white/50">
+              <MoreVertical className="h-5 w-5 text-slate" />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -143,14 +141,14 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
               key={i}
               className="rounded-2xl border-border shadow-none overflow-hidden h-full"
             >
-              <div className="p-5 space-y-4">
+              <div className="p-4 space-y-4">
                 <div className="flex items-center gap-3">
                   <div
                     className={`p-2.5 rounded-xl ${item.bgColor} ${item.color}`}
                   >
                     <item.icon className="h-5 w-5" />
                   </div>
-                  <div className="font-bold text-[13px] text-dark">
+                  <div className="font-bold text-[11px] text-dark">
                     {item.name}
                   </div>
                 </div>
@@ -176,10 +174,13 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
       </div>
 
       {/* Profile Information */}
-      <div className="bg-white rounded-[30px] border border-border shadow-sm overflow-hidden mb-12">
-        <div className="grid grid-cols-1 lg:grid-cols-3 divide-y lg:divide-y-0 lg:divide-x divide-border">
+      <h2 className="text-lg font-bold font-outfit text-dark mt-6">
+        Profile information
+      </h2>
+      <div className="border-t border-b border-border">
+        <div className="grid grid-cols-1 lg:grid-cols-3 lg:divide-x divide-border">
           {/* Basic Info */}
-          <div className="p-8 space-y-8">
+          <div className="p-6 space-y-6">
             <h3 className="text-sm font-bold font-outfit text-dark">Basic</h3>
             <div className="space-y-6">
               <InfoItem label="First name:" value="Simon" />
@@ -195,7 +196,7 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
           </div>
 
           {/* Activities */}
-          <div className="p-8 space-y-8">
+          <div className="p-6 space-y-6">
             <h3 className="text-sm font-bold font-outfit text-dark">
               Activities
             </h3>
@@ -205,12 +206,12 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
               <InfoItem label="Last Login" value="2024-03-02 10:15 UTC" />
               <InfoItem label="Email Verification" value="Enabled" />
               <InfoItem label="Biometric" value="Enabled" />
-              <InfoItem label="KYC Level" value="Level 3 🔥" />
+              <InfoItem label="KYC Level" value="Level 3 🥉" />
             </div>
           </div>
 
           {/* Transactions */}
-          <div className="p-8 space-y-8">
+          <div className="p-6 space-y-6">
             <h3 className="text-sm font-bold font-outfit text-dark">
               Transaction
             </h3>
