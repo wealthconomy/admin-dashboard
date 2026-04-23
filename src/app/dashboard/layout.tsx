@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 interface SubItem {
   name: string;
@@ -277,8 +278,8 @@ export default function DashboardLayout({
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col h-full overflow-hidden">
-        {/* Header */}
-        <div className="z-30 pl-4 pr-8 pt-4 pb-1">
+        {/* Header with Persistent Gap Area */}
+        <div className="z-30 pl-4 pr-8 pt-[21px] pb-5 bg-surface">
           <header className="h-[65px] w-full max-w-[1138.5px] mx-auto bg-white rounded-[20px] py-[10px] px-[29px] flex items-center justify-between shadow-sm border border-border/50">
             <div className="flex items-center gap-4 lg:hidden">
               <button onClick={() => setIsSidebarOpen(true)}>
@@ -364,29 +365,20 @@ export default function DashboardLayout({
                 </button>
               </div>
 
-              <button className="hover:opacity-80 transition-opacity">
-                <svg
-                  width="30"
-                  height="30"
-                  viewBox="0 0 42 42"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <g clipPath="url(#clip0_794_2785)">
-                    <path
-                      fillRule="evenodd"
-                      clipRule="evenodd"
-                      d="M21.5 0.5C24.1921 0.499987 26.8578 1.03022 29.345 2.06044C31.8322 3.09065 34.0921 4.60067 35.9957 6.50426C37.8993 8.40786 39.4093 10.6678 40.4395 13.1549C41.4697 15.6421 42 18.3079 42 21C42 32.3218 32.8218 41.5 21.5 41.5C10.1782 41.5 1 32.3218 1 21C1 9.67819 10.1782 0.5 21.5 0.5ZM23.55 23.05H19.45C14.3748 23.05 10.0176 26.1238 8.13832 30.5115C11.1118 34.6811 15.9884 37.4 21.5 37.4C27.0115 37.4 31.8881 34.6811 34.8617 30.5112C32.9824 26.1238 28.6252 23.05 23.55 23.05ZM21.5 6.64999C18.1034 6.64999 15.35 9.40346 15.35 12.8C15.35 16.1965 18.1034 18.95 21.5 18.95C24.8965 18.95 27.6499 16.1965 27.6499 12.8C27.6499 9.40346 24.8966 6.64999 21.5 6.64999Z"
-                      fill="#155D5F"
-                    />
-                  </g>
-                  <defs>
-                    <clipPath id="clip0_794_2785">
-                      <rect width="42" height="42" fill="white" />
-                    </clipPath>
-                  </defs>
-                </svg>
-              </button>
+              <Link
+                href="/dashboard/settings"
+                className="hover:opacity-80 transition-opacity"
+              >
+                <Avatar className="h-8 w-8 border border-border/50">
+                  <AvatarImage
+                    src="https://i.pravatar.cc/150?u=simon"
+                    alt="Simon Smith"
+                  />
+                  <AvatarFallback className="bg-primary/5 text-primary text-xs font-bold">
+                    SS
+                  </AvatarFallback>
+                </Avatar>
+              </Link>
               <button className="hover:opacity-80 transition-opacity">
                 <svg
                   width="30"
@@ -406,7 +398,7 @@ export default function DashboardLayout({
         </div>
 
         {/* Page Content */}
-        <main className="flex-1 overflow-y-auto pl-4 pr-8 pt-8 pb-8 lg:pl-6 lg:pr-12 lg:pb-12">
+        <main className="flex-1 overflow-y-auto pl-4 pr-8 pb-5 lg:pl-6 lg:pr-12 lg:pb-10">
           {children}
         </main>
       </div>

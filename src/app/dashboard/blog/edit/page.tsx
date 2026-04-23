@@ -1,0 +1,404 @@
+"use client";
+
+import { useState, useRef } from "react";
+import Link from "next/link";
+import Image from "next/image";
+import {
+  ChevronLeft,
+  Upload,
+  Play,
+  Calendar,
+  ChevronDown,
+  Check,
+  X,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+
+const PORTFOLIOS = [
+  "WealthFix",
+  "WealthFlex",
+  "WealthFlow",
+  "WealthGroup",
+  "WealthGoal",
+  "WealthFam",
+];
+
+const formatRelativeDate = (dateStr: string) => {
+  if (!dateStr) return "Just now";
+  const date = new Date(dateStr);
+  const now = new Date();
+  const dDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const dNow = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const diffInMs = now.getTime() - date.getTime();
+  const diffInDays = Math.floor(
+    (dNow.getTime() - dDate.getTime()) / (1000 * 60 * 60 * 24),
+  );
+  if (dDate.getTime() === dNow.getTime()) return "Just now";
+  if (diffInMs < 0) return "Scheduled";
+  if (diffInDays < 7) return `${diffInDays} days ago`;
+  return date
+    .toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    })
+    .replace(/\//g, " / ");
+};
+
+const renderPreviewContent = (text: string) => {
+  if (!text) return "No content provided.";
+
+  return text.split("\n").map((line, i) => {
+    // Headers
+    if (line.startsWith("# ")) {
+      return (
+        <h2
+          key={i}
+          className="text-lg font-bold text-dark mt-4 mb-2 first:mt-0"
+        >
+          {line.slice(2)}
+        </h2>
+      );
+    }
+    if (line.startsWith("## ")) {
+      return (
+        <h3
+          key={i}
+          className="text-base font-bold text-dark mt-3 mb-1 first:mt-0"
+        >
+          {line.slice(3)}
+        </h3>
+      );
+    }
+    // Bold markers (simple implementation)
+    const formattedLine = line.split(/(\*\*.*?\*\*)/g).map((part, j) => {
+      if (part.startsWith("**") && part.endsWith("**")) {
+        return (
+          <strong key={j} className="font-bold text-dark">
+            {part.slice(2, -2)}
+          </strong>
+        );
+      }
+      return part;
+    });
+
+    return (
+      <p
+        key={i}
+        className="min-h-[1.5em] text-slate/70 text-xs leading-relaxed font-medium"
+      >
+        {formattedLine}
+      </p>
+    );
+  });
+};
+
+export default function EditBlogPage() {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [formData, setFormData] = useState({
+    author: "Ayo Ogunseinde",
+    title: "Automation Secrets",
+    content:
+      "# Introduction\nLorem ipsum dolor sit amet, consectetur adipiscing elit. Adipiscing fermentum, ut duis lorem facilisi enim, quis a neque.\n\n## Section 1\nLorem ipsum dolor sit amet, consectetur adipiscing elit. Adipiscing fermentum, ut duis lorem facilisi enim, quis a neque. \n\nThanks for reading!",
+    category: "WealthGoal",
+    date: "2026-04-12",
+    image:
+      "https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=300&auto=format&fit=crop",
+  });
+
+  const [previewData, setPreviewData] = useState<typeof formData | null>({
+    ...formData,
+  });
+
+  const handlePreview = () => {
+    setPreviewData({ ...formData });
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData({ ...formData, image: reader.result as string });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const removeImage = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setFormData({ ...formData, image: "" });
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-[20px] p-10 border border-border/50 shadow-sm w-full max-w-[1137px] min-h-[1000px] mx-auto space-y-10 animate-in fade-in duration-500">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Link href="/dashboard/blog">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="rounded-full hover:bg-surface border border-transparent hover:border-border/50"
+            >
+              <ChevronLeft className="h-5 w-5 text-slate" />
+            </Button>
+          </Link>
+          <div>
+            <h1 className="text-2xl font-bold font-outfit text-dark tracking-tight">
+              Edit blog
+            </h1>
+            <p className="text-slate/40 text-[10px] font-bold uppercase tracking-wider">
+              Edit
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-20">
+          <span className="text-2xl font-bold font-outfit text-dark tracking-tight">
+            Preview
+          </span>
+          <Button className="bg-[#155D5F] hover:bg-[#155D5F]/90 text-white rounded-xl h-12 px-10 font-bold text-sm shadow-xl shadow-primary/20 transition-all active:scale-95">
+            Post
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-0 border-t border-border/50 pt-10">
+        {/* Left: Form */}
+        <div className="lg:col-span-7 lg:pr-10 space-y-8">
+          <div className="space-y-6">
+            <div className="space-y-2.5">
+              <Label className="text-[13px] font-bold text-slate/70 ml-1">
+                Author Name
+              </Label>
+              <Input
+                placeholder="Enter author name"
+                className="h-12 bg-surface/50 border-border/30 rounded-xl px-5 text-sm font-medium focus-visible:ring-primary/20 transition-all border shadow-none"
+                value={formData.author}
+                onChange={(e) =>
+                  setFormData({ ...formData, author: e.target.value })
+                }
+              />
+            </div>
+
+            <div className="space-y-2.5">
+              <Label className="text-[13px] font-bold text-slate/70 ml-1">
+                Title
+              </Label>
+              <Input
+                placeholder="Enter blog title"
+                className="h-12 bg-surface/50 border-border/30 rounded-xl px-5 text-sm font-medium focus-visible:ring-primary/20 transition-all border shadow-none"
+                value={formData.title}
+                onChange={(e) =>
+                  setFormData({ ...formData, title: e.target.value })
+                }
+              />
+            </div>
+
+            <div className="space-y-2.5">
+              <Label className="text-[13px] font-bold text-slate/70 ml-1 flex justify-between items-center">
+                <span>Content</span>
+                <span className="text-[10px] text-slate/40 capitalize font-medium">
+                  Use # for Header, ## for Subheader, **text** for bold
+                </span>
+              </Label>
+              <textarea
+                placeholder="Write your content here..."
+                className="min-h-[350px] w-full bg-surface/50 border border-border/30 rounded-xl p-5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all resize-none shadow-none"
+                value={formData.content}
+                onChange={(e) =>
+                  setFormData({ ...formData, content: e.target.value })
+                }
+              />
+            </div>
+
+            <div className="space-y-2.5">
+              <Label className="text-[13px] font-bold text-slate/70 ml-1">
+                Upload Cover Image
+              </Label>
+              <input
+                type="file"
+                ref={fileInputRef}
+                className="hidden"
+                accept="image/*"
+                onChange={handleImageUpload}
+              />
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className="relative min-h-[120px] w-full rounded-2xl overflow-hidden group cursor-pointer border border-dashed border-border/30 bg-surface/30 px-5 flex items-center justify-center transition-all hover:bg-surface/50"
+              >
+                {formData.image ? (
+                  <div className="flex items-center gap-4">
+                    <div className="relative h-16 w-24 rounded-lg overflow-hidden border border-border/20 shadow-sm">
+                      <Image
+                        src={formData.image}
+                        alt="Cover"
+                        fill
+                        className="object-cover"
+                      />
+                    </div>
+                    <div className="flex flex-col items-start">
+                      <span className="text-xs font-bold text-dark">
+                        Image Selected
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={removeImage}
+                        className="h-7 px-2 text-[10px] font-bold text-red-500 hover:text-red-600 hover:bg-red-50 -ml-2 gap-1.5"
+                      >
+                        <X className="h-3 w-3" />
+                        Remove image
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-2">
+                    <Upload className="h-6 w-6 text-primary mb-1" />
+                    <span className="text-[11px] font-bold text-dark">
+                      Upload cover image
+                    </span>
+                    <span className="text-[10px] font-medium text-slate/50">
+                      Max size 2MB
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2.5">
+                <Label className="text-[13px] font-bold text-slate/70 ml-1">
+                  Schedule Post
+                </Label>
+                <div className="relative">
+                  <Input
+                    type="date"
+                    className="h-12 bg-surface/50 border-border/30 rounded-xl px-5 text-sm font-medium focus-visible:ring-primary/20 transition-all border shadow-none pr-12"
+                    value={formData.date}
+                    onChange={(e) =>
+                      setFormData({ ...formData, date: e.target.value })
+                    }
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2.5">
+                <Label className="text-[13px] font-bold text-slate/70 ml-1">
+                  Select Portfolio
+                </Label>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <div className="h-12 bg-surface/50 border border-border/30 rounded-xl px-4 flex items-center justify-between text-sm font-medium text-dark cursor-pointer hover:bg-surface/80 transition-all">
+                      <span>{formData.category}</span>
+                      <ChevronDown className="h-5 w-5 text-slate/40" />
+                    </div>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="w-[300px] bg-white border border-border/50 rounded-xl shadow-xl p-1 animate-in fade-in zoom-in-95 duration-200">
+                    {PORTFOLIOS.map((item) => (
+                      <DropdownMenuItem
+                        key={item}
+                        className="rounded-lg h-10 px-4 text-sm font-medium text-slate hover:text-dark hover:bg-surface cursor-pointer flex items-center justify-between"
+                        onClick={() =>
+                          setFormData({ ...formData, category: item })
+                        }
+                      >
+                        {item}
+                        {formData.category === item && (
+                          <Check className="h-4 w-4 text-[#155D5F]" />
+                        )}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </div>
+
+            <Button
+              onClick={handlePreview}
+              className="w-full h-12 bg-[#155D5F]/10 hover:bg-[#155D5F]/20 text-[#155D5F] rounded-xl font-bold text-sm flex items-center justify-center gap-2 border border-[#155D5F]/5 transition-all"
+            >
+              Preview
+              <Play className="h-3 w-3 fill-current" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Vertical Divider */}
+        <div className="hidden lg:flex lg:col-span-1 justify-center">
+          <div className="w-[3px] bg-border/40 h-full"></div>
+        </div>
+
+        {/* Right: Preview */}
+        <div className="lg:col-span-4 space-y-6">
+          <div className="p-6 space-y-6 sticky top-8">
+            {previewData && (
+              <div className="animate-in fade-in slide-in-from-right-4 duration-500 space-y-6">
+                <div className="relative h-[200px] w-full rounded-[20px] overflow-hidden bg-white border border-border/20 shadow-sm">
+                  {previewData.image ? (
+                    <Image
+                      src={previewData.image}
+                      alt="Preview"
+                      fill
+                      className="object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-surface flex items-center justify-center">
+                      <Upload className="h-8 w-8 text-slate/20" />
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-4">
+                  <div className="px-3 py-1 bg-red-50 text-[10px] font-bold text-red-500 uppercase tracking-widest inline-block rounded-md">
+                    {previewData.category}
+                  </div>
+
+                  <h1 className="text-xl font-bold font-outfit text-dark leading-tight tracking-tight">
+                    {previewData.title}
+                  </h1>
+
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-full bg-primary/5 border border-primary/10 flex items-center justify-center text-[10px] font-bold text-primary shadow-sm">
+                      {previewData.author[0]?.toUpperCase() || "A"}
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-dark">
+                        {previewData.author}
+                      </p>
+                      <p className="text-[9px] font-semibold text-slate/40 flex items-center gap-1">
+                        {formatRelativeDate(previewData.date)}{" "}
+                        <span className="h-1 w-1 bg-slate/20 rounded-full" /> 4
+                        mins reading
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="pt-4 border-t border-border/50">
+                    <div className="space-y-2">
+                      {renderPreviewContent(previewData.content)}
+                    </div>
+                    <div className="mt-6 text-slate/40 text-[11px] font-bold">
+                      Thanks for reading!
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
