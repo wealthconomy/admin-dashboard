@@ -96,6 +96,7 @@ export default function DashboardLayout({
               src="/logo1.png"
               alt="Wealthconomy Logo"
               fill
+              sizes="(max-width: 768px) 100vw, 269px"
               className="object-contain object-left"
               priority
             />
@@ -340,12 +341,9 @@ export default function DashboardLayout({
                         width="25.4545"
                         height="25.4545"
                         filterUnits="userSpaceOnUse"
-                        color-interpolation-filters="sRGB"
+                        colorInterpolationFilters="sRGB"
                       >
-                        <feFlood
-                          flood-opacity="0"
-                          result="BackgroundImageFix"
-                        />
+                        <feFlood floodOpacity="0" result="BackgroundImageFix" />
                         <feColorMatrix
                           in="SourceAlpha"
                           type="matrix"

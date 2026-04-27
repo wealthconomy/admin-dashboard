@@ -25,9 +25,22 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="h-full antialiased">
-      <body className={`${inter.variable} ${outfit.variable} font-sans min-h-full flex flex-col`}>
+      <body
+        className={`${inter.variable} ${outfit.variable} font-sans min-h-full flex flex-col`}
+      >
         {children}
-        <Toaster position="top-right" />
+        <Toaster
+          position="top-right"
+          toastOptions={{
+            style: {
+              background: "white",
+              color: "#1C1C1C",
+              border: "1px solid rgba(21, 93, 95, 0.1)",
+              borderRadius: "16px",
+            },
+            className: "font-sans font-medium",
+          }}
+        />
       </body>
     </html>
   );
