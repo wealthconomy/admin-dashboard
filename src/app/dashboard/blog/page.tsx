@@ -122,6 +122,18 @@ const scheduledPosts = [
 export default function BlogOverviewPage() {
   const [searchQuery, setSearchQuery] = useState("");
 
+  const filteredArticles = articles.filter(
+    (article) =>
+      article.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      article.category.toLowerCase().includes(searchQuery.toLowerCase()),
+  );
+
+  const filteredScheduledPosts = scheduledPosts.filter(
+    (post) =>
+      post.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      post.category.toLowerCase().includes(searchQuery.toLowerCase()),
+  );
+
   return (
     <div className="bg-white rounded-[20px] p-10 border border-border/50 shadow-sm w-full max-w-[1137px] min-h-[1000px] mx-auto space-y-10 animate-in fade-in duration-500">
       {/* Header Section */}
@@ -166,65 +178,69 @@ export default function BlogOverviewPage() {
         ))}
       </div>
 
-      {/* Search and Filters */}
-      <div className="flex flex-col md:flex-row gap-4 items-center">
-        <div className="relative flex-1 w-full">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate/40" />
-          <Input
-            placeholder="Search for topics or keywords"
-            className="pl-11 h-12 bg-white border-border/50 rounded-xl text-sm font-medium focus-visible:ring-primary/20"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
-      </div>
-
       {/* Published Articles Section */}
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <h2 className="text-lg font-bold text-dark font-outfit">
             Published Articles
           </h2>
-          {/* Removed View all as requested */}
+          <div className="relative w-full sm:max-w-[300px]">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate/40" />
+            <Input
+              placeholder="Search for articles..."
+              className="pl-11 h-11 bg-surface border-border/30 rounded-xl text-sm font-medium focus-visible:ring-primary/20 shadow-none"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {articles.map((article) => (
-            <Link key={article.id} href="/dashboard/blog/edit">
-              <div className="bg-white border border-border/50 rounded-[20px] overflow-hidden group hover:border-primary/30 hover:shadow-md transition-all duration-300 flex flex-col h-full">
-                <div className="relative h-40 w-full overflow-hidden">
-                  <Image
-                    src={article.image}
-                    alt={article.title}
-                    fill
-                    className="object-cover group-hover:scale-105 transition-transform duration-500"
-                  />
-                  <div className="absolute top-3 left-3 bg-white/90 backdrop-blur-sm px-2 py-1 rounded-lg text-[10px] font-bold text-primary uppercase tracking-wider">
-                    {article.category}
+        {filteredArticles.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {filteredArticles.map((article) => (
+              <Link key={article.id} href="/dashboard/blog/edit">
+                <div className="bg-white border border-border/50 rounded-[20px] overflow-hidden group hover:border-primary/30 hover:shadow-md transition-all duration-300 flex flex-col h-full">
+                  <div className="relative h-40 w-full overflow-hidden">
+                    <Image
+                      src={article.image}
+                      alt={article.title}
+                      fill
+                      className="object-cover group-hover:scale-105 transition-transform duration-500"
+                    />
+                    <div className="absolute top-3 left-3 bg-white/90 backdrop-blur-sm px-2 py-1 rounded-lg text-[10px] font-bold text-primary uppercase tracking-wider">
+                      {article.category}
+                    </div>
                   </div>
-                </div>
-                <div className="p-4 space-y-3 flex-1 flex flex-col">
-                  <h3 className="font-bold text-sm text-dark line-clamp-2 leading-tight group-hover:text-primary transition-colors">
-                    {article.title}
-                  </h3>
-                  <div className="mt-auto pt-2 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="h-6 w-6 rounded-full bg-surface border border-border/50 flex items-center justify-center text-[10px] font-bold text-slate">
-                        AO
+                  <div className="p-4 space-y-3 flex-1 flex flex-col">
+                    <h3 className="font-bold text-sm text-dark line-clamp-2 leading-tight group-hover:text-primary transition-colors">
+                      {article.title}
+                    </h3>
+                    <div className="mt-auto pt-2 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="h-6 w-6 rounded-full bg-surface border border-border/50 flex items-center justify-center text-[10px] font-bold text-slate">
+                          AO
+                        </div>
+                        <span className="text-[10px] font-semibold text-slate/70">
+                          {article.author}
+                        </span>
                       </div>
-                      <span className="text-[10px] font-semibold text-slate/70">
-                        {article.author}
+                      <span className="text-[9px] font-medium text-slate/40">
+                        {article.readTime}
                       </span>
                     </div>
-                    <span className="text-[9px] font-medium text-slate/40">
-                      {article.readTime}
-                    </span>
                   </div>
                 </div>
-              </div>
-            </Link>
-          ))}
-        </div>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <div className="py-20 flex flex-col items-center justify-center text-center space-y-3 opacity-40">
+            <Search className="h-10 w-10 text-slate" />
+            <p className="text-sm font-bold font-outfit">
+              No published articles found matching your search
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Scheduled Post Section */}
@@ -233,46 +249,55 @@ export default function BlogOverviewPage() {
           <h2 className="text-lg font-bold text-dark font-outfit">
             Scheduled Post
           </h2>
-          {/* Removed View all as requested */}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {scheduledPosts.map((post) => (
-            <Link key={post.id} href="/dashboard/blog/edit">
-              <div className="bg-white border border-border/50 rounded-[20px] overflow-hidden group hover:border-primary/30 hover:shadow-md transition-all duration-300 flex flex-col h-full">
-                <div className="relative h-40 w-full overflow-hidden">
-                  <Image
-                    src={post.image}
-                    alt={post.title}
-                    fill
-                    className="object-cover group-hover:scale-105 transition-transform duration-500"
-                  />
-                  <div className="absolute top-3 left-3 bg-white/90 backdrop-blur-sm px-2 py-1 rounded-lg text-[10px] font-bold text-primary uppercase tracking-wider">
-                    {post.category}
+        {filteredScheduledPosts.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {filteredScheduledPosts.map((post) => (
+              <Link key={post.id} href="/dashboard/blog/edit">
+                <div className="bg-white border border-border/50 rounded-[20px] overflow-hidden group hover:border-primary/30 hover:shadow-md transition-all duration-300 flex flex-col h-full">
+                  <div className="relative h-40 w-full overflow-hidden">
+                    <Image
+                      src={post.image}
+                      alt={post.title}
+                      fill
+                      className="object-cover group-hover:scale-105 transition-transform duration-500"
+                    />
+                    <div className="absolute top-3 left-3 bg-white/90 backdrop-blur-sm px-2 py-1 rounded-lg text-[10px] font-bold text-primary uppercase tracking-wider">
+                      {post.category}
+                    </div>
                   </div>
-                </div>
-                <div className="p-4 space-y-3 flex-1 flex flex-col">
-                  <h3 className="font-bold text-sm text-dark line-clamp-2 leading-tight group-hover:text-primary transition-colors">
-                    {post.title}
-                  </h3>
-                  <div className="mt-auto pt-2 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="h-6 w-6 rounded-full bg-surface border border-border/50 flex items-center justify-center text-[10px] font-bold text-slate">
-                        AO
+                  <div className="p-4 space-y-3 flex-1 flex flex-col">
+                    <h3 className="font-bold text-sm text-dark line-clamp-2 leading-tight group-hover:text-primary transition-colors">
+                      {post.title}
+                    </h3>
+                    <div className="mt-auto pt-2 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="h-6 w-6 rounded-full bg-surface border border-border/50 flex items-center justify-center text-[10px] font-bold text-slate">
+                          AO
+                        </div>
+                        <span className="text-[10px] font-semibold text-slate/70">
+                          {post.author}
+                        </span>
                       </div>
-                      <span className="text-[10px] font-semibold text-slate/70">
-                        {post.author}
+                      <span className="text-[9px] font-medium text-slate/40">
+                        {post.readTime}
                       </span>
                     </div>
-                    <span className="text-[9px] font-medium text-slate/40">
-                      {post.readTime}
-                    </span>
                   </div>
                 </div>
-              </div>
-            </Link>
-          ))}
-        </div>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          searchQuery && (
+            <div className="py-10 flex flex-col items-center justify-center text-center space-y-3 opacity-40">
+              <p className="text-sm font-bold font-outfit">
+                No scheduled posts found
+              </p>
+            </div>
+          )
+        )}
       </div>
     </div>
   );

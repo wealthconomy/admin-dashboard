@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
 import {
   LayoutDashboard,
@@ -70,13 +70,20 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [expandedItems, setExpandedItems] = useState<string[]>([]);
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   const toggleExpand = (name: string) => {
     setExpandedItems((prev) =>
       prev.includes(name) ? prev.filter((i) => i !== name) : [...prev, name],
     );
+  };
+
+  const handeLogout = () => {
+    setShowLogoutModal(false);
+    router.push("/");
   };
 
   return (
@@ -161,6 +168,7 @@ export default function DashboardLayout({
         <div className="p-4 border-t border-border">
           <Button
             variant="ghost"
+            onClick={() => setShowLogoutModal(true)}
             className="w-full justify-start text-red-500 hover:text-red-600 hover:bg-red-50 gap-3"
           >
             <LogOut className="h-5 w-5" />
@@ -267,7 +275,10 @@ export default function DashboardLayout({
         <div className="p-4 border-t border-border mt-auto">
           <Button
             variant="ghost"
-            onClick={() => setIsSidebarOpen(false)}
+            onClick={() => {
+              setIsSidebarOpen(false);
+              setShowLogoutModal(true);
+            }}
             className="w-full justify-start text-red-500 hover:text-red-600 hover:bg-red-50 gap-3"
           >
             <LogOut className="h-5 w-5" />
@@ -379,7 +390,10 @@ export default function DashboardLayout({
                   </AvatarFallback>
                 </Avatar>
               </Link>
-              <button className="hover:opacity-80 transition-opacity">
+              <button
+                onClick={() => setShowLogoutModal(true)}
+                className="hover:opacity-80 transition-opacity cursor-pointer"
+              >
                 <svg
                   width="30"
                   height="30"
@@ -402,6 +416,48 @@ export default function DashboardLayout({
           {children}
         </main>
       </div>
+
+      {/* Logout Confirmation Modal */}
+      {showLogoutModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            onClick={() => setShowLogoutModal(false)}
+          />
+          <div className="relative bg-white rounded-[24px] p-8 w-full max-w-[400px] shadow-2xl border border-border/50 space-y-6 animate-in zoom-in-95 duration-300">
+            <div className="flex flex-col items-center text-center space-y-4">
+              <div className="h-16 w-16 rounded-full bg-red-50 flex items-center justify-center">
+                <LogOut className="h-8 w-8 text-red-500" />
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-xl font-bold font-outfit text-dark tracking-tight">
+                  Log out of dashboard?
+                </h3>
+                <p className="text-sm font-medium text-slate/50">
+                  Are you sure you want to log out? You will need to enter your
+                  credentials to access the admin panel again.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <Button
+                variant="ghost"
+                onClick={() => setShowLogoutModal(false)}
+                className="h-12 rounded-xl border border-border/50 font-bold text-slate hover:bg-surface transition-all"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handeLogout}
+                className="h-12 rounded-xl bg-red-500 hover:bg-red-600 text-white font-bold shadow-lg shadow-red-500/20 transition-all active:scale-95"
+              >
+                Log out
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
