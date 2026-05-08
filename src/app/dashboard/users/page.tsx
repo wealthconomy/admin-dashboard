@@ -16,7 +16,10 @@ import {
   Calendar,
   AlertCircle,
   Eye,
-  Filter
+  Filter,
+  FileText,
+  Lock,
+  Ban
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -108,6 +111,7 @@ export default function UsersPage() {
   // Suspension Multi-step State
   const [suspendStep, setSuspendStep] = useState(1); 
   const [suspendUser, setSuspendUser] = useState<any | null>(null);
+  const [modalMode, setModalMode] = useState<"suspend" | "block">("suspend");
   const [suspendData, setSuspendData] = useState({
     reason: "",
     duration: "30 Days"
@@ -131,17 +135,28 @@ export default function UsersPage() {
     setIsSubmitting(true);
     
     setTimeout(() => {
-      const isSuspending = suspendUser.status === "Active";
+      const isActivating = suspendUser.status !== "Active";
       setUserList(userList.map(u => 
         u.id === suspendUser.id 
-        ? { ...u, status: isSuspending ? "Suspended" : "Active" } 
+        ? { 
+            ...u, 
+            status: isActivating 
+              ? "Active" 
+              : (modalMode === "block" ? "Blocked" : "Suspended") 
+          } 
         : u
       ));
       setIsSubmitting(false);
       setSuspendUser(null);
       setSuspendStep(1);
       setSuspendData({ reason: "", duration: "30 Days" });
-      toast.success(`User successfully ${isSuspending ? 'suspended' : 'activated'}!`);
+      toast.success(
+        `User successfully ${
+          isActivating 
+            ? "reactivated" 
+            : (modalMode === "block" ? "blocked" : "suspended")
+        }!`
+      );
     }, 1500);
   };
 
@@ -237,8 +252,20 @@ export default function UsersPage() {
                 </TableCell>
                 <TableCell className="py-5 px-6">
                   <div className="flex justify-center">
-                    <Badge className={`${user.status === "Active" ? "bg-emerald-50 text-emerald-600 border-emerald-100/50" : "bg-red-50 text-red-500 border-red-100/50"} px-4 py-1.5 rounded-xl gap-2 font-bold text-[10px] items-center border shadow-none transition-all`}>
-                      <div className={`w-1.5 h-1.5 rounded-full ${user.status === "Active" ? "bg-emerald-500" : "bg-red-500"}`} />
+                    <Badge className={`${
+                      user.status === "Active" 
+                        ? "bg-emerald-50 text-emerald-600 border-emerald-100/50" 
+                        : user.status === "Blocked"
+                        ? "bg-slate-100 text-slate-700 border-slate-200"
+                        : "bg-red-50 text-red-500 border-red-100/50"
+                    } px-4 py-1.5 rounded-xl gap-2 font-bold text-[10px] items-center border shadow-none transition-all`}>
+                      <div className={`w-1.5 h-1.5 rounded-full ${
+                        user.status === "Active" 
+                          ? "bg-emerald-500" 
+                          : user.status === "Blocked"
+                          ? "bg-slate-500"
+                          : "bg-red-500"
+                      }`} />
                       {user.status}
                     </Badge>
                   </div>
@@ -253,14 +280,32 @@ export default function UsersPage() {
                         <MoreVertical className="h-4.5 w-4.5 text-slate/40" />
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-48 rounded-[16px] border-border/50 shadow-xl p-1 animate-in slide-in-from-top-1 duration-200">
+                    <DropdownMenuContent align="end" className="w-52 rounded-[16px] border-border/50 shadow-xl p-1 animate-in slide-in-from-top-1 duration-200">
                       <DropdownMenuItem onClick={() => router.push(`/dashboard/users/${user.id}`)} className="py-2.5 px-4 text-xs font-bold focus:bg-surface text-dark cursor-pointer rounded-xl gap-2">
                          <Eye className="h-3.5 w-3.5 text-primary" />
-                         View Details
+                         View Account
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setSuspendUser(user)} className={`py-2.5 px-4 text-xs font-bold ${user.status === 'Active' ? 'text-red-500 focus:bg-red-50' : 'text-emerald-600 focus:bg-emerald-50'} cursor-pointer rounded-xl gap-2`}>
-                         {user.status === 'Active' ? 'Suspend User' : 'Activate User'}
+                      <DropdownMenuItem onClick={() => router.push(`/dashboard/users/${user.id}/credentials`)} className="py-2.5 px-4 text-xs font-bold focus:bg-surface text-dark cursor-pointer rounded-xl gap-2">
+                         <FileText className="h-3.5 w-3.5 text-blue-500" />
+                         User Credential
                       </DropdownMenuItem>
+                      {user.status === "Active" ? (
+                        <>
+                          <DropdownMenuItem onClick={() => { setSuspendUser(user); setModalMode("suspend"); }} className="py-2.5 px-4 text-xs font-bold text-red-500 focus:bg-red-50 cursor-pointer rounded-xl gap-2">
+                             <Ban className="h-3.5 w-3.5" />
+                             Suspend User
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => { setSuspendUser(user); setModalMode("block"); }} className="py-2.5 px-4 text-xs font-bold text-red-700 focus:bg-red-100 cursor-pointer rounded-xl gap-2">
+                             <Lock className="h-3.5 w-3.5" />
+                             Block User
+                          </DropdownMenuItem>
+                        </>
+                      ) : (
+                        <DropdownMenuItem onClick={() => { setSuspendUser(user); setModalMode(user.status === "Blocked" ? "block" : "suspend"); }} className="py-2.5 px-4 text-xs font-bold text-emerald-600 focus:bg-emerald-50 cursor-pointer rounded-xl gap-2">
+                           <ShieldAlert className="h-3.5 w-3.5" />
+                           Activate User
+                        </DropdownMenuItem>
+                      )}
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </TableCell>
@@ -299,7 +344,9 @@ export default function UsersPage() {
 
                 <div className="space-y-1">
                   <h3 className="text-xl font-bold font-outfit text-dark tracking-tight">
-                    {suspendUser.status === 'Active' ? 'Suspend User' : 'Reactivate User'}
+                    {suspendUser.status === 'Active' 
+                      ? (modalMode === "block" ? 'Block User' : 'Suspend User') 
+                      : 'Reactivate User'}
                   </h3>
                   <p className="text-sm font-medium text-slate/50 leading-relaxed">
                     Account management for <span className="text-dark font-bold">{suspendUser.name}</span>.
@@ -308,7 +355,7 @@ export default function UsersPage() {
 
                 <div className="space-y-5">
                    <div className="space-y-2">
-                      <label className="text-[12px] font-bold text-dark/80 ml-1">Reason for {suspendUser.status === 'Active' ? 'Suspension' : 'Activation'}</label>
+                      <label className="text-[12px] font-bold text-dark/80 ml-1">Reason for {suspendUser.status === 'Active' ? (modalMode === 'block' ? 'Blocking' : 'Suspension') : 'Activation'}</label>
                       <textarea 
                         className="w-full min-h-[90px] p-4 bg-surface/50 border border-border/30 rounded-xl font-medium text-sm focus:ring-1 focus:ring-primary/20 outline-none transition-all resize-none shadow-inner"
                         placeholder="Type the reason here..."
@@ -317,7 +364,7 @@ export default function UsersPage() {
                       />
                    </div>
 
-                   {suspendUser.status === 'Active' && (
+                   {suspendUser.status === 'Active' && modalMode === "suspend" && (
                      <div className="space-y-2">
                         <label className="text-[12px] font-bold text-dark/80 ml-1">Duration</label>
                         <div className="grid grid-cols-2 gap-2">
@@ -339,7 +386,7 @@ export default function UsersPage() {
 
                 <Button 
                   onClick={() => { if(suspendData.reason) setSuspendStep(2); else toast.error("Please provide a reason") }}
-                  className={`w-full h-12 rounded-xl font-bold shadow-lg transition-all active:scale-95 ${suspendUser.status === 'Active' ? 'bg-[#D93F3F] hover:bg-[#C23535] text-white shadow-red-900/10' : 'bg-[#155D5F] hover:bg-[#0F4A4C] text-white shadow-primary/10'}`}
+                  className={`w-full h-12 rounded-xl font-bold shadow-lg transition-all active:scale-95 ${suspendUser.status === 'Active' ? (modalMode === 'block' ? 'bg-[#991B1B] hover:bg-[#7F1D1D] text-white shadow-red-900/10' : 'bg-[#D93F3F] hover:bg-[#C23535] text-white shadow-red-900/10') : 'bg-[#155D5F] hover:bg-[#0F4A4C] text-white shadow-primary/10'}`}
                 >
                   Proceed to Review
                 </Button>
@@ -375,7 +422,9 @@ export default function UsersPage() {
                        <div className="flex justify-between items-start">
                           <p className="text-[10px] font-bold text-slate/30 uppercase tracking-tighter">Action</p>
                           <p className={`text-xs font-bold ${suspendUser.status === 'Active' ? 'text-red-500' : 'text-emerald-600'}`}>
-                             {suspendUser.status === 'Active' ? `Suspend (${suspendData.duration})` : 'Reactivate'}
+                             {suspendUser.status === 'Active' 
+                               ? (modalMode === "block" ? "Block (Permanent)" : `Suspend (${suspendData.duration})`) 
+                               : 'Reactivate'}
                           </p>
                        </div>
                        <div className="space-y-1">
@@ -388,12 +437,12 @@ export default function UsersPage() {
                  <Button 
                    onClick={handleSuspendToggle}
                    disabled={isSubmitting}
-                   className={`w-full h-12 rounded-xl font-bold shadow-lg transition-all active:scale-95 ${suspendUser.status === 'Active' ? 'bg-[#D93F3F] hover:bg-[#C23535] text-white shadow-red-900/10' : 'bg-[#155D5F] hover:bg-[#0F4A4C] text-white shadow-primary/10'}`}
+                   className={`w-full h-12 rounded-xl font-bold shadow-lg transition-all active:scale-95 ${suspendUser.status === 'Active' ? (modalMode === 'block' ? 'bg-[#991B1B] hover:bg-[#7F1D1D] text-white shadow-red-900/10' : 'bg-[#D93F3F] hover:bg-[#C23535] text-white shadow-red-900/10') : 'bg-[#155D5F] hover:bg-[#0F4A4C] text-white shadow-primary/10'}`}
                  >
                    {isSubmitting ? (
                      <Loader2 className="h-4 w-4 animate-spin mx-auto text-white/80" />
                    ) : (
-                    `Confirm ${suspendUser.status === 'Active' ? 'Suspension' : 'Activation'}`
+                    `Confirm ${suspendUser.status === 'Active' ? (modalMode === 'block' ? 'Blocking' : 'Suspension') : 'Activation'}`
                    )}
                  </Button>
               </div>

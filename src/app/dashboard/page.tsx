@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Users,
   Briefcase,
@@ -9,6 +10,10 @@ import {
   Search,
   MoreVertical,
   ArrowUpRight,
+  Eye,
+  FileText,
+  Ban,
+  Lock,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -20,7 +25,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
@@ -100,6 +112,7 @@ const mockUsers = [
 ];
 
 export default function OverviewPage() {
+  const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -271,13 +284,37 @@ export default function OverviewPage() {
                         {user.preference}
                       </TableCell>
                       <TableCell className="text-right">
-                        <button className="p-2 hover:bg-surface rounded-lg transition-colors text-slate/40">
-                          <div className="flex flex-col gap-0.5 items-center">
-                            <div className="w-1 h-1 rounded-full bg-slate/40"></div>
-                            <div className="w-1 h-1 rounded-full bg-gold"></div>
-                            <div className="w-1 h-1 rounded-full bg-slate/40"></div>
-                          </div>
-                        </button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" className="h-8 w-8 p-0 hover:bg-surface rounded-full">
+                              <MoreVertical className="h-4 w-4 text-slate/40" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-48 rounded-[14px] border-border/50 shadow-xl p-1 bg-white">
+                            <DropdownMenuItem
+                              onClick={() => router.push(`/dashboard/users/ID537252${i + 7}`)}
+                              className="py-2.5 px-4 text-xs font-bold focus:bg-surface text-dark cursor-pointer rounded-xl gap-2"
+                            >
+                              <Eye className="h-3.5 w-3.5 text-primary" />
+                              View Account
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => router.push(`/dashboard/users/ID537252${i + 7}/credentials`)}
+                              className="py-2.5 px-4 text-xs font-bold focus:bg-surface text-dark cursor-pointer rounded-xl gap-2"
+                            >
+                              <FileText className="h-3.5 w-3.5 text-blue-500" />
+                              User Credential
+                            </DropdownMenuItem>
+                            <DropdownMenuItem className="py-2.5 px-4 text-xs font-bold focus:bg-surface text-orange-500 cursor-pointer rounded-xl gap-2">
+                              <Lock className="h-3.5 w-3.5" />
+                              Suspend User
+                            </DropdownMenuItem>
+                            <DropdownMenuItem className="py-2.5 px-4 text-xs font-bold focus:bg-surface text-red-600 cursor-pointer rounded-xl gap-2">
+                              <Ban className="h-3.5 w-3.5" />
+                              Block User
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </TableCell>
                     </TableRow>
                   ))}

@@ -4,301 +4,282 @@ import { useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import {
-  Search,
-  Plus,
-  Layout,
-  Eye,
-  Bookmark,
-  MoreVertical,
-  Calendar,
-  Clock,
+  Search, PenLine, Layout, Eye, Bookmark,
+  MoreVertical, Clock, Calendar, BookOpen,
+  Send, FileEdit, CheckCircle2, X
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  DropdownMenu, DropdownMenuContent,
+  DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { toast } from "sonner";
 
-const stats = [
-  {
-    label: "Published Articles",
-    value: "237",
-    icon: Layout,
-    color: "text-primary",
-    bgColor: "bg-primary/5",
-  },
-  {
-    label: "Views",
-    value: "124",
-    icon: Eye,
-    color: "text-emerald-500",
-    bgColor: "bg-emerald-50",
-  },
-  {
-    label: "Bookmarked",
-    value: "98",
-    icon: Bookmark,
-    color: "text-amber-500",
-    bgColor: "bg-amber-50",
-  },
+type ArticleStatus = "published" | "scheduled" | "draft";
+
+interface Article {
+  id: number;
+  title: string;
+  author: string;
+  authorAvatar: string;
+  timeAgo: string;
+  bookmarks: number;
+  views: number;
+  category: string;
+  categoryColor: string;
+  image: string;
+  status: ArticleStatus;
+  scheduledFor?: string;
+}
+
+const CATEGORY_COLORS: Record<string, string> = {
+  WealthFlex: "bg-purple-100 text-purple-700",
+  WealthFam:  "bg-teal-100 text-teal-700",
+  WealthFix:  "bg-blue-100 text-blue-700",
+  WealthFlow: "bg-orange-100 text-orange-700",
+};
+
+const INITIAL_ARTICLES: Article[] = [
+  { id: 1,  title: "Emergency Funds 101",         author: "Ayo Ogunseinde", authorAvatar: "https://i.pravatar.cc/150?u=ayo1",  timeAgo: "7 hours ago", bookmarks: 2, views: 4, category: "WealthFlex", categoryColor: "WealthFlex", image: "https://images.unsplash.com/photo-1554224155-6726b3ff858f?q=80&w=400&h=200&auto=format&fit=crop", status: "published" },
+  { id: 2,  title: "Automation Secrets",           author: "Ayo Ogunseinde", authorAvatar: "https://i.pravatar.cc/150?u=ayo2",  timeAgo: "7 hours ago", bookmarks: 2, views: 4, category: "WealthFam",  categoryColor: "WealthFam",  image: "https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=400&h=200&auto=format&fit=crop", status: "published" },
+  { id: 3,  title: "Automation Secrets",           author: "Ayo Ogunseinde", authorAvatar: "https://i.pravatar.cc/150?u=ayo3",  timeAgo: "7 hours ago", bookmarks: 2, views: 4, category: "WealthFam",  categoryColor: "WealthFam",  image: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=400&h=200&auto=format&fit=crop", status: "published" },
+  { id: 4,  title: "Emergency Funds 101",         author: "Ayo Ogunseinde", authorAvatar: "https://i.pravatar.cc/150?u=ayo4",  timeAgo: "7 hours ago", bookmarks: 2, views: 4, category: "WealthFlex", categoryColor: "WealthFlex", image: "https://images.unsplash.com/photo-1579621970563-ebec7560ff3e?q=80&w=400&h=200&auto=format&fit=crop", status: "published" },
+  { id: 5,  title: "Emergency Funds 101",         author: "Ayo Ogunseinde", authorAvatar: "https://i.pravatar.cc/150?u=ayo5",  timeAgo: "7 hours ago", bookmarks: 2, views: 4, category: "WealthFlex", categoryColor: "WealthFlex", image: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?q=80&w=400&h=200&auto=format&fit=crop", status: "published" },
+  { id: 6,  title: "Automation Secrets",           author: "Ayo Ogunseinde", authorAvatar: "https://i.pravatar.cc/150?u=ayo6",  timeAgo: "7 hours ago", bookmarks: 2, views: 4, category: "WealthFam",  categoryColor: "WealthFam",  image: "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=400&h=200&auto=format&fit=crop", status: "published" },
+  { id: 7,  title: "Automation Secrets",           author: "Ayo Ogunseinde", authorAvatar: "https://i.pravatar.cc/150?u=ayo7",  timeAgo: "7 hours ago", bookmarks: 2, views: 4, category: "WealthFam",  categoryColor: "WealthFam",  image: "https://images.unsplash.com/photo-1504868584819-f8e8b4b6d7e3?q=80&w=400&h=200&auto=format&fit=crop", status: "published" },
+  { id: 8,  title: "Emergency Funds 101",         author: "Ayo Ogunseinde", authorAvatar: "https://i.pravatar.cc/150?u=ayo8",  timeAgo: "7 hours ago", bookmarks: 2, views: 4, category: "WealthFlex", categoryColor: "WealthFlex", image: "https://images.unsplash.com/photo-1526304640581-d334cdbbf45e?q=80&w=400&h=200&auto=format&fit=crop", status: "published" },
+  { id: 9,  title: "Emergency Funds 101",         author: "Ayo Ogunseinde", authorAvatar: "https://i.pravatar.cc/150?u=ayo9",  timeAgo: "7 hours ago", bookmarks: 2, views: 4, category: "WealthFlex", categoryColor: "WealthFlex", image: "https://images.unsplash.com/photo-1554224155-6726b3ff858f?q=80&w=400&h=200&auto=format&fit=crop", status: "scheduled", scheduledFor: "May 15, 2026 · 9:00 AM" },
+  { id: 10, title: "Automation Secrets",           author: "Ayo Ogunseinde", authorAvatar: "https://i.pravatar.cc/150?u=ayo10", timeAgo: "7 hours ago", bookmarks: 2, views: 4, category: "WealthFam",  categoryColor: "WealthFam",  image: "https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=400&h=200&auto=format&fit=crop", status: "scheduled", scheduledFor: "May 16, 2026 · 2:00 PM" },
+  { id: 11, title: "Automation Secrets",           author: "Ayo Ogunseinde", authorAvatar: "https://i.pravatar.cc/150?u=ayo11", timeAgo: "7 hours ago", bookmarks: 2, views: 4, category: "WealthFam",  categoryColor: "WealthFam",  image: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=400&h=200&auto=format&fit=crop", status: "scheduled", scheduledFor: "May 18, 2026 · 10:00 AM" },
+  { id: 12, title: "Emergency Funds 101",         author: "Ayo Ogunseinde", authorAvatar: "https://i.pravatar.cc/150?u=ayo12", timeAgo: "7 hours ago", bookmarks: 2, views: 4, category: "WealthFlex", categoryColor: "WealthFlex", image: "https://images.unsplash.com/photo-1579621970563-ebec7560ff3e?q=80&w=400&h=200&auto=format&fit=crop", status: "scheduled", scheduledFor: "May 20, 2026 · 8:00 AM" },
+  { id: 13, title: "Emergency Funds 101",         author: "Ayo Ogunseinde", authorAvatar: "https://i.pravatar.cc/150?u=ayo13", timeAgo: "3 hours ago",  bookmarks: 0, views: 0, category: "WealthFlex", categoryColor: "WealthFlex", image: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?q=80&w=400&h=200&auto=format&fit=crop", status: "draft" },
+  { id: 14, title: "Automation Secrets",           author: "Ayo Ogunseinde", authorAvatar: "https://i.pravatar.cc/150?u=ayo14", timeAgo: "1 hour ago",   bookmarks: 0, views: 0, category: "WealthFam",  categoryColor: "WealthFam",  image: "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=400&h=200&auto=format&fit=crop", status: "draft" },
+  { id: 15, title: "Automation Secrets",           author: "Ayo Ogunseinde", authorAvatar: "https://i.pravatar.cc/150?u=ayo15", timeAgo: "2 hours ago",  bookmarks: 0, views: 0, category: "WealthFam",  categoryColor: "WealthFam",  image: "https://images.unsplash.com/photo-1504868584819-f8e8b4b6d7e3?q=80&w=400&h=200&auto=format&fit=crop", status: "draft" },
+  { id: 16, title: "Emergency Funds 101",         author: "Ayo Ogunseinde", authorAvatar: "https://i.pravatar.cc/150?u=ayo16", timeAgo: "5 hours ago",  bookmarks: 0, views: 0, category: "WealthFlex", categoryColor: "WealthFlex", image: "https://images.unsplash.com/photo-1526304640581-d334cdbbf45e?q=80&w=400&h=200&auto=format&fit=crop", status: "draft" },
 ];
 
-const articles = [
-  {
-    id: 1,
-    title: "Emergency Funds 101",
-    author: "Ayo Ogunseinde",
-    readTime: "4 mins reading",
-    category: "WealthFlex",
-    image:
-      "https://images.unsplash.com/photo-1554224155-6726b3ff858f?q=80&w=300&h=200&auto=format&fit=crop",
-  },
-  {
-    id: 2,
-    title: "Automation Secrets",
-    author: "Ayo Ogunseinde",
-    readTime: "4 mins reading",
-    category: "WealthFam",
-    image:
-      "https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=300&h=200&auto=format&fit=crop",
-  },
-  {
-    id: 3,
-    title: "Automation Secrets",
-    author: "Ayo Ogunseinde",
-    readTime: "4 mins reading",
-    category: "WealthFam",
-    image:
-      "https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=300&h=200&auto=format&fit=crop",
-  },
-  {
-    id: 4,
-    title: "Emergency Funds 101",
-    author: "Ayo Ogunseinde",
-    readTime: "4 mins reading",
-    category: "WealthFlex",
-    image:
-      "https://images.unsplash.com/photo-1579621970563-ebec7560ff3e?q=80&w=300&h=200&auto=format&fit=crop",
-  },
-];
+function ArticleCard({ article, onPublish }: { article: Article; onPublish: (id: number) => void }) {
+  const router = useRouter();
+  const catColor = CATEGORY_COLORS[article.categoryColor] ?? "bg-slate-100 text-slate-600";
 
-const scheduledPosts = [
-  {
-    id: 5,
-    title: "Emergency Funds 101",
-    author: "Ayo Ogunseinde",
-    readTime: "4 mins reading",
-    category: "WealthFlex",
-    image:
-      "https://images.unsplash.com/photo-1554224155-6726b3ff858f?q=80&w=300&h=200&auto=format&fit=crop",
-  },
-  {
-    id: 6,
-    title: "Automation Secrets",
-    author: "Ayo Ogunseinde",
-    readTime: "4 mins reading",
-    category: "WealthFam",
-    image:
-      "https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=300&h=200&auto=format&fit=crop",
-  },
-  {
-    id: 7,
-    title: "Automation Secrets",
-    author: "Ayo Ogunseinde",
-    readTime: "4 mins reading",
-    category: "WealthFam",
-    image:
-      "https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=300&h=200&auto=format&fit=crop",
-  },
-  {
-    id: 8,
-    title: "Emergency Funds 101",
-    author: "Ayo Ogunseinde",
-    readTime: "4 mins reading",
-    category: "WealthFlex",
-    image:
-      "https://images.unsplash.com/photo-1579621970563-ebec7560ff3e?q=80&w=300&h=200&auto=format&fit=crop",
-  },
-];
+  return (
+    <div className="flex items-start gap-2.5 py-2.5 group">
+      {/* Thumbnail */}
+      <div className="relative h-[68px] w-[90px] rounded-lg overflow-hidden shrink-0">
+        <Image
+          src={article.image}
+          alt={article.title}
+          fill
+          className="object-cover group-hover:scale-105 transition-transform duration-500"
+        />
+      </div>
+
+      {/* Details */}
+      <div className="flex-1 min-w-0 flex flex-col gap-1 pt-0.5">
+        {/* Category badge */}
+        <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full self-start leading-none ${catColor}`}>
+          {article.category}
+        </span>
+
+        {/* Title */}
+        <h3 className="text-[12px] font-bold text-dark leading-snug line-clamp-2 group-hover:text-primary transition-colors">
+          {article.title}
+        </h3>
+
+        {/* Author + meta row */}
+        <div className="flex items-center gap-1.5 mt-0.5">
+          <Avatar className="h-5 w-5 shrink-0 border border-white shadow-sm">
+            <AvatarImage src={article.authorAvatar} />
+            <AvatarFallback className="text-[7px] bg-primary/10 text-primary font-bold">AO</AvatarFallback>
+          </Avatar>
+          <div className="flex flex-col min-w-0">
+            <span className="text-[10px] text-dark font-semibold leading-tight truncate">{article.author}</span>
+            <div className="flex items-center gap-1">
+              {article.status === "published" && (
+                <span className="text-[9px] text-slate/50">{article.bookmarks} Bookmarks</span>
+              )}
+              {article.status === "published" && (
+                <><span className="text-[9px] text-slate/30">•</span>
+                <span className="text-[9px] text-slate/50">{article.views} Views</span></>
+              )}
+              {article.status !== "published" && (
+                <span className="text-[9px] text-slate/50">{article.timeAgo}</span>
+              )}
+              {article.status === "scheduled" && article.scheduledFor && (
+                <><span className="text-[9px] text-slate/30">•</span>
+                <span className="text-[9px] text-orange-500 font-semibold">Scheduled</span></>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Action menu */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button className="shrink-0 p-0.5 mt-1 rounded-lg hover:bg-surface transition-colors text-slate/30 hover:text-slate/60">
+            <MoreVertical className="h-3.5 w-3.5" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-44 rounded-[14px] border-border/50 shadow-xl p-1 bg-white">
+          {/* Edit Article — not shown for scheduled (Reschedule covers it) */}
+          {article.status !== "scheduled" && (
+            <DropdownMenuItem onClick={() => router.push(`/dashboard/blog/edit`)} className="py-2 px-3 text-xs font-bold focus:bg-surface text-dark cursor-pointer rounded-xl gap-2">
+              <FileEdit className="h-3.5 w-3.5 text-primary" /> Edit Article
+            </DropdownMenuItem>
+          )}
+          {article.status === "draft" && (
+            <DropdownMenuItem onClick={() => onPublish(article.id)} className="py-2 px-3 text-xs font-bold focus:bg-surface text-emerald-600 cursor-pointer rounded-xl gap-2">
+              <Send className="h-3.5 w-3.5" /> Publish Now
+            </DropdownMenuItem>
+          )}
+          {article.status === "published" && (
+            <DropdownMenuItem className="py-2 px-3 text-xs font-bold focus:bg-surface text-slate cursor-pointer rounded-xl gap-2">
+              <X className="h-3.5 w-3.5 text-slate/50" /> Unpublish
+            </DropdownMenuItem>
+          )}
+          {article.status === "scheduled" && (
+            <DropdownMenuItem onClick={() => router.push(`/dashboard/blog/edit`)} className="py-2 px-3 text-xs font-bold focus:bg-surface text-orange-500 cursor-pointer rounded-xl gap-2">
+              <Calendar className="h-3.5 w-3.5" /> Reschedule
+            </DropdownMenuItem>
+          )}
+
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+}
 
 export default function BlogOverviewPage() {
   const [searchQuery, setSearchQuery] = useState("");
+  const [articles, setArticles] = useState<Article[]>(INITIAL_ARTICLES);
 
-  const filteredArticles = articles.filter(
-    (article) =>
-      article.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      article.category.toLowerCase().includes(searchQuery.toLowerCase()),
+  const published  = articles.filter((a) => a.status === "published");
+  const scheduled  = articles.filter((a) => a.status === "scheduled");
+  const drafts     = articles.filter((a) => a.status === "draft");
+
+  const filteredPublished = published.filter((a) =>
+    a.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    a.category.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const filteredScheduledPosts = scheduledPosts.filter(
-    (post) =>
-      post.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      post.category.toLowerCase().includes(searchQuery.toLowerCase()),
-  );
+  const handlePublish = (id: number) => {
+    setArticles((prev) =>
+      prev.map((a) => a.id === id ? { ...a, status: "published" as ArticleStatus } : a)
+    );
+    toast.success("Article published successfully!");
+  };
 
   return (
-    <div className="bg-white rounded-[20px] p-10 border border-border/50 shadow-sm w-full max-w-[1137px] min-h-[1000px] mx-auto space-y-10 animate-in fade-in duration-500">
-      {/* Header Section */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <h1 className="text-2xl font-bold font-outfit text-dark tracking-tight">
-          Blogs
-        </h1>
+    <div className="bg-white rounded-[20px] p-8 border border-border/50 shadow-sm w-full max-w-[1137px] min-h-[1000px] mx-auto space-y-8 animate-in fade-in duration-500">
+
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold font-outfit text-dark tracking-tight">Blogs</h1>
         <Link href="/dashboard/blog/new">
-          <Button className="bg-[#155D5F] hover:bg-[#155D5F]/90 text-white rounded-xl h-12 px-6 font-bold text-sm shadow-lg shadow-primary/10 transition-all active:scale-95 flex items-center gap-2 cursor-pointer">
-            <Plus className="h-5 w-5" />
-            Create new blog
+          <Button className="bg-[#155D5F] hover:bg-[#155D5F]/90 text-white rounded-xl h-11 px-5 font-bold text-sm shadow-lg shadow-primary/10 gap-2 cursor-pointer">
+            <PenLine className="h-4 w-4" />
+            Write new blog
           </Button>
         </Link>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {stats.map((stat, i) => (
-          <Card
-            key={i}
-            className="h-[175px] bg-[#F2FFFF] border border-[#155D5F4D] rounded-[20px] shadow-none overflow-hidden transition-all hover:bg-[#E6F9F9]"
-          >
-            <CardContent className="p-5 flex flex-col justify-between h-full relative">
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="text-4xl font-bold font-outfit text-primary mb-1">
-                    {stat.value}
-                  </div>
-                  <div className="text-lg font-semibold text-dark">
-                    {stat.label}
-                  </div>
-                </div>
-                <div
-                  className={`p-2.5 rounded-full ${stat.color} absolute top-3 right-3`}
-                >
-                  <stat.icon className="h-5 w-5 bg-[#E6F9F9] rounded-full" />
-                </div>
-              </div>
-              <div className="mt-4 flex flex-col gap-2.5"></div>
-            </CardContent>
-          </Card>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        {[
+          { label: "Published Articles", value: published.length.toString(), icon: <Layout className="h-5 w-5 text-white" /> },
+          { label: "Views",              value: "124",                        icon: <Eye className="h-5 w-5 text-white" /> },
+          { label: "Bookmarked",         value: "98",                         icon: <Bookmark className="h-5 w-5 text-white" /> },
+        ].map((s, i) => (
+          <div key={i} className="h-[130px] bg-[#F2FFFF] border border-[#155D5F4D] rounded-[20px] flex items-center justify-between px-7 hover:bg-[#E8FAFA] transition-colors">
+            <div>
+              <p className="text-4xl font-bold font-outfit text-primary leading-none">{s.value}</p>
+              <p className="text-sm font-semibold text-primary/80 mt-2">{s.label}</p>
+            </div>
+            <div className="h-11 w-11 rounded-full bg-[#155D5F] flex items-center justify-center shrink-0">
+              {s.icon}
+            </div>
+          </div>
         ))}
       </div>
 
-      {/* Published Articles Section */}
-      <div className="space-y-6">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <h2 className="text-lg font-bold text-dark font-outfit">
-            Published Articles
-          </h2>
-          <div className="relative w-full sm:max-w-[300px]">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate/40" />
-            <Input
-              placeholder="Search for articles..."
-              className="pl-11 h-11 bg-surface border-border/30 rounded-xl text-sm font-medium focus-visible:ring-primary/20 shadow-none"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+      {/* Published Articles */}
+      <div className="space-y-5">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <h2 className="text-lg font-bold text-dark font-outfit shrink-0">Published Articles</h2>
+            <div className="relative w-[200px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate/40" />
+              <Input
+                placeholder="Search for topics or keywords"
+                className="pl-9 h-8 bg-surface border-border/30 rounded-xl text-xs font-medium focus-visible:ring-primary/20 shadow-none"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
           </div>
+          <Link href="#" className="text-primary text-xs font-bold hover:underline shrink-0">View all</Link>
         </div>
 
-        {filteredArticles.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {filteredArticles.map((article) => (
-              <Link key={article.id} href="/dashboard/blog/edit">
-                <div className="bg-white border border-border/50 rounded-[20px] overflow-hidden group hover:border-primary/30 hover:shadow-md transition-all duration-300 flex flex-col h-full">
-                  <div className="relative h-40 w-full overflow-hidden">
-                    <Image
-                      src={article.image}
-                      alt={article.title}
-                      fill
-                      className="object-cover group-hover:scale-105 transition-transform duration-500"
-                    />
-                    <div className="absolute top-3 left-3 bg-white/90 backdrop-blur-sm px-2 py-1 rounded-lg text-[10px] font-bold text-primary uppercase tracking-wider">
-                      {article.category}
-                    </div>
-                  </div>
-                  <div className="p-4 space-y-3 flex-1 flex flex-col">
-                    <h3 className="font-bold text-sm text-dark line-clamp-2 leading-tight group-hover:text-primary transition-colors">
-                      {article.title}
-                    </h3>
-                    <div className="mt-auto pt-2 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className="h-6 w-6 rounded-full bg-surface border border-border/50 flex items-center justify-center text-[10px] font-bold text-slate">
-                          AO
-                        </div>
-                        <span className="text-[10px] font-semibold text-slate/70">
-                          {article.author}
-                        </span>
-                      </div>
-                      <span className="text-[9px] font-medium text-slate/40">
-                        {article.readTime}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        ) : (
-          <div className="py-20 flex flex-col items-center justify-center text-center space-y-3 opacity-40">
-            <Search className="h-10 w-10 text-slate" />
-            <p className="text-sm font-bold font-outfit">
-              No published articles found matching your search
-            </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-1">
+          {filteredPublished.slice(0, 8).map((article) => (
+            <ArticleCard key={article.id} article={article} onPublish={handlePublish} />
+          ))}
+        </div>
+        {filteredPublished.length === 0 && (
+          <div className="py-12 flex flex-col items-center gap-2 text-slate/40">
+            <BookOpen className="h-8 w-8" />
+            <p className="text-sm font-medium">No published articles match your search.</p>
           </div>
         )}
       </div>
 
-      {/* Scheduled Post Section */}
-      <div className="space-y-6 pb-10">
+      {/* Scheduled Posts */}
+      <div className="space-y-5">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold text-dark font-outfit">
-            Scheduled Post
+            Scheduled Post<span className="text-slate/50 font-medium">({scheduled.length})</span>
           </h2>
+          <Link href="#" className="text-primary text-xs font-bold hover:underline">View all</Link>
         </div>
-
-        {filteredScheduledPosts.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {filteredScheduledPosts.map((post) => (
-              <Link key={post.id} href="/dashboard/blog/edit">
-                <div className="bg-white border border-border/50 rounded-[20px] overflow-hidden group hover:border-primary/30 hover:shadow-md transition-all duration-300 flex flex-col h-full">
-                  <div className="relative h-40 w-full overflow-hidden">
-                    <Image
-                      src={post.image}
-                      alt={post.title}
-                      fill
-                      className="object-cover group-hover:scale-105 transition-transform duration-500"
-                    />
-                    <div className="absolute top-3 left-3 bg-white/90 backdrop-blur-sm px-2 py-1 rounded-lg text-[10px] font-bold text-primary uppercase tracking-wider">
-                      {post.category}
-                    </div>
-                  </div>
-                  <div className="p-4 space-y-3 flex-1 flex flex-col">
-                    <h3 className="font-bold text-sm text-dark line-clamp-2 leading-tight group-hover:text-primary transition-colors">
-                      {post.title}
-                    </h3>
-                    <div className="mt-auto pt-2 flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className="h-6 w-6 rounded-full bg-surface border border-border/50 flex items-center justify-center text-[10px] font-bold text-slate">
-                          AO
-                        </div>
-                        <span className="text-[10px] font-semibold text-slate/70">
-                          {post.author}
-                        </span>
-                      </div>
-                      <span className="text-[9px] font-medium text-slate/40">
-                        {post.readTime}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </Link>
-            ))}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-1">
+          {scheduled.slice(0, 4).map((article) => (
+            <ArticleCard key={article.id} article={article} onPublish={handlePublish} />
+          ))}
+        </div>
+        {scheduled.length === 0 && (
+          <div className="py-10 flex flex-col items-center gap-2 text-slate/40">
+            <Clock className="h-6 w-6" />
+            <p className="text-sm font-medium">No scheduled posts.</p>
           </div>
-        ) : (
-          searchQuery && (
-            <div className="py-10 flex flex-col items-center justify-center text-center space-y-3 opacity-40">
-              <p className="text-sm font-bold font-outfit">
-                No scheduled posts found
-              </p>
-            </div>
-          )
         )}
       </div>
+
+      {/* Draft */}
+      <div className="space-y-5">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold text-dark font-outfit">
+            Draft<span className="text-slate/50 font-medium">({drafts.length})</span>
+          </h2>
+          <Link href="#" className="text-primary text-xs font-bold hover:underline">View all</Link>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-1">
+          {drafts.slice(0, 4).map((article) => (
+            <ArticleCard key={article.id} article={article} onPublish={handlePublish} />
+          ))}
+        </div>
+        {drafts.length === 0 && (
+          <div className="py-10 flex flex-col items-center gap-2 text-slate/40">
+            <FileEdit className="h-6 w-6" />
+            <p className="text-sm font-medium">No drafts.</p>
+          </div>
+        )}
+      </div>
+
     </div>
   );
 }
