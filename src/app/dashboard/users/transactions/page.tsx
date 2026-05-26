@@ -27,10 +27,10 @@ const INITIAL_TRANSACTIONS = [
     email: "simon.olabiran@gmail.com",
     amount: "N43,485.00",
     txId: "876543456",
-    actionType: "Funds Transfer",
+    actionType: "Deposit",
     status: "Successful",
     portfolio: "WealthFam",
-    type: "Withdrawal or Deposit",
+    type: "Deposit",
     subtitle: "Funds Received",
     sentFromName: "Simon Peter",
     sentFromBank: "Opay",
@@ -48,10 +48,10 @@ const INITIAL_TRANSACTIONS = [
     email: "simon.olabiran@gmail.com",
     amount: "N43,485.00",
     txId: "876543456",
-    actionType: "Funds Transfer",
+    actionType: "Wealth TopUp",
     status: "Successful",
     portfolio: "WealthFam",
-    type: "Portfolio Top Up",
+    type: "Wealth TopUp",
     subtitle: "Portfolio Transfer",
     sentFromName: null,
     sentFromBank: null,
@@ -70,10 +70,10 @@ const INITIAL_TRANSACTIONS = [
     email: "adewale.j@gmail.com",
     amount: "N15,000.00",
     txId: "876543457",
-    actionType: "Wealth TopUp",
+    actionType: "Deposit",
     status: "Failed",
     portfolio: "WealthFlex",
-    type: "Wealth TopUp",
+    type: "Deposit",
     subtitle: "Deposit",
     sentFromName: "Adewale Johnson",
     sentFromBank: "GTBank",
@@ -91,10 +91,10 @@ const INITIAL_TRANSACTIONS = [
     email: "c.okoro@outlook.com",
     amount: "N50,000.00",
     txId: "876543458",
-    actionType: "Wealth TopUp",
+    actionType: "Deposit",
     status: "Pending",
     portfolio: "WealthFlow",
-    type: "Wealth TopUp",
+    type: "Deposit",
     subtitle: "Deposit",
     sentFromName: "Chinelo Okoro",
     sentFromBank: "Access Bank",
@@ -112,10 +112,10 @@ const INITIAL_TRANSACTIONS = [
     email: "blawal@wealthconomy.com",
     amount: "N120,500.00",
     txId: "876543459",
-    actionType: "Wealth TopUp",
+    actionType: "Deposit",
     status: "Successful",
     portfolio: "WealthFam",
-    type: "Wealth TopUp",
+    type: "Deposit",
     subtitle: "Deposit",
     sentFromName: "Babatunde Lawal",
     sentFromBank: "Zenith Bank",
@@ -379,7 +379,7 @@ export default function TransactionsPage() {
             <div className="bg-white rounded-xl p-4 mb-4">
               <div className="flex items-start justify-between mb-1">
                 <div>
-                  <p className="text-[11px] text-emerald-600 font-bold">Wealth Withdrawal</p>
+                  <p className="text-[11px] text-emerald-600 font-bold">Withdrawal</p>
                   <p className="text-[22px] font-black text-dark leading-tight">-{receiptModal.amount}</p>
                   <p className="text-[11px] text-slate/50 font-medium mt-1">{receiptModal.timestamp} • 03:05pm</p>
                 </div>

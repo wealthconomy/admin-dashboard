@@ -24,9 +24,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="h-full antialiased">
+    <html lang="en" className="h-full antialiased" suppressHydrationWarning>
       <body
         className={`${inter.variable} ${outfit.variable} font-sans min-h-full flex flex-col`}
+        suppressHydrationWarning
       >
         {children}
         <Toaster

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
@@ -8,6 +8,7 @@ import {
   LayoutDashboard,
   Users,
   BookOpen,
+  Library,
   ShieldCheck,
   UserPlus,
   Settings,
@@ -24,6 +25,7 @@ import {
   AlertTriangle,
   Info,
   ShieldAlert,
+  BarChart,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -69,7 +71,9 @@ const sidebarItems: SidebarItem[] = [
       },
     ],
   },
-  { name: "Blog", icon: BookOpen, href: "/dashboard/blog" },
+  { name: "Blog Management", icon: BookOpen, href: "/dashboard/blog" },
+  { name: "Library Management", icon: Library, href: "/dashboard/library" },
+  { name: "Reports & Analytics", icon: BarChart, href: "/dashboard/reports" },
   { name: "Admin Management", icon: ShieldCheck, href: "/dashboard/admin" },
   { name: "Users Referrals", icon: UserPlus, href: "/dashboard/referrals" },
   { name: "Account Settings", icon: Settings, href: "/dashboard/settings" },
@@ -82,6 +86,13 @@ function DashboardHeader({ setIsSidebarOpen, setShowLogoutModal }: {
 }) {
   const router = useRouter();
   const { unreadCount, notifications } = useNotifications();
+  const [adminName, setAdminName] = useState("Admin");
+
+  useEffect(() => {
+    // Attempt to retrieve username from localStorage or another auth source
+    const storedName = localStorage.getItem("adminName") || "Simon"; 
+    setAdminName(storedName);
+  }, []);
 
   return (
     <header className="h-[65px] w-full max-w-[1138.5px] mx-auto bg-white rounded-[20px] py-[10px] px-[29px] flex items-center justify-between shadow-sm border border-border/50">
@@ -96,7 +107,7 @@ function DashboardHeader({ setIsSidebarOpen, setShowLogoutModal }: {
 
       <div className="hidden lg:block">
         <h2 className="text-lg font-bold font-outfit text-dark whitespace-nowrap">
-          Hi Simon
+          Hi {adminName}
         </h2>
       </div>
 

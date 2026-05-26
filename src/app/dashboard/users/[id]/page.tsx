@@ -35,6 +35,7 @@ const portfolioItems = [
   {
     name: "WealthFlex",
     amount: "₦300,735.42",
+    interest: "₦12,500.00",
     icon: Wallet,
     color: "text-red-500",
     bgColor: "bg-red-50",
@@ -42,6 +43,7 @@ const portfolioItems = [
   {
     name: "WealthGoal",
     amount: "₦300,735.42",
+    interest: "₦8,200.00",
     icon: Target,
     color: "text-pink-500",
     bgColor: "bg-pink-50",
@@ -51,6 +53,7 @@ const portfolioItems = [
   {
     name: "WealthFix",
     amount: "₦300,735.42",
+    interest: "₦45,000.00",
     icon: Zap,
     color: "text-orange-500",
     bgColor: "bg-orange-50",
@@ -60,6 +63,7 @@ const portfolioItems = [
   {
     name: "WealthFam",
     amount: "₦300,735.42",
+    interest: "₦0.00",
     icon: Users,
     color: "text-purple-500",
     bgColor: "bg-purple-50",
@@ -69,6 +73,7 @@ const portfolioItems = [
   {
     name: "WealthFlow",
     amount: "₦300,735.42",
+    interest: "₦1,500.00",
     icon: RefreshCcw,
     color: "text-blue-500",
     bgColor: "bg-blue-50",
@@ -78,6 +83,7 @@ const portfolioItems = [
   {
     name: "WealthGroup",
     amount: "₦300,735.42",
+    interest: "₦2,400.00",
     icon: UsersRound,
     color: "text-gray-500",
     bgColor: "bg-gray-50",
@@ -245,8 +251,11 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
                   <div className="text-sm font-bold text-dark">
                     {item.amount}
                   </div>
+                  <div className="text-[11px] font-bold text-emerald-600 mt-1">
+                    +{item.interest} Interest
+                  </div>
                   {item.sub && (
-                    <div className="text-[10px] text-slate/60 mt-1">
+                    <div className="text-[10px] text-slate/60 mt-2">
                       {item.sub}
                     </div>
                   )}

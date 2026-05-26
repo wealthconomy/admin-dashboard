@@ -2,6 +2,7 @@
 
 import { useState, useRef } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import Image from "next/image";
 import {
   ChevronLeft,
@@ -12,6 +13,8 @@ import {
   Info,
   Check,
   X,
+  Smartphone,
+  Globe,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,8 +25,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { toast } from "sonner";
 
 const PORTFOLIOS = [
+  "General",
   "WealthFix",
   "WealthFlex",
   "WealthFlow",
@@ -103,20 +108,36 @@ const renderPreviewContent = (text: string) => {
 };
 
 export default function NewBlogPage() {
+  const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState({
     author: "",
     title: "",
     content: "",
-    category: "WealthFlex",
+    category: "General",
     date: "",
     image: "",
+    publishToApp: true,
+    publishToWeb: true,
   });
 
   const [previewData, setPreviewData] = useState<typeof formData | null>(null);
 
   const handlePreview = () => {
     setPreviewData({ ...formData });
+  };
+
+  const handlePost = () => {
+    if (!formData.title.trim()) { toast.error("Title is required."); return; }
+    if (!formData.author.trim()) { toast.error("Author is required."); return; }
+    if (!formData.content.trim()) { toast.error("Content is required."); return; }
+    if (!formData.publishToApp && !formData.publishToWeb) {
+      toast.error("Please select at least one publishing target.");
+      return;
+    }
+    console.log("Post blog payload:", formData);
+    toast.success("Blog posted successfully!");
+    setTimeout(() => router.push("/dashboard/blog"), 800);
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -160,7 +181,10 @@ export default function NewBlogPage() {
           <span className="text-2xl font-bold font-outfit text-dark tracking-tight">
             Preview
           </span>
-          <Button className="bg-[#155D5F] hover:bg-[#155D5F]/90 text-white rounded-xl h-12 px-10 font-bold text-sm shadow-xl shadow-primary/20 transition-all active:scale-95">
+          <Button 
+            onClick={handlePost}
+            className="bg-[#155D5F] hover:bg-[#155D5F]/90 text-white rounded-xl h-12 px-10 font-bold text-sm shadow-xl shadow-primary/20 transition-all active:scale-95"
+          >
             Post
           </Button>
         </div>
@@ -317,6 +341,61 @@ export default function NewBlogPage() {
               </div>
             </div>
 
+            {/* Publish To Platforms Selection */}
+            <div className="space-y-2.5 border-t border-border/30 pt-6">
+              <Label className="text-[13px] font-bold text-slate/70 ml-1 flex items-center gap-1">
+                <span>Publish To</span>
+                <span className="text-red-500">*</span>
+              </Label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (formData.publishToApp && !formData.publishToWeb) return;
+                    setFormData({ ...formData, publishToApp: !formData.publishToApp });
+                  }}
+                  className={`flex items-start gap-4 p-4 rounded-xl border transition-all text-left ${
+                    formData.publishToApp
+                      ? "border-[#155D5F] bg-[#155D5F]/5"
+                      : "border-border/30 bg-surface/50 text-slate/40 hover:bg-surface/80"
+                  }`}
+                >
+                  <div className={`p-2 rounded-lg ${formData.publishToApp ? "bg-[#155D5F] text-white" : "bg-slate/10 text-slate/40"}`}>
+                    <Smartphone className="h-5 w-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-xs text-dark">Mobile Application</p>
+                    <p className="text-[10px] text-slate/50 mt-1 leading-relaxed">
+                      Publish post to mobile app feed.
+                    </p>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!formData.publishToApp && formData.publishToWeb) return;
+                    setFormData({ ...formData, publishToWeb: !formData.publishToWeb });
+                  }}
+                  className={`flex items-start gap-4 p-4 rounded-xl border transition-all text-left ${
+                    formData.publishToWeb
+                      ? "border-[#155D5F] bg-[#155D5F]/5"
+                      : "border-border/30 bg-surface/50 text-slate/40 hover:bg-surface/80"
+                  }`}
+                >
+                  <div className={`p-2 rounded-lg ${formData.publishToWeb ? "bg-[#155D5F] text-white" : "bg-slate/10 text-slate/40"}`}>
+                    <Globe className="h-5 w-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-xs text-dark">Web Portal</p>
+                    <p className="text-[10px] text-slate/50 mt-1 leading-relaxed">
+                      Publish post to client web portal.
+                    </p>
+                  </div>
+                </button>
+              </div>
+            </div>
+
             <Button
               onClick={handlePreview}
               className="w-full h-12 bg-[#155D5F]/10 hover:bg-[#155D5F]/20 text-[#155D5F] rounded-xl font-bold text-sm flex items-center justify-center gap-2 border border-[#155D5F]/5 transition-all"
@@ -367,8 +446,20 @@ export default function NewBlogPage() {
                 </div>
 
                 <div className="space-y-4">
-                  <div className="px-3 py-1 bg-red-50 text-[10px] font-bold text-red-500 uppercase tracking-widest inline-block rounded-md">
-                    {previewData.category}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="px-3 py-1 bg-red-50 text-[10px] font-bold text-red-500 uppercase tracking-widest inline-block rounded-md">
+                      {previewData.category}
+                    </div>
+                    {previewData.publishToApp && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-100 text-[9px] font-extrabold uppercase tracking-wider">
+                        <Smartphone className="h-2.5 w-2.5" /> App
+                      </span>
+                    )}
+                    {previewData.publishToWeb && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-100 text-[9px] font-extrabold uppercase tracking-wider">
+                        <Globe className="h-2.5 w-2.5" /> Web
+                      </span>
+                    )}
                   </div>
 
                   <h1 className="text-xl font-bold font-outfit text-dark leading-tight tracking-tight">

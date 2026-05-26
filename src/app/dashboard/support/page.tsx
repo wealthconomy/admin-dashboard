@@ -15,6 +15,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 // Mock Data
 const ADMINS = [
@@ -25,6 +31,7 @@ const ADMINS = [
     time: "10:00am",
     status: "online",
     image: "https://i.pravatar.cc/150?u=a1",
+    isAdmin: true,
   },
   {
     id: 2,
@@ -33,6 +40,7 @@ const ADMINS = [
     time: "11:30am",
     status: "online",
     image: "https://i.pravatar.cc/150?u=a2",
+    isAdmin: true,
   },
   {
     id: 3,
@@ -41,6 +49,7 @@ const ADMINS = [
     time: "9:45am",
     status: "online",
     image: "https://i.pravatar.cc/150?u=a3",
+    isAdmin: true,
   },
   {
     id: 4,
@@ -49,6 +58,7 @@ const ADMINS = [
     time: "12:00pm",
     status: "offline",
     image: "https://i.pravatar.cc/150?u=a4",
+    isAdmin: true,
   },
   {
     id: 5,
@@ -57,10 +67,11 @@ const ADMINS = [
     time: "2:00pm",
     status: "online",
     image: "https://i.pravatar.cc/150?u=a5",
+    isAdmin: true,
   },
 ];
 
-const USERS = [
+const INITIAL_USERS = [
   {
     id: 101,
     name: "Alice Thompson",
@@ -69,6 +80,7 @@ const USERS = [
     status: "online",
     image: "https://i.pravatar.cc/150?u=s1",
     unreadCount: 2,
+    stage: "queue", // queue, active, resolved
   },
   {
     id: 102,
@@ -78,6 +90,7 @@ const USERS = [
     status: "online",
     image: "https://i.pravatar.cc/150?u=s2",
     unreadCount: 0,
+    stage: "queue",
   },
   {
     id: 103,
@@ -87,6 +100,7 @@ const USERS = [
     status: "offline",
     image: "https://i.pravatar.cc/150?u=s3",
     unreadCount: 1,
+    stage: "queue",
   },
   {
     id: 104,
@@ -96,6 +110,7 @@ const USERS = [
     status: "online",
     image: "https://i.pravatar.cc/150?u=s4",
     unreadCount: 0,
+    stage: "queue",
   },
   {
     id: 105,
@@ -105,6 +120,7 @@ const USERS = [
     status: "online",
     image: "https://i.pravatar.cc/150?u=s5",
     unreadCount: 5,
+    stage: "queue",
   },
   {
     id: 106,
@@ -114,6 +130,7 @@ const USERS = [
     status: "online",
     image: "https://i.pravatar.cc/150?u=s6",
     unreadCount: 0,
+    stage: "queue",
   },
   {
     id: 107,
@@ -123,6 +140,7 @@ const USERS = [
     status: "online",
     image: "https://i.pravatar.cc/150?u=s7",
     unreadCount: 0,
+    stage: "queue",
   },
   {
     id: 108,
@@ -132,6 +150,7 @@ const USERS = [
     status: "online",
     image: "https://i.pravatar.cc/150?u=s8",
     unreadCount: 0,
+    stage: "queue",
   },
 ];
 
@@ -176,22 +195,26 @@ const INITIAL_MESSAGES = [
 ];
 
 export default function SupportCentrePage() {
+  const [users, setUsers] = useState(INITIAL_USERS);
   const [selectedChat, setSelectedChat] = useState<any | null>(null);
   const [messages, setMessages] = useState(INITIAL_MESSAGES);
   const [inputText, setInputText] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+  const [activeTab, setActiveTab] = useState<"queue" | "active" | "resolved">("queue");
 
-  const filteredUsers = USERS.filter(
+  const filteredUsers = users.filter(
     (user) =>
-      user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.id.toString().includes(searchTerm),
+      user.stage === activeTab &&
+      (user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        user.id.toString().includes(searchTerm)),
   );
 
   const toggleChat = (item: any) => {
     if (selectedChat?.id === item.id) {
       setSelectedChat(null);
     } else {
-      setSelectedChat(item);
+      setSelectedChat({ ...item, unreadCount: 0 });
+      setUsers(users.map((u) => (u.id === item.id ? { ...u, unreadCount: 0 } : u)));
     }
   };
 
@@ -210,11 +233,29 @@ export default function SupportCentrePage() {
     setInputText("");
   };
 
+  const handleClaimChat = (userId: number) => {
+    setUsers(users.map((u) => (u.id === userId ? { ...u, stage: "active" } : u)));
+    setSelectedChat((prev: any) => (prev?.id === userId ? { ...prev, stage: "active" } : prev));
+    setActiveTab("active");
+  };
+
+  const handleCloseChat = (userId: number) => {
+    setUsers(users.map((u) => (u.id === userId ? { ...u, stage: "resolved" } : u)));
+    setSelectedChat((prev: any) => (prev?.id === userId ? { ...prev, stage: "resolved" } : prev));
+    setActiveTab("resolved");
+  };
+
+  const handleReopenChat = (userId: number) => {
+    setUsers(users.map((u) => (u.id === userId ? { ...u, stage: "active" } : u)));
+    setSelectedChat((prev: any) => (prev?.id === userId ? { ...prev, stage: "active" } : prev));
+    setActiveTab("active");
+  };
+
   return (
     <div className="bg-white rounded-[20px] border border-border/50 shadow-sm w-full max-w-[1137px] h-[850px] mx-auto flex overflow-hidden animate-in fade-in duration-500">
       {/* Sidebar */}
-      <aside className="w-[380px] border-r border-border/50 flex flex-col bg-white">
-        <div className="p-6 space-y-6 flex flex-col h-full">
+      <aside className="w-[380px] border-r border-border/50 flex flex-col bg-white shrink-0">
+        <div className="p-6 space-y-6 flex flex-col h-full min-h-0">
           <div className="flex items-center justify-between">
             <h1 className="text-2xl font-bold font-outfit text-dark tracking-tight">
               Chats
@@ -232,7 +273,7 @@ export default function SupportCentrePage() {
           </div>
 
           {/* Admins */}
-          <div className="space-y-3">
+          <div className="space-y-3 shrink-0">
             <h2 className="text-[13px] font-bold text-slate/70 ml-1">Admins</h2>
             <div className="bg-surface/30 border border-border/30 rounded-[20px] p-4 pr-2 flex items-center gap-2 overflow-x-auto custom-scrollbar scrollbar-hide">
               <div className="flex items-center gap-4 min-w-max pr-2">
@@ -269,18 +310,42 @@ export default function SupportCentrePage() {
             </div>
           </div>
 
-          {/* Users */}
+          {/* Users Stage Tabs */}
           <div className="space-y-4 flex-1 flex flex-col min-h-0">
-            <div className="flex items-center justify-between">
-              <h2 className="text-[13px] font-bold text-slate/70 ml-1">
-                Users
-              </h2>
-              <Badge className="bg-[#EF4444] hover:bg-[#EF4444] text-white rounded-lg px-2.5 py-0.5 text-[11px] font-bold border-none">
-                Queue(21)
-              </Badge>
+            <div className="flex bg-surface/80 p-1 rounded-xl gap-1 shrink-0">
+              <button
+                onClick={() => setActiveTab("queue")}
+                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
+                  activeTab === "queue"
+                    ? "bg-white text-[#155D5F] shadow-sm"
+                    : "text-slate/60 hover:text-dark"
+                }`}
+              >
+                Queue ({users.filter((u) => u.stage === "queue").length})
+              </button>
+              <button
+                onClick={() => setActiveTab("active")}
+                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
+                  activeTab === "active"
+                    ? "bg-white text-[#155D5F] shadow-sm"
+                    : "text-slate/60 hover:text-dark"
+                }`}
+              >
+                Active ({users.filter((u) => u.stage === "active").length})
+              </button>
+              <button
+                onClick={() => setActiveTab("resolved")}
+                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
+                  activeTab === "resolved"
+                    ? "bg-white text-[#155D5F] shadow-sm"
+                    : "text-slate/60 hover:text-dark"
+                }`}
+              >
+                Resolved ({users.filter((u) => u.stage === "resolved").length})
+              </button>
             </div>
 
-            <div className="space-y-2 overflow-y-auto pr-2 custom-scrollbar">
+            <div className="space-y-2 overflow-y-auto pr-2 flex-1 custom-scrollbar">
               {filteredUsers.length > 0 ? (
                 filteredUsers.map((user) => (
                   <div
@@ -324,7 +389,7 @@ export default function SupportCentrePage() {
                 <div className="flex flex-col items-center justify-center py-10 text-center space-y-2 opacity-40">
                   <Search className="h-8 w-8 text-slate/40" />
                   <p className="text-xs font-bold font-outfit">
-                    No users found
+                    No users found in {activeTab}
                   </p>
                 </div>
               )}
@@ -334,11 +399,10 @@ export default function SupportCentrePage() {
       </aside>
 
       {/* Chat Area */}
-      <main className="flex-1 flex flex-col bg-white">
+      <main className="flex-1 flex flex-col bg-white min-w-0">
         {!selectedChat ? (
           <div className="flex-1 flex flex-col items-center justify-center text-center p-12 space-y-8 animate-in fade-in zoom-in-95 duration-500">
-            <div className="p-3 bg-surface/50 rounded-full shadow-inner relative">
-              <div className=" " />
+            <div className="p-.5 bg-surface/50 rounded-full shadow-inner relative">
               <Image
                 src="/logo1.png"
                 alt="Logo"
@@ -379,23 +443,76 @@ export default function SupportCentrePage() {
                   <h3 className="text-base font-bold text-dark">
                     {selectedChat.name}
                   </h3>
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-2">
                     <span className="h-2 w-2 rounded-full bg-[#10B981]" />
                     <span className="text-[11px] font-bold text-slate/40 uppercase tracking-wider">
                       Online
                     </span>
+                    {!selectedChat.isAdmin && (
+                      <Badge
+                        className={`text-[10px] px-2 py-0.5 rounded-md ${
+                          selectedChat.stage === "queue"
+                            ? "bg-orange-100 text-orange-600 hover:bg-orange-100"
+                            : selectedChat.stage === "active"
+                              ? "bg-blue-100 text-blue-600 hover:bg-blue-100"
+                              : "bg-green-100 text-green-600 hover:bg-green-100"
+                        }`}
+                      >
+                        {selectedChat.stage === "queue"
+                          ? "In Queue"
+                          : selectedChat.stage === "active"
+                            ? "Active"
+                            : "Resolved"}
+                      </Badge>
+                    )}
                   </div>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="text-slate/40 hover:text-dark rounded-full transition-colors"
-                >
-                  <MoreVertical className="h-5 w-5" />
-                </Button>
-              </div>
+
+              {!selectedChat.isAdmin && (
+                <div className="flex items-center gap-2">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-slate/40 hover:text-dark rounded-full transition-colors outline-none"
+                      >
+                        <MoreVertical className="h-5 w-5" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent
+                      align="end"
+                      className="bg-white rounded-xl shadow-lg border-border/50 w-48 p-2"
+                    >
+                      {selectedChat.stage === "queue" && (
+                        <DropdownMenuItem
+                          onClick={() => handleClaimChat(selectedChat.id)}
+                          className="cursor-pointer font-bold text-xs text-[#155D5F] hover:bg-surface py-2.5 rounded-lg px-3"
+                        >
+                          Claim Chat
+                        </DropdownMenuItem>
+                      )}
+                      {selectedChat.stage === "active" && (
+                        <DropdownMenuItem
+                          onClick={() => handleCloseChat(selectedChat.id)}
+                          className="cursor-pointer font-bold text-xs text-red-600 hover:bg-surface py-2.5 rounded-lg px-3"
+                        >
+                          Close / Resolve Chat
+                        </DropdownMenuItem>
+                      )}
+                      {selectedChat.stage === "resolved" && (
+                        <DropdownMenuItem
+                          onClick={() => handleReopenChat(selectedChat.id)}
+                          className="cursor-pointer font-bold text-xs text-[#155D5F] hover:bg-surface py-2.5 rounded-lg px-3"
+                        >
+                          Reopen / Claim Chat
+                        </DropdownMenuItem>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              )}
             </header>
 
             {/* Messages Area */}

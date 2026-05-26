@@ -11,6 +11,7 @@ import { toast } from "sonner";
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [username, setUsername] = useState("");
   const router = useRouter();
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -20,6 +21,8 @@ export default function LoginPage() {
     // Simulate login
     setTimeout(() => {
       setIsLoading(false);
+      const displayName = username.includes("@") ? username.split("@")[0] : username;
+      localStorage.setItem("adminName", displayName);
       toast.success("Login successful!");
       router.push("/dashboard");
     }, 1500);
@@ -83,13 +86,15 @@ export default function LoginPage() {
           <form onSubmit={handleLogin} className="w-full space-y-6">
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate ml-1">
-                Email or Mobile
+               Username or Email
               </label>
               <div className="relative">
                 <Mail className="absolute left-3 top-3 h-5 w-5 text-slate/40" />
                 <Input
                   type="text"
                   placeholder="Email or Mobile"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
                   className="pl-10 py-6 bg-surface border-none rounded-xl focus-visible:ring-primary/20"
                   required
                 />
