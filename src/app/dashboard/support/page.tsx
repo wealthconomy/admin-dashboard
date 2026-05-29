@@ -32,6 +32,7 @@ const ADMINS = [
     status: "online",
     image: "https://i.pravatar.cc/150?u=a1",
     isAdmin: true,
+    role: "Super Admin",
   },
   {
     id: 2,
@@ -41,6 +42,7 @@ const ADMINS = [
     status: "online",
     image: "https://i.pravatar.cc/150?u=a2",
     isAdmin: true,
+    role: "Admin",
   },
   {
     id: 3,
@@ -50,6 +52,7 @@ const ADMINS = [
     status: "online",
     image: "https://i.pravatar.cc/150?u=a3",
     isAdmin: true,
+    role: "Support Lead",
   },
   {
     id: 4,
@@ -59,6 +62,7 @@ const ADMINS = [
     status: "offline",
     image: "https://i.pravatar.cc/150?u=a4",
     isAdmin: true,
+    role: "SysAdmin",
   },
   {
     id: 5,
@@ -68,6 +72,7 @@ const ADMINS = [
     status: "online",
     image: "https://i.pravatar.cc/150?u=a5",
     isAdmin: true,
+    role: "Content Writer",
   },
 ];
 
@@ -281,7 +286,7 @@ export default function SupportCentrePage() {
                   <div
                     key={admin.id}
                     onClick={() => toggleChat(admin)}
-                    className={`flex flex-col items-center gap-2 cursor-pointer group px-1 rounded-xl transition-all ${selectedChat?.id === admin.id ? "opacity-100 scale-105" : "opacity-70 hover:opacity-100"}`}
+                    className={`flex flex-col items-center gap-1.5 cursor-pointer group px-1.5 py-1 rounded-xl transition-all ${selectedChat?.id === admin.id ? "opacity-100 bg-primary/5 scale-105" : "opacity-70 hover:opacity-100"}`}
                   >
                     <div
                       className={`relative p-0.5 rounded-full ring-2 transition-all ${selectedChat?.id === admin.id ? "ring-primary" : "ring-transparent"}`}
@@ -296,11 +301,16 @@ export default function SupportCentrePage() {
                         <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-[#10B981] border-2 border-white" />
                       )}
                     </div>
-                    <span
-                      className={`text-[10px] font-bold transition-colors ${selectedChat?.id === admin.id ? "text-primary" : "text-slate/60 group-hover:text-dark"}`}
-                    >
-                      {admin.name}
-                    </span>
+                    <div className="flex flex-col items-center min-w-0">
+                      <span
+                        className={`text-[11px] font-bold transition-colors truncate max-w-[65px] ${selectedChat?.id === admin.id ? "text-[#155D5F]" : "text-slate/80 group-hover:text-dark"}`}
+                      >
+                        {admin.name}
+                      </span>
+                      <span className="text-[8.5px] font-extrabold text-slate/40 tracking-tight leading-none truncate max-w-[65px]">
+                        {admin.role}
+                      </span>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -440,8 +450,13 @@ export default function SupportCentrePage() {
                   )}
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-dark">
+                  <h3 className="text-base font-bold text-dark flex items-center gap-2">
                     {selectedChat.name}
+                    {selectedChat.isAdmin && (
+                      <Badge className="bg-primary/5 text-primary border-none text-[9.5px] font-extrabold px-2.5 py-0.5 rounded-full hover:bg-primary/5 select-none">
+                        {selectedChat.role}
+                      </Badge>
+                    )}
                   </h3>
                   <div className="flex items-center gap-2">
                     <span className="h-2 w-2 rounded-full bg-[#10B981]" />

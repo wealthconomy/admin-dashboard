@@ -111,8 +111,64 @@ export function NotificationProvider({
   const [notifications, setNotifications] = useState<Notification[]>(
     INITIAL_NOTIFICATIONS,
   );
+  const [activeProfile, setActiveProfile] = useState<any>(null);
 
-  const unreadCount = notifications.filter((n) => n.status === "unread").length;
+  useEffect(() => {
+    // Read the active administrative profile
+    const getProfile = () => {
+      const p = localStorage.getItem("activeAdminProfile");
+      if (p) {
+        try {
+          setActiveProfile(JSON.parse(p));
+        } catch (e) {
+          setActiveProfile(null);
+        }
+      } else {
+        setActiveProfile(null);
+      }
+    };
+
+    getProfile();
+
+    // Dynamically update context whenever simulated role switcher is toggled
+    const handleStorageChange = () => {
+      getProfile();
+    };
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
+  }, []);
+
+  // Filter notifications according to the active administrator's module privileges
+  const filteredNotifications = notifications.filter((n) => {
+    if (!activeProfile) return true; // Fallback to full list during initial layout mount
+    if (activeProfile.role === "Super Admin") return true; // Super Admin sees all
+
+    const allowed = activeProfile.allowedPages || [];
+
+    // Financial Withdrawal Request alerts
+    if (n.type === "financial") {
+      return allowed.includes("/dashboard/users/transactions") || allowed.includes("*");
+    }
+
+    // Pending KYC uploads lists alerts
+    if (n.type === "management") {
+      return allowed.includes("/dashboard/users") || allowed.includes("*");
+    }
+
+    // Security audits login alerts
+    if (n.type === "security") {
+      return activeProfile.role === "Super Admin" || allowed.includes("*");
+    }
+
+    // General maintenance system alerts
+    if (n.type === "system") {
+      return true;
+    }
+
+    return false;
+  });
+
+  const unreadCount = filteredNotifications.filter((n) => n.status === "unread").length;
 
   const markAsRead = (id: string) => {
     setNotifications((prev) =>
@@ -137,7 +193,7 @@ export function NotificationProvider({
   return (
     <NotificationContext.Provider
       value={{
-        notifications,
+        notifications: filteredNotifications,
         unreadCount,
         markAsRead,
         markAllAsRead,
