@@ -625,7 +625,7 @@ export default function LibraryPage() {
               <div className="flex items-start justify-between">
                 <div>
                   <p className="text-2xl font-bold font-outfit text-primary leading-none">
-                    {totalMaterials}
+                    {totalMaterials.toLocaleString()}
                   </p>
                   <p className="text-[11px] font-semibold text-primary/80 mt-2">
                     Total Materials
@@ -646,7 +646,7 @@ export default function LibraryPage() {
               <div className="flex items-start justify-between">
                 <div>
                   <p className="text-2xl font-bold font-outfit text-primary leading-none">
-                    {totalDocs}
+                    {totalDocs.toLocaleString()}
                   </p>
                   <p className="text-[11px] font-semibold text-primary/80 mt-2">
                     Documents
@@ -666,7 +666,7 @@ export default function LibraryPage() {
               <div className="flex items-start justify-between">
                 <div>
                   <p className="text-2xl font-bold font-outfit text-primary leading-none">
-                    {totalVideos}
+                    {totalVideos.toLocaleString()}
                   </p>
                   <p className="text-[11px] font-semibold text-primary/80 mt-2">
                     Videos
@@ -689,7 +689,7 @@ export default function LibraryPage() {
                   <div className="flex items-start justify-between">
                     <div>
                       <p className="text-2xl font-bold font-outfit text-primary leading-none">
-                        {totalDownloadable}
+                        {totalDownloadable.toLocaleString()}
                       </p>
                       <p className="text-[11px] font-semibold text-primary/80 mt-2">
                         Total Downloads                      </p>
@@ -708,7 +708,7 @@ export default function LibraryPage() {
                   <div className="flex items-start justify-between">
                     <div>
                       <p className="text-2xl font-bold font-outfit text-primary leading-none">
-                        {newUsers}
+                        {newUsers.toLocaleString()}
                       </p>
                       <p className="text-[11px] font-semibold text-primary/80 mt-2">
                         New Users
@@ -729,7 +729,7 @@ export default function LibraryPage() {
                   <div className="flex items-start justify-between">
                     <div>
                       <p className="text-2xl font-bold font-outfit text-primary leading-none">
-                        {returningUsers}
+                        {returningUsers.toLocaleString()}
                       </p>
                       <p className="text-[11px] font-semibold text-primary/80 mt-2">
                         Returning Users
