@@ -22,60 +22,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-// Mock Data
-const ADMINS = [
-  {
-    id: 1,
-    name: "Simon",
-    lastMessage: "Quick update on the... ",
-    time: "10:00am",
-    status: "online",
-    image: "https://i.pravatar.cc/150?u=a1",
-    isAdmin: true,
-    role: "Super Admin",
-  },
-  {
-    id: 2,
-    name: "Fatima",
-    lastMessage: "Ready when you are",
-    time: "11:30am",
-    status: "online",
-    image: "https://i.pravatar.cc/150?u=a2",
-    isAdmin: true,
-    role: "Admin",
-  },
-  {
-    id: 3,
-    name: "Jessica",
-    lastMessage: "Let's review the... ",
-    time: "9:45am",
-    status: "online",
-    image: "https://i.pravatar.cc/150?u=a3",
-    isAdmin: true,
-    role: "Support Lead",
-  },
-  {
-    id: 4,
-    name: "John",
-    lastMessage: "I'll handle the... ",
-    time: "12:00pm",
-    status: "offline",
-    image: "https://i.pravatar.cc/150?u=a4",
-    isAdmin: true,
-    role: "SysAdmin",
-  },
-  {
-    id: 5,
-    name: "Ali",
-    lastMessage: "Meeting in 5",
-    time: "2:00pm",
-    status: "online",
-    image: "https://i.pravatar.cc/150?u=a5",
-    isAdmin: true,
-    role: "Content Writer",
-  },
-];
-
 const INITIAL_USERS = [
   {
     id: 101,
@@ -275,49 +221,6 @@ export default function SupportCentrePage() {
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-11 h-12 bg-surface/50 border-border/30 rounded-2xl text-sm font-medium focus-visible:ring-primary/20 transition-all shadow-none"
             />
-          </div>
-
-          {/* Admins */}
-          <div className="space-y-3 shrink-0">
-            <h2 className="text-[13px] font-bold text-slate/70 ml-1">Admins</h2>
-            <div className="bg-surface/30 border border-border/30 rounded-[20px] p-4 pr-2 flex items-center gap-2 overflow-x-auto custom-scrollbar scrollbar-hide">
-              <div className="flex items-center gap-4 min-w-max pr-2">
-                {ADMINS.map((admin) => (
-                  <div
-                    key={admin.id}
-                    onClick={() => toggleChat(admin)}
-                    className={`flex flex-col items-center gap-1.5 cursor-pointer group px-1.5 py-1 rounded-xl transition-all ${selectedChat?.id === admin.id ? "opacity-100 bg-primary/5 scale-105" : "opacity-70 hover:opacity-100"}`}
-                  >
-                    <div
-                      className={`relative p-0.5 rounded-full ring-2 transition-all ${selectedChat?.id === admin.id ? "ring-primary" : "ring-transparent"}`}
-                    >
-                      <Avatar className="h-10 w-10 border-2 border-white">
-                        <AvatarImage src={admin.image} />
-                        <AvatarFallback className="bg-primary/5 text-[10px] font-bold text-primary">
-                          {admin.name[0]}
-                        </AvatarFallback>
-                      </Avatar>
-                      {admin.status === "online" && (
-                        <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-[#10B981] border-2 border-white" />
-                      )}
-                    </div>
-                    <div className="flex flex-col items-center min-w-0">
-                      <span
-                        className={`text-[11px] font-bold transition-colors truncate max-w-[65px] ${selectedChat?.id === admin.id ? "text-[#155D5F]" : "text-slate/80 group-hover:text-dark"}`}
-                      >
-                        {admin.name}
-                      </span>
-                      <span className="text-[8.5px] font-extrabold text-slate/40 tracking-tight leading-none truncate max-w-[65px]">
-                        {admin.role}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="sticky right-0 flex items-center justify-center bg-surface/90 backdrop-blur-sm h-10 w-8 ml-auto">
-                <ChevronRight className="h-4 w-4 text-slate/40" />
-              </div>
-            </div>
           </div>
 
           {/* Users Stage Tabs */}

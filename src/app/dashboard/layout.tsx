@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/popover";
 import { NotificationProvider, useNotifications } from "@/context/NotificationContext";
 import { toast } from "sonner";
+import { AdminChatWidget } from "@/components/AdminChatWidget";
 
 interface SubItem {
   name: string;
@@ -113,18 +114,8 @@ const MOCK_PROFILES = [
     role: "Admin",
     email: "fatima.y@wealthconomy.com",
     avatar: "https://i.pravatar.cc/150?u=2",
-    // Admin has access to standard tools but NOT Admin Management or System Audit Logs
     allowedPages: [
-      "/dashboard",
-      "/dashboard/users",
-      "/dashboard/users/activities",
-      "/dashboard/users/transactions",
-      "/dashboard/blog",
-      "/dashboard/library",
-      "/dashboard/reports",
-      "/dashboard/referrals",
       "/dashboard/settings",
-      "/dashboard/support",
     ],
   },
   {
@@ -132,11 +123,7 @@ const MOCK_PROFILES = [
     role: "Content Writer",
     email: "ayodeji.a@wealthconomy.com",
     avatar: "https://i.pravatar.cc/150?u=6",
-    // Content writer can only view dashboard, blog engine, library material, and support
     allowedPages: [
-      "/dashboard",
-      "/dashboard/blog",
-      "/dashboard/library",
       "/dashboard/settings",
     ],
   },
@@ -416,7 +403,7 @@ export default function DashboardLayout({
   // RBAC Dynamic Route Check
   const isPageAllowed = !activeProfile || 
                         pathname === "/dashboard/notifications" || // Notification center is universally accessible for all profiles to read their messages
-                        pathname === "/dashboard/support" || // Support Centre is universally accessible so admins can message each other
+                        pathname.startsWith("/dashboard/portfolio/") || // Portfolio plan detail pages inherit dashboard-level access
                         activeProfile.allowedPages.includes("*") || 
                         activeProfile.allowedPages.includes(pathname);
 
@@ -735,6 +722,7 @@ export default function DashboardLayout({
           </div>
         )}
       </div>
+      <AdminChatWidget />
     </NotificationProvider>
   );
 }

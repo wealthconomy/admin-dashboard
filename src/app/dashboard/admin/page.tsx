@@ -67,28 +67,28 @@ const INITIAL_ROLES = [
     id: "role_2",
     name: "Admin",
     description: "Standard administration, cannot view system audit logs or manage other admins.",
-    allowedPages: ["/dashboard", "/dashboard/users", "/dashboard/users/activities", "/dashboard/users/transactions", "/dashboard/blog", "/dashboard/library", "/dashboard/reports", "/dashboard/referrals", "/dashboard/settings", "/dashboard/support"],
+    allowedPages: ["/dashboard/settings"],
     isSystem: true,
   },
   {
     id: "role_3",
     name: "Content Writer",
     description: "Uploads blog material and manages the digital asset library.",
-    allowedPages: ["/dashboard", "/dashboard/blog", "/dashboard/library", "/dashboard/settings"],
+    allowedPages: ["/dashboard/settings"],
     isSystem: false,
   },
   {
     id: "role_4",
     name: "Editor",
     description: "Reviews content uploads, library materials, and handles support operations.",
-    allowedPages: ["/dashboard", "/dashboard/blog", "/dashboard/library", "/dashboard/support", "/dashboard/settings"],
+    allowedPages: ["/dashboard/settings"],
     isSystem: true,
   },
   {
     id: "role_5",
     name: "Viewer",
     description: "Read-only access to overview charts, users directories, and reports.",
-    allowedPages: ["/dashboard", "/dashboard/users", "/dashboard/reports"],
+    allowedPages: ["/dashboard/settings"],
     isSystem: true,
   },
 ];
@@ -113,7 +113,7 @@ const INITIAL_ADMINS = [
     timestamp: "Currently Active",
     image: "https://i.pravatar.cc/150?u=2",
     role: "Admin",
-    allowedPages: ["/dashboard", "/dashboard/users", "/dashboard/users/activities", "/dashboard/users/transactions", "/dashboard/blog", "/dashboard/library", "/dashboard/reports", "/dashboard/referrals", "/dashboard/settings", "/dashboard/support"],
+    allowedPages: ["/dashboard/settings"],
   },
   {
     id: "3",
@@ -123,7 +123,7 @@ const INITIAL_ADMINS = [
     timestamp: "Currently Active",
     image: "https://i.pravatar.cc/150?u=3",
     role: "Editor",
-    allowedPages: ["/dashboard", "/dashboard/blog", "/dashboard/library", "/dashboard/support", "/dashboard/settings"],
+    allowedPages: ["/dashboard/settings"],
   },
   {
     id: "6",
@@ -133,7 +133,7 @@ const INITIAL_ADMINS = [
     timestamp: "10 mins ago",
     image: "https://i.pravatar.cc/150?u=6",
     role: "Content Writer",
-    allowedPages: ["/dashboard", "/dashboard/blog", "/dashboard/library", "/dashboard/settings"],
+    allowedPages: ["/dashboard/settings"],
   },
 ];
 
@@ -169,7 +169,7 @@ export default function AdminManagementPage() {
   const [roleFormData, setRoleFormData] = useState({
     name: "",
     description: "",
-    allowedPages: ["/dashboard"] as string[],
+    allowedPages: ["/dashboard/settings"] as string[],
   });
 
   // Pre-fill pages checkboxes when selected role changes in admin forms
@@ -266,7 +266,7 @@ export default function AdminManagementPage() {
       setRoles([...roles, newRole]);
       setIsSubmitting(false);
       setIsCreateRoleOpen(false);
-      setRoleFormData({ name: "", description: "", allowedPages: ["/dashboard"] });
+      setRoleFormData({ name: "", description: "", allowedPages: ["/dashboard/settings"] });
       toast.success(`Role '${newRole.name}' added with ${newRole.allowedPages.length} default pages!`);
     }, 800);
   };

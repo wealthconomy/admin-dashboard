@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Wallet, Target, Crosshair, Users, Activity, Briefcase } from "lucide-react";
 
 interface PortfolioStatsProps {
@@ -71,12 +72,16 @@ export function PortfolioStats({ timeFilter }: PortfolioStatsProps) {
 
       <div className="flex flex-wrap items-center justify-between gap-[20px]">
         {portfolios.map((portfolio, i) => (
-          <div key={i} className="flex items-start gap-3">
-            <div className={`p-2.5 rounded-full ${portfolio.color} shrink-0`}>
+          <Link
+            key={i}
+            href={`/dashboard/portfolio/${portfolio.name.toLowerCase()}`}
+            className="flex items-start gap-3 rounded-xl p-2 -m-2 hover:bg-surface/70 hover:shadow-sm transition-all duration-200 group cursor-pointer"
+          >
+            <div className={`p-2.5 rounded-full ${portfolio.color} shrink-0 group-hover:scale-105 transition-transform`}>
               <portfolio.icon className="w-5 h-5" />
             </div>
             <div className="space-y-0.5">
-              <h3 className="text-[13px] font-bold text-dark">{portfolio.name}</h3>
+              <h3 className="text-[13px] font-bold text-dark group-hover:text-primary transition-colors">{portfolio.name}</h3>
               <div className="text-[14px] font-bold text-dark">{portfolio.value}</div>
               <div className="text-[10px] flex items-center gap-1.5 whitespace-nowrap">
                 <span className="text-slate">Active: <span className="text-slate">{portfolio.active.toLocaleString()}</span></span>
@@ -86,7 +91,7 @@ export function PortfolioStats({ timeFilter }: PortfolioStatsProps) {
                 <span className="text-[#65D36A]">Completed: {portfolio.completed.toLocaleString()}</span>
               </div>
             </div>
-          </div>
+          </Link>
         ))}
       </div>
     </div>
