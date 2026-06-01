@@ -29,6 +29,7 @@ import {
   Terminal,
   Lock,
   ArrowLeft,
+  Send,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -80,6 +81,7 @@ const sidebarItems: SidebarItem[] = [
   { name: "Library Management", icon: Library, href: "/dashboard/library" },
   { name: "Support Centre", icon: LifeBuoy, href: "/dashboard/support" },
   { name: "Users Referrals", icon: UserPlus, href: "/dashboard/referrals" },
+  { name: "Push Notifications", icon: Send, href: "/dashboard/push-notifications" },
   { name: "Reports & Analytics", icon: BarChart, href: "/dashboard/reports" },
   { name: "Admin Management", icon: ShieldCheck, href: "/dashboard/admin" },
   { name: "System Audit Logs", icon: Terminal, href: "/dashboard/audit-logs" },
@@ -105,6 +107,7 @@ const MOCK_PROFILES = [
       "/dashboard/admin",
       "/dashboard/audit-logs",
       "/dashboard/referrals",
+      "/dashboard/push-notifications",
       "/dashboard/settings",
       "/dashboard/support",
     ],
@@ -440,7 +443,6 @@ export default function DashboardLayout({
                     href={item.href}
                     onClick={(e) => {
                       if (item.hasDropdown) {
-                        e.preventDefault();
                         toggleExpand(item.name);
                       }
                     }}
@@ -545,7 +547,6 @@ export default function DashboardLayout({
                     href={item.href}
                     onClick={(e) => {
                       if (item.hasDropdown) {
-                        e.preventDefault();
                         toggleExpand(item.name);
                       } else {
                         setIsSidebarOpen(false);
