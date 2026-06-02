@@ -130,20 +130,23 @@ const INITIAL_TRANSACTIONS = [
 
 type Tx = (typeof INITIAL_TRANSACTIONS)[0];
 
-const PORTFOLIOS = ["WealthFix", "WealthFlex", "WealthFlow", "WealthFam", "WealthGoal"];
+const STATUSES = ["Successful", "Pending", "Failed"];
+const TYPES = ["Deposit", "Withdrawal", "Wealth TopUp"];
 
 export default function TransactionsPage() {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedPortfolio, setSelectedPortfolio] = useState("All Portfolios");
+  const [statusFilter, setStatusFilter] = useState("All Status");
+  const [typeFilter, setTypeFilter] = useState("All Types");
   const [logModal, setLogModal] = useState<Tx | null>(null);
   const [receiptModal, setReceiptModal] = useState<Tx | null>(null);
 
   const filtered = INITIAL_TRANSACTIONS.filter((tx) => {
     const q = searchQuery.toLowerCase();
     const matchSearch = tx.name.toLowerCase().includes(q) || tx.txId.includes(q) || tx.id.toLowerCase().includes(q) || tx.actionType.toLowerCase().includes(q);
-    const matchPortfolio = selectedPortfolio === "All Portfolios" || tx.portfolio === selectedPortfolio;
-    return matchSearch && matchPortfolio;
+    const matchStatus = statusFilter === "All Status" || tx.status === statusFilter;
+    const matchType = typeFilter === "All Types" || tx.actionType === typeFilter;
+    return matchSearch && matchStatus && matchType;
   });
 
   const statusBadge = (s: string) => {
@@ -181,19 +184,35 @@ export default function TransactionsPage() {
               className="w-full pl-10 pr-4 h-11 bg-surface border-border/30 rounded-xl text-sm font-medium focus-visible:ring-primary/20 shadow-none"
             />
           </div>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" className="h-11 px-5 rounded-xl border-border/50 font-bold text-sm text-slate hover:bg-surface gap-2 shrink-0">
-                Filter <ChevronDown className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-44 rounded-2xl border-border/50 p-2 shadow-xl bg-white">
-              <DropdownMenuItem onClick={() => setSelectedPortfolio("All Portfolios")} className="rounded-xl py-2 px-4 text-sm font-medium cursor-pointer">All Portfolios</DropdownMenuItem>
-              {PORTFOLIOS.map((p) => (
-                <DropdownMenuItem key={p} onClick={() => setSelectedPortfolio(p)} className="rounded-xl py-2 px-4 text-sm font-medium cursor-pointer">{p}</DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <div className="flex gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="h-11 px-4 rounded-xl border-border/50 font-bold text-sm text-slate hover:bg-surface gap-2 shrink-0">
+                  {statusFilter === "All Status" ? "Status" : statusFilter} <ChevronDown className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-40 rounded-2xl border-border/50 p-2 shadow-xl bg-white">
+                <DropdownMenuItem onClick={() => setStatusFilter("All Status")} className="rounded-xl py-2 px-4 text-sm font-medium cursor-pointer">All Status</DropdownMenuItem>
+                {STATUSES.map((s) => (
+                  <DropdownMenuItem key={s} onClick={() => setStatusFilter(s)} className="rounded-xl py-2 px-4 text-sm font-medium cursor-pointer">{s}</DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="h-11 px-4 rounded-xl border-border/50 font-bold text-sm text-slate hover:bg-surface gap-2 shrink-0">
+                  {typeFilter === "All Types" ? "Type" : typeFilter} <ChevronDown className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44 rounded-2xl border-border/50 p-2 shadow-xl bg-white">
+                <DropdownMenuItem onClick={() => setTypeFilter("All Types")} className="rounded-xl py-2 px-4 text-sm font-medium cursor-pointer">All Types</DropdownMenuItem>
+                {TYPES.map((t) => (
+                  <DropdownMenuItem key={t} onClick={() => setTypeFilter(t)} className="rounded-xl py-2 px-4 text-sm font-medium cursor-pointer">{t}</DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </div>
 
