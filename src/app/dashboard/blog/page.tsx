@@ -7,7 +7,7 @@ import {
   Search, PenLine, Layout, Eye, Bookmark,
   MoreVertical, Clock, Calendar, BookOpen,
   Send, FileEdit, CheckCircle2, X, MessageSquare,
-  Heart, User, ThumbsUp, Smartphone, Globe
+  Heart, User, ThumbsUp, Smartphone, Globe, Trash2
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -20,24 +20,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 
-type ArticleStatus = "published" | "scheduled" | "draft";
-
-interface Article {
-  id: number;
-  title: string;
-  author: string;
-  authorAvatar: string;
-  timeAgo: string;
-  bookmarks: number;
-  views: number;
-  category: string;
-  categoryColor: string;
-  image: string;
-  status: ArticleStatus;
-  scheduledFor?: string;
-  publishToApp?: boolean;
-  publishToWeb?: boolean;
-}
+import { Article, ArticleStatus, BlogCommentsModal, ConfirmActionModal } from "./shared";
 
 const CATEGORY_COLORS: Record<string, string> = {
   WealthFlex: "bg-purple-100 text-purple-700",
@@ -65,203 +48,19 @@ const INITIAL_ARTICLES: Article[] = [
   { id: 16, title: "Emergency Funds 101",         author: "Ayo Ogunseinde", authorAvatar: "https://i.pravatar.cc/150?u=ayo16", timeAgo: "5 hours ago",  bookmarks: 0, views: 0, category: "WealthFlex", categoryColor: "WealthFlex", image: "https://images.unsplash.com/photo-1526304640581-d334cdbbf45e?q=80&w=400&h=200&auto=format&fit=crop", status: "draft", publishToApp: true, publishToWeb: true },
 ];
 
-// ─── Blog Comments & Reactions Detail Modal ─────────────────────────
 
-interface BlogReactionComment {
-  id: string;
-  userName: string;
-  userRole: string;
-  content: string;
-  timeAgo: string;
-  likes: number;
-}
-
-const MOCK_BLOG_ENGAGEMENT: Record<
-  number,
-  {
-    likes: { user: string; role: string }[];
-    comments: BlogReactionComment[];
-  }
-> = {
-  1: {
-    likes: [
-      { user: "Sarah Jenkins", role: "Investor" },
-      { user: "Michael Chen", role: "Entrepreneur" },
-    ],
-    comments: [
-      {
-        id: "bc1",
-        userName: "Sarah Jenkins",
-        userRole: "Investor",
-        content: "Super helpful breakdown of how much emergency savings to keep. 3-6 months is definitely a sweet spot!",
-        timeAgo: "2 days ago",
-        likes: 4,
-      },
-    ],
-  },
-  2: {
-    likes: [
-      { user: "Jessica Taylor", role: "Investor" },
-    ],
-    comments: [],
-  },
-};
-
-function BlogCommentsModal({
-  article,
-  onClose,
-}: {
-  article: Article;
-  onClose: () => void;
-}) {
-  const engagement = MOCK_BLOG_ENGAGEMENT[article.id] || {
-    likes: [],
-    comments: [],
-  };
-
-  const [activeTab, setActiveTab] = useState<"likes" | "comments">("comments");
-
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-200">
-      <div
-        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-        onClick={onClose}
-      />
-      <div className="relative bg-white rounded-[24px] p-6 w-full max-w-[580px] h-[520px] flex flex-col shadow-2xl border border-border/50 animate-in zoom-in-95 duration-200">
-        {/* Close Button */}
-        <button
-          onClick={onClose}
-          className="absolute top-5 right-5 p-1.5 rounded-full hover:bg-surface text-slate/50 hover:text-slate transition-all"
-        >
-          <X className="h-5 w-5" />
-        </button>
-
-        {/* Modal Header */}
-        <div className="mb-5 pr-8">
-          <span className="text-[10px] uppercase tracking-wider font-extrabold text-primary bg-primary/5 px-2.5 py-1 rounded-full">
-            Blog Engagement Details
-          </span>
-          <h3 className="text-lg font-bold font-outfit text-dark tracking-tight mt-2 line-clamp-1">
-            {article.title}
-          </h3>
-          <p className="text-xs text-slate/50 mt-1">
-            Author: <span className="font-bold text-dark">{article.author}</span> · Views: <span className="font-bold text-dark">{article.views}</span>
-          </p>
-        </div>
-
-        {/* Tabs */}
-        <div className="flex border-b border-border/40 mb-4">
-          <button
-            onClick={() => setActiveTab("comments")}
-            className={`flex-1 pb-3 text-sm font-bold transition-all border-b-2 ${
-              activeTab === "comments"
-                ? "border-primary text-primary"
-                : "border-transparent text-slate/40 hover:text-slate"
-            }`}
-          >
-            Comments ({engagement.comments.length})
-          </button>
-          <button
-            onClick={() => setActiveTab("likes")}
-            className={`flex-1 pb-3 text-sm font-bold transition-all border-b-2 ${
-              activeTab === "likes"
-                ? "border-primary text-primary"
-                : "border-transparent text-slate/40 hover:text-slate"
-            }`}
-          >
-            Liked By ({engagement.likes.length > 0 ? engagement.likes.length : article.bookmarks})
-          </button>
-        </div>
-
-        {/* Tab Content */}
-        <div className="flex-1 overflow-y-auto pr-1">
-          {activeTab === "comments" ? (
-            engagement.comments.length > 0 ? (
-              <div className="space-y-4">
-                {engagement.comments.map((comment) => (
-                  <div
-                    key={comment.id}
-                    className="p-4 rounded-2xl bg-surface/30 border border-border/10 space-y-2"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs">
-                          {comment.userName.charAt(0)}
-                        </div>
-                        <div>
-                          <p className="text-xs font-bold text-dark">
-                            {comment.userName}
-                          </p>
-                          <p className="text-[10px] text-slate/40">
-                            {comment.userRole}
-                          </p>
-                        </div>
-                      </div>
-                      <span className="text-[10px] text-slate/40 font-medium">
-                        {comment.timeAgo}
-                      </span>
-                    </div>
-                    <p className="text-xs text-dark font-medium leading-relaxed">
-                      {comment.content}
-                    </p>
-                    <div className="flex items-center gap-1 text-[10px] text-slate/40 font-bold pt-1">
-                      <Heart className="h-3 w-3 text-red-500 fill-red-500" />
-                      <span>{comment.likes} likes</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="h-full flex flex-col items-center justify-center text-slate/40">
-                <MessageSquare className="h-10 w-10 opacity-20 mb-2" />
-                <p className="text-xs font-semibold">No comments posted yet.</p>
-              </div>
-            )
-          ) : (
-            <div className="space-y-2">
-              {engagement.likes.length > 0 ? (
-                engagement.likes.map((like, index) => (
-                  <div
-                    key={index}
-                    className="flex items-center justify-between p-3 hover:bg-surface/30 rounded-xl transition-all"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="h-7 w-7 rounded-full bg-primary/5 text-primary flex items-center justify-center font-bold text-[11px]">
-                        {like.user.charAt(0)}
-                      </div>
-                      <div>
-                        <p className="text-xs font-bold text-dark">
-                          {like.user}
-                        </p>
-                        <p className="text-[9px] text-slate/40">{like.role}</p>
-                      </div>
-                    </div>
-                    <div className="h-6 w-6 rounded-full bg-red-50 flex items-center justify-center">
-                      <Heart className="h-3 w-3 text-red-500 fill-red-500" />
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="h-full flex flex-col items-center justify-center text-slate/40">
-                  <ThumbsUp className="h-10 w-10 opacity-20 mb-2" />
-                  <p className="text-xs font-semibold">No bookmarks or likes recorded.</p>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function ArticleCard({
   article,
   onPublish,
+  onUnpublish,
+  onDelete,
   onViewEngagement,
 }: {
   article: Article;
   onPublish: (id: number) => void;
+  onUnpublish: (id: number) => void;
+  onDelete: (id: number) => void;
   onViewEngagement: (article: Article) => void;
 }) {
   const router = useRouter();
@@ -356,7 +155,7 @@ function ArticleCard({
             </DropdownMenuItem>
           )}
           {article.status === "published" && (
-            <DropdownMenuItem className="py-2 px-3 text-xs font-bold focus:bg-surface text-slate cursor-pointer rounded-xl gap-2">
+            <DropdownMenuItem onClick={() => onUnpublish(article.id)} className="py-2 px-3 text-xs font-bold focus:bg-surface text-slate cursor-pointer rounded-xl gap-2">
               <X className="h-3.5 w-3.5 text-slate/50" /> Unpublish
             </DropdownMenuItem>
           )}
@@ -365,7 +164,9 @@ function ArticleCard({
               <Calendar className="h-3.5 w-3.5" /> Reschedule
             </DropdownMenuItem>
           )}
-
+          <DropdownMenuItem onClick={() => onDelete(article.id)} className="py-2 px-3 text-xs font-bold focus:bg-red-50 text-red-600 cursor-pointer rounded-xl gap-2 mt-0.5">
+            <Trash2 className="h-3.5 w-3.5" /> Delete Article
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
@@ -376,6 +177,21 @@ export default function BlogOverviewPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [articles, setArticles] = useState<Article[]>(INITIAL_ARTICLES);
   const [viewingBlogComments, setViewingBlogComments] = useState<Article | null>(null);
+  
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    description: string;
+    confirmText: string;
+    isDanger?: boolean;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: "",
+    description: "",
+    confirmText: "",
+    onConfirm: () => {}
+  });
 
   const published  = articles.filter((a) => a.status === "published");
   const scheduled  = articles.filter((a) => a.status === "scheduled");
@@ -393,12 +209,55 @@ export default function BlogOverviewPage() {
     toast.success("Article published successfully!");
   };
 
+  const handleUnpublish = (id: number) => {
+    setConfirmModal({
+      isOpen: true,
+      title: "Unpublish Article",
+      description: "Are you sure you want to unpublish this article? It will be moved to drafts.",
+      confirmText: "Unpublish",
+      isDanger: false,
+      onConfirm: () => {
+        setArticles((prev) =>
+          prev.map((a) => a.id === id ? { ...a, status: "draft" as ArticleStatus } : a)
+        );
+        toast.success("Article unpublished and moved to drafts.");
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+      }
+    });
+  };
+
+  const handleDelete = (id: number) => {
+    setConfirmModal({
+      isOpen: true,
+      title: "Delete Article",
+      description: "Are you sure you want to delete this article? This action cannot be undone.",
+      confirmText: "Delete",
+      isDanger: true,
+      onConfirm: () => {
+        setArticles((prev) => prev.filter((a) => a.id !== id));
+        toast.success("Article deleted successfully.");
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+      }
+    });
+  };
+
   return (
     <>
       {viewingBlogComments && (
         <BlogCommentsModal
           article={viewingBlogComments}
           onClose={() => setViewingBlogComments(null)}
+        />
+      )}
+
+      {confirmModal.isOpen && (
+        <ConfirmActionModal
+          title={confirmModal.title}
+          description={confirmModal.description}
+          confirmText={confirmModal.confirmText}
+          isDanger={confirmModal.isDanger}
+          onConfirm={confirmModal.onConfirm}
+          onClose={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
         />
       )}
 
@@ -458,6 +317,8 @@ export default function BlogOverviewPage() {
               key={article.id}
               article={article}
               onPublish={handlePublish}
+              onUnpublish={handleUnpublish}
+              onDelete={handleDelete}
               onViewEngagement={(art) => setViewingBlogComments(art)}
             />
           ))}
@@ -484,6 +345,8 @@ export default function BlogOverviewPage() {
               key={article.id}
               article={article}
               onPublish={handlePublish}
+              onUnpublish={handleUnpublish}
+              onDelete={handleDelete}
               onViewEngagement={(art) => setViewingBlogComments(art)}
             />
           ))}
@@ -510,6 +373,8 @@ export default function BlogOverviewPage() {
               key={article.id}
               article={article}
               onPublish={handlePublish}
+              onUnpublish={handleUnpublish}
+              onDelete={handleDelete}
               onViewEngagement={(art) => setViewingBlogComments(art)}
             />
           ))}

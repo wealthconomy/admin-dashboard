@@ -2,12 +2,17 @@
 
 import { useState, Suspense } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { ArrowLeft, Search, Calendar, Heart, MessageSquare } from "lucide-react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { ArrowLeft, Search, Calendar, Heart, MessageSquare, MoreVertical, FileEdit, Send, X, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-type ArticleStatus = "published" | "scheduled" | "draft";
+import {
+  DropdownMenu, DropdownMenuContent,
+  DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { toast } from "sonner";
+import { ArticleStatus, Article, BlogCommentsModal, ConfirmActionModal } from "../shared";
 
 // Seed articles matching the main page
 const SEED_ARTICLES = [
@@ -31,16 +36,89 @@ const SEED_ARTICLES = [
 
 function BlogViewAllContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const statusParam = (searchParams.get("status") || "published") as ArticleStatus;
   const [searchQuery, setSearchQuery] = useState("");
+  const [articles, setArticles] = useState<Article[]>(SEED_ARTICLES as Article[]);
+  
+  const [viewingBlogComments, setViewingBlogComments] = useState<Article | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    description: string;
+    confirmText: string;
+    isDanger?: boolean;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: "",
+    description: "",
+    confirmText: "",
+    onConfirm: () => {}
+  });
 
-  const filteredArticles = SEED_ARTICLES.filter((article) => {
+  const filteredArticles = articles.filter((article) => {
     const matchesStatus = article.status === statusParam;
     const matchesSearch =
       article.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       article.category.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesStatus && matchesSearch;
   });
+
+  const handlePublish = (id: number) => {
+    setArticles((prev) =>
+      prev.map((a) => a.id === id ? { ...a, status: "published" as ArticleStatus } : a)
+    );
+    toast.success("Article published successfully!");
+    setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+  };
+
+  const handlePublishConfirm = (id: number) => {
+    setConfirmModal({
+      isOpen: true,
+      title: "Publish Article",
+      description: "Are you sure you want to publish this article? It will be immediately visible to all users.",
+      confirmText: "Publish Now",
+      isDanger: false,
+      onConfirm: () => handlePublish(id),
+    });
+  };
+
+  const handleReschedule = () => {
+    router.push(`/dashboard/blog/edit`);
+  };
+
+  const handleUnpublish = (id: number) => {
+    setConfirmModal({
+      isOpen: true,
+      title: "Unpublish Article",
+      description: "Are you sure you want to unpublish this article? It will be moved to drafts.",
+      confirmText: "Unpublish",
+      isDanger: false,
+      onConfirm: () => {
+        setArticles((prev) =>
+          prev.map((a) => a.id === id ? { ...a, status: "draft" as ArticleStatus } : a)
+        );
+        toast.success("Article unpublished and moved to drafts.");
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+      }
+    });
+  };
+
+  const handleDelete = (id: number) => {
+    setConfirmModal({
+      isOpen: true,
+      title: "Delete Article",
+      description: "Are you sure you want to delete this article? This action cannot be undone.",
+      confirmText: "Delete",
+      isDanger: true,
+      onConfirm: () => {
+        setArticles((prev) => prev.filter((a) => a.id !== id));
+        toast.success("Article deleted successfully.");
+        setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+      }
+    });
+  };
 
   const getPageTitle = () => {
     switch (statusParam) {
@@ -56,7 +134,26 @@ function BlogViewAllContent() {
   };
 
   return (
-    <div className="bg-white rounded-[20px] p-8 border border-border/50 shadow-sm w-full max-w-[1137px] min-h-[900px] mx-auto space-y-8 animate-in fade-in duration-500">
+    <>
+      {viewingBlogComments && (
+        <BlogCommentsModal
+          article={viewingBlogComments}
+          onClose={() => setViewingBlogComments(null)}
+        />
+      )}
+
+      {confirmModal.isOpen && (
+        <ConfirmActionModal
+          title={confirmModal.title}
+          description={confirmModal.description}
+          confirmText={confirmModal.confirmText}
+          isDanger={confirmModal.isDanger}
+          onConfirm={confirmModal.onConfirm}
+          onClose={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+        />
+      )}
+
+      <div className="bg-white rounded-[20px] p-8 border border-border/50 shadow-sm w-full max-w-[1137px] min-h-[900px] mx-auto space-y-8 animate-in fade-in duration-500">
       {/* Header */}
       <div className="flex items-center justify-between pb-5 border-b border-border/40">
         <div className="flex items-center gap-4">
@@ -109,6 +206,46 @@ function BlogViewAllContent() {
                 <span className="absolute top-3 left-3 text-[10px] font-extrabold uppercase bg-white/90 backdrop-blur-sm px-2.5 py-1 rounded-full text-primary shadow-sm border border-border/20">
                   {article.category}
                 </span>
+
+                <div className="absolute top-3 right-3">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button className="h-7 w-7 rounded-full bg-white/90 backdrop-blur-sm text-slate flex items-center justify-center hover:bg-white transition-colors shadow-sm border border-border/20">
+                        <MoreVertical className="h-4 w-4" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-44 rounded-[14px] border-border/50 shadow-xl p-1 bg-white">
+                      {article.status !== "scheduled" && (
+                        <DropdownMenuItem onClick={() => router.push(`/dashboard/blog/edit`)} className="py-2 px-3 text-xs font-bold focus:bg-surface text-dark cursor-pointer rounded-xl gap-2">
+                          <FileEdit className="h-3.5 w-3.5 text-primary" /> Edit Article
+                        </DropdownMenuItem>
+                      )}
+                      {article.status === "scheduled" && (
+                        <DropdownMenuItem onClick={() => handleReschedule()} className="py-2 px-3 text-xs font-bold focus:bg-surface text-orange-500 cursor-pointer rounded-xl gap-2">
+                          <Calendar className="h-3.5 w-3.5" /> Reschedule
+                        </DropdownMenuItem>
+                      )}
+                      {article.status === "published" && (
+                        <DropdownMenuItem onClick={() => setViewingBlogComments(article as Article)} className="py-2 px-3 text-xs font-bold focus:bg-surface text-emerald-600 cursor-pointer rounded-xl gap-2">
+                          <MessageSquare className="h-3.5 w-3.5" /> View Engagement
+                        </DropdownMenuItem>
+                      )}
+                      {article.status === "draft" && (
+                        <DropdownMenuItem onClick={() => handlePublishConfirm(article.id)} className="py-2 px-3 text-xs font-bold focus:bg-surface text-emerald-600 cursor-pointer rounded-xl gap-2">
+                          <Send className="h-3.5 w-3.5" /> Publish Now
+                        </DropdownMenuItem>
+                      )}
+                      {article.status === "published" && (
+                        <DropdownMenuItem onClick={() => handleUnpublish(article.id)} className="py-2 px-3 text-xs font-bold focus:bg-surface text-slate cursor-pointer rounded-xl gap-2">
+                          <X className="h-3.5 w-3.5 text-slate/50" /> Unpublish
+                        </DropdownMenuItem>
+                      )}
+                      <DropdownMenuItem onClick={() => handleDelete(article.id)} className="py-2 px-3 text-xs font-bold focus:bg-red-50 text-red-600 cursor-pointer rounded-xl gap-2 mt-0.5">
+                        <Trash2 className="h-3.5 w-3.5" /> Delete Article
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
               </div>
 
               {/* Card Details */}
@@ -159,7 +296,8 @@ function BlogViewAllContent() {
           <p className="text-xs">Adjust your search or add a new article.</p>
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 }
 
