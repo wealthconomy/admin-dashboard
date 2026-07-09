@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, use } from "react";
 import { useRouter } from "next/navigation";
 import {
   ChevronLeft,
@@ -19,6 +19,7 @@ import {
   Loader2,
   Ban,
   Lock,
+  Trash2,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -29,40 +30,62 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { toast } from "sonner";
+import { 
+  useGetUserDetailsQuery,
+  useSuspendUserMutation,
+  useUnsuspendUserMutation,
+  useBlockUserMutation,
+  useUnblockUserMutation,
+  useDeleteUserMutation
+} from "@/lib/redux/features/usersApi";
+import {
+  useResetUserPasswordMutation,
+  useResetUserMfaMutation
+} from "@/lib/redux/features/adminApi";
 
 const portfolioItems = [
   {
     name: "WealthFlex",
-    amount: "₦300,735.42",
-    interest: "₦12,500.00",
+    amount: "₦0.00",
+    interest: "₦0.00",
     icon: Wallet,
     color: "text-red-500",
     bgColor: "bg-red-50",
+    sub: "0 Active WealthFlex",
+    completed: "0 Completed",
   },
   {
     name: "WealthGoal",
-    amount: "₦300,735.42",
-    interest: "₦8,200.00",
+    amount: "₦0.00",
+    interest: "₦0.00",
     icon: Target,
     color: "text-pink-500",
     bgColor: "bg-pink-50",
-    sub: "3 Active WealthGoals",
-    completed: "2 Completed",
+    sub: "0 Active WealthGoals",
+    completed: "0 Completed",
   },
   {
     name: "WealthFix",
-    amount: "₦300,735.42",
-    interest: "₦45,000.00",
+    amount: "₦0.00",
+    interest: "₦0.00",
     icon: Zap,
     color: "text-orange-500",
     bgColor: "bg-orange-50",
-    sub: "3 Active WealthFix",
-    completed: "2 Completed",
+    sub: "0 Active WealthFix",
+    completed: "0 Completed",
   },
   {
     name: "WealthFam",
-    amount: "₦300,735.42",
+    amount: "₦0.00",
     interest: "₦0.00",
     icon: Users,
     color: "text-purple-500",
@@ -72,57 +95,93 @@ const portfolioItems = [
   },
   {
     name: "WealthFlow",
-    amount: "₦300,735.42",
-    interest: "₦1,500.00",
+    amount: "₦0.00",
+    interest: "₦0.00",
     icon: RefreshCcw,
     color: "text-blue-500",
     bgColor: "bg-blue-50",
-    sub: "2 Active WealthAuto",
-    completed: "1 Complete",
+    sub: "0 Active WealthAuto",
+    completed: "0 Complete",
   },
   {
     name: "WealthGroup",
-    amount: "₦300,735.42",
-    interest: "₦2,400.00",
+    amount: "₦0.00",
+    interest: "₦0.00",
     icon: UsersRound,
     color: "text-gray-500",
     bgColor: "bg-gray-50",
-    sub: "2 Active WealthGroup",
-    completed: "2 Completed",
+    sub: "0 Active WealthGroup",
+    completed: "0 Completed",
   },
 ];
 
-export default function UserDetailPage({ params }: { params: { id: string } }) {
+export default function UserDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
+  
+  const resolvedParams = use(params);
+  const resolvedId = resolvedParams.id;
 
-  // Suspend/Block States
+  const { data: userDataResponse, isLoading, isError, refetch } = useGetUserDetailsQuery(resolvedId);
+  // Safely extract the user object whether it's wrapped in { data: ... } or { data: { data: ... } }
+  const user = userDataResponse?.data?.data || userDataResponse?.data || userDataResponse;
+
+  const [suspendUserMutation] = useSuspendUserMutation();
+  const [unsuspendUserMutation] = useUnsuspendUserMutation();
+  const [blockUserMutation] = useBlockUserMutation();
+  const [unblockUserMutation] = useUnblockUserMutation();
+  const [deleteUserMutation] = useDeleteUserMutation();
+  const [resetPasswordMutation] = useResetUserPasswordMutation();
+  const [resetMfaMutation] = useResetUserMfaMutation();
+
   const [suspendStep, setSuspendStep] = useState(1);
   const [suspendUser, setSuspendUser] = useState<any | null>(null);
-  const [modalMode, setModalMode] = useState<"suspend" | "block">("suspend");
+  const [modalMode, setModalMode] = useState<"suspend" | "block" | "delete">("suspend");
   const [suspendData, setSuspendData] = useState({
     reason: "",
     duration: "30 Days",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [userStatus, setUserStatus] = useState("Active");
+  const userStatus = user?.blockedAt || user?.disciplineStatus === "BLOCKED" ? "Blocked" : (user?.suspendedUntil || user?.disciplineStatus === "SUSPENDED" ? "Suspended" : "Active");
 
-  const handleSuspendToggle = () => {
+  const handleSuspendToggle = async () => {
     setIsSubmitting(true);
-    setTimeout(() => {
-      const isActivating = userStatus !== "Active";
-      setUserStatus(isActivating ? "Active" : (modalMode === "block" ? "Blocked" : "Suspended"));
+    try {
+      if (modalMode === "delete") {
+        await deleteUserMutation(resolvedId).unwrap();
+        toast.success("User successfully deleted!");
+        router.push("/dashboard/users");
+        return;
+      }
+
+      if (userStatus === "Active") {
+        if (modalMode === "block") {
+          await blockUserMutation({ id: resolvedId, reason: suspendData.reason }).unwrap();
+          toast.success("User successfully blocked!");
+        } else {
+          await suspendUserMutation({ 
+            id: resolvedId, 
+            reason: suspendData.reason,
+            durationDays: parseInt(suspendData.duration) || 30
+          }).unwrap();
+          toast.success("User successfully suspended!");
+        }
+      } else {
+        if (userStatus === "Blocked") {
+          await unblockUserMutation(resolvedId).unwrap();
+        } else {
+          await unsuspendUserMutation(resolvedId).unwrap();
+        }
+        toast.success("User successfully reactivated!");
+      }
+      refetch();
+    } catch (err: any) {
+      toast.error(err?.data?.message || "Failed to update user status");
+    } finally {
       setIsSubmitting(false);
       setSuspendUser(null);
       setSuspendStep(1);
       setSuspendData({ reason: "", duration: "30 Days" });
-      toast.success(
-        `User successfully ${
-          isActivating 
-            ? "reactivated" 
-            : (modalMode === "block" ? "blocked" : "suspended")
-        }!`
-      );
-    }, 1500);
+    }
   };
 
   const closeSuspendModal = () => {
@@ -132,6 +191,44 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
     }
   };
 
+  const handleResetPassword = async () => {
+    try {
+      await resetPasswordMutation(resolvedId).unwrap();
+      toast.success("User password has been reset.");
+    } catch (err: any) {
+      toast.error(err?.data?.message || "Failed to reset password");
+    }
+  };
+
+  const handleResetMfa = async () => {
+    try {
+      await resetMfaMutation(resolvedId).unwrap();
+      toast.success("User MFA settings have been reset.");
+    } catch (err: any) {
+      toast.error(err?.data?.message || "Failed to reset MFA");
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <p className="mt-4 text-sm font-medium text-slate/50">Loading user profile...</p>
+      </div>
+    );
+  }
+
+  if (isError || !user) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4">
+        <AlertCircle className="w-12 h-12 text-red-500" />
+        <p className="text-lg font-bold text-dark">Failed to load user</p>
+        <p className="text-sm text-slate/60 text-center max-w-md">The user could not be found or an internal server error occurred (500). Please check with the backend team or try again later.</p>
+        <Button onClick={() => router.back()} variant="outline">Go Back</Button>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-white rounded-[20px] p-10 border border-border/50 shadow-sm w-full max-w-[1137px] min-h-[1000px] mx-auto space-y-10">
       {/* Back Navigation & User Header */}
@@ -139,17 +236,17 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
         <div className="flex items-center justify-between w-full max-w-[1090px] h-[137px] bg-[#F8EEFE33] border-[0.5px] border-[#C5C5C5] rounded-[20px] pl-[20px] pr-[30px] gap-[10px] mx-auto transition-all">
           <div className="flex items-center gap-[10px]">
             <Avatar className="h-24 w-24 border-4 border-white shadow-sm">
-              <AvatarImage src={`https://i.pravatar.cc/150?u=${params.id}`} />
-              <AvatarFallback className="bg-primary/5 text-primary text-2xl font-bold">
-                S
+              <AvatarImage src={user?.imageUrl || ""} />
+              <AvatarFallback className="bg-primary/5 text-primary text-2xl font-bold uppercase">
+                {user?.firstName?.[0] || user?.name?.[0] || "U"}
               </AvatarFallback>
             </Avatar>
             <div className="space-y-1">
               <h1 className="text-2xl font-bold font-outfit text-dark tracking-tight">
-                Simon Smith
+                {isLoading ? "Loading..." : (`${user?.firstName || ""} ${user?.lastName || ""} ${user?.name || ""}`.trim() || user?.email || user?.phone || "Unknown User")}
               </h1>
               <p className="text-slate text-sm font-medium opacity-70">
-                {params.id || "ID5372527"}
+                {resolvedId}
               </p>
             </div>
           </div>
@@ -167,10 +264,10 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
                   fill="#1D84D9"
                 />
               </svg>
-              Verified
+              {user?.isVerified ? "Verified" : "Unverified"}
             </Badge>
             <button 
-              onClick={() => router.push(`/dashboard/users/${params.id}/credentials`)}
+              onClick={() => router.push(`/dashboard/users/${resolvedId}/credentials`)}
               className="p-2.5 hover:bg-white rounded-xl transition-all border border-[#C5C5C5] shadow-sm bg-white/50 active:scale-95"
               title="User Credentials"
             >
@@ -186,14 +283,14 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
                 {userStatus === "Active" ? (
                   <>
                     <DropdownMenuItem 
-                      onClick={() => { setSuspendUser({ id: params.id, name: "Simon Smith", status: userStatus }); setModalMode("suspend"); }} 
+                      onClick={() => { setSuspendUser({ id: resolvedId, name: "Simon Smith", status: userStatus }); setModalMode("suspend"); }} 
                       className="py-2.5 px-4 text-xs font-bold text-red-500 focus:bg-red-50 cursor-pointer rounded-xl gap-2"
                     >
                        <Ban className="h-3.5 w-3.5" />
                        Suspend User
                     </DropdownMenuItem>
                     <DropdownMenuItem 
-                      onClick={() => { setSuspendUser({ id: params.id, name: "Simon Smith", status: userStatus }); setModalMode("block"); }} 
+                      onClick={() => { setSuspendUser({ id: resolvedId, name: "Simon Smith", status: userStatus }); setModalMode("block"); }} 
                       className="py-2.5 px-4 text-xs font-bold text-red-700 focus:bg-red-100 cursor-pointer rounded-xl gap-2"
                     >
                        <Lock className="h-3.5 w-3.5" />
@@ -202,13 +299,36 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
                   </>
                 ) : (
                   <DropdownMenuItem 
-                    onClick={() => { setSuspendUser({ id: params.id, name: "Simon Smith", status: userStatus }); setModalMode(userStatus === "Blocked" ? "block" : "suspend"); }} 
+                    onClick={() => { setSuspendUser({ id: resolvedId, name: "Simon Smith", status: userStatus }); setModalMode(userStatus === "Blocked" ? "block" : "suspend"); }} 
                     className="py-2.5 px-4 text-xs font-bold text-emerald-600 focus:bg-emerald-50 cursor-pointer rounded-xl gap-2"
                   >
                      <ShieldAlert className="h-3.5 w-3.5" />
                      Activate User
                   </DropdownMenuItem>
                 )}
+                <div className="h-px bg-border/20 my-1 mx-1" />
+                <DropdownMenuItem 
+                  onClick={handleResetPassword}
+                  className="py-2.5 px-4 text-xs font-bold text-dark focus:bg-surface cursor-pointer rounded-xl gap-2"
+                >
+                   <Lock className="h-3.5 w-3.5" />
+                   Reset Password
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  onClick={handleResetMfa}
+                  className="py-2.5 px-4 text-xs font-bold text-dark focus:bg-surface cursor-pointer rounded-xl gap-2"
+                >
+                   <ShieldAlert className="h-3.5 w-3.5" />
+                   Reset MFA
+                </DropdownMenuItem>
+                <div className="h-px bg-border/20 my-1 mx-1" />
+                <DropdownMenuItem 
+                  onClick={() => { setSuspendUser({ id: resolvedId, name: user?.name, status: userStatus }); setModalMode("delete"); setSuspendData(prev => ({...prev, reason: "Administrative deletion"})); setSuspendStep(2); }} 
+                  className="py-2.5 px-4 text-xs font-bold text-red-600 focus:bg-red-50 cursor-pointer rounded-xl gap-2"
+                >
+                   <Trash2 className="h-3.5 w-3.5" />
+                   Delete User
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -216,7 +336,7 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
       </div>
 
       <button
-        onClick={() => router.back()}
+        onClick={() => router.push("/dashboard/users")}
         className="flex items-center gap-2 text-slate/60 hover:text-primary transition-all font-medium text-sm group"
       >
         <div className="p-1.5 rounded-lg group-hover:bg-primary/5 transition-all">
@@ -281,15 +401,15 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
           <div className="p-6 space-y-6">
             <h3 className="text-sm font-bold font-outfit text-dark">Basic</h3>
             <div className="space-y-6">
-              <InfoItem label="First name:" value="Simon" />
-              <InfoItem label="Last name:" value="Smith" />
+              <InfoItem label="First name:" value={user?.firstName || user?.name?.split(' ')[0] || "N/A"} />
+              <InfoItem label="Last name:" value={user?.lastName || user?.name?.split(' ')[1] || "N/A"} />
               <InfoItem
                 label="Email address:"
-                value="simon.olabiran@gmail.com"
+                value={user?.email || "N/A"}
                 isLink
               />
-              <InfoItem label="Profile ID:" value={params.id || "ID5372527"} />
-              <InfoItem label="Phone number:" value="+234567889274" />
+              <InfoItem label="Profile ID:" value={resolvedId} />
+              <InfoItem label="Phone number:" value={user?.phone || "N/A"} />
             </div>
           </div>
 
@@ -300,11 +420,11 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
             </h3>
             <div className="space-y-6">
               <InfoItem label="Status" value={userStatus} isStatus />
-              <InfoItem label="Date Created" value="2024-02-15 14:30 UTC" />
-              <InfoItem label="Last Login" value="2024-03-02 10:15 UTC" />
-              <InfoItem label="Email Verification" value="Enabled" />
-              <InfoItem label="Biometric" value="Enabled" />
-              <InfoItem label="KYC Level" value="Level 3 🥉" />
+              <InfoItem label="Date Created" value={user?.createdAt ? new Date(user.createdAt).toLocaleString() : "N/A"} />
+              <InfoItem label="Last Login" value={user?.lastLoginDate ? new Date(user.lastLoginDate).toLocaleString() : "N/A"} />
+              <InfoItem label="Email Verification" value={user?.isVerified ? "Verified" : "Unverified"} />
+              <InfoItem label="Biometric" value={user?.biometricsEnabled ? "Enabled" : "Disabled"} />
+              <InfoItem label="KYC Level" value={`Level ${user?.kycLevel || "N/A"}`} />
             </div>
           </div>
 
@@ -314,14 +434,11 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
               Transaction
             </h3>
             <div className="space-y-6">
-              <InfoItem
-                label="Withdrawal History"
-                value="5 Withdrawals (N52,126.02)"
-              />
-              <InfoItem label="Pending Transactions" value="12 Transactions" />
-              <InfoItem label="Total Payments Made" value="12 Transactions" />
-              <InfoItem label="Failed Transactions" value="0 Transaction" />
-              <InfoItem label="Total Amount Processed" value="N32,524.91" />
+              <InfoItem label="Wallet Balance" value={`₦${Number(user?.walletBalance || 0).toLocaleString()}`} />
+              <InfoItem label="Total Savings" value={`₦${Number(user?.totalSavings || 0).toLocaleString()}`} />
+              <InfoItem label="Total Interest" value={`₦${Number(user?.totalInterest || 0).toLocaleString()}`} />
+              <InfoItem label="Pending Transactions" value={`${user?.pendingTransactionsCount || 0} Transactions`} />
+              <InfoItem label="Failed Transactions" value={`${user?.failedTransactionsCount || 0} Transaction`} />
             </div>
           </div>
         </div>
@@ -352,7 +469,7 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
                       : 'Reactivate User'}
                   </h3>
                   <p className="text-sm font-medium text-slate/50 leading-relaxed">
-                    Account management for <span className="text-dark font-bold">Simon Smith</span>.
+                    Account management for <span className="text-dark font-bold">{`${user?.firstName || ""} ${user?.lastName || ""}`.trim() || user?.name || "User"}</span>.
                   </p>
                 </div>
 
@@ -412,42 +529,50 @@ export default function UserDetailPage({ params }: { params: { id: string } }) {
                  <div className="bg-surface/30 border border-border/30 rounded-xl p-5 space-y-4">
                     <div className="flex items-center gap-3 pb-3 border-b border-border/20">
                        <Avatar className="h-10 w-10 border-2 border-white shadow-sm ring-1 ring-border/5">
-                          <AvatarImage src={`https://i.pravatar.cc/150?u=${params.id}`} />
-                          <AvatarFallback>S</AvatarFallback>
+                          <AvatarImage src={user?.imageUrl || ""} />
+                          <AvatarFallback className="bg-primary/5 text-primary font-bold text-xs uppercase">
+                            {user?.firstName?.[0] || user?.name?.[0] || "U"}
+                          </AvatarFallback>
                        </Avatar>
                        <div>
                           <p className="text-[10px] font-bold text-slate/30 uppercase tracking-tighter">User</p>
-                          <p className="text-sm font-bold text-dark leading-none mt-1">Simon Smith</p>
+                          <p className="text-sm font-bold text-dark leading-none mt-1">{`${user?.firstName || ""} ${user?.lastName || ""}`.trim() || user?.name || "User"}</p>
                        </div>
                     </div>
 
                     <div className="space-y-3">
                        <div className="flex justify-between items-start">
                           <p className="text-[10px] font-bold text-slate/30 uppercase tracking-tighter">Action</p>
-                          <p className={`text-xs font-bold ${userStatus === 'Active' ? 'text-red-500' : 'text-emerald-600'}`}>
-                             {userStatus === 'Active' 
+                          <p className={`text-xs font-bold ${modalMode === 'delete' ? 'text-red-700' : (userStatus === 'Active' ? 'text-red-500' : 'text-emerald-600')}`}>
+                             {modalMode === 'delete' ? 'Delete (Permanent)' : (userStatus === 'Active' 
                                ? (modalMode === "block" ? "Block (Permanent)" : `Suspend (${suspendData.duration})`) 
-                               : 'Reactivate'}
+                               : 'Reactivate')}
                           </p>
                        </div>
                        <div className="space-y-1">
                           <p className="text-[10px] font-bold text-slate/30 uppercase tracking-tighter">Reason</p>
-                          <p className="text-xs font-medium text-dark leading-relaxed line-clamp-3">"{suspendData.reason}"</p>
+                          <p className="text-xs font-medium text-dark leading-relaxed line-clamp-3">"{suspendData.reason || "User deletion requested"}"</p>
                        </div>
                     </div>
                  </div>
 
                  <Button 
-                   onClick={handleSuspendToggle}
-                   disabled={isSubmitting}
-                   className={`w-full h-12 rounded-xl font-bold shadow-lg transition-all active:scale-95 ${userStatus === 'Active' ? (modalMode === 'block' ? 'bg-[#991B1B] hover:bg-[#7F1D1D] text-white shadow-red-900/10' : 'bg-[#D93F3F] hover:bg-[#C23535] text-white shadow-red-900/10') : 'bg-[#155D5F] hover:bg-[#0F4A4C] text-white shadow-primary/10'}`}
-                 >
-                   {isSubmitting ? (
-                     <Loader2 className="h-4 w-4 animate-spin mx-auto text-white/80" />
-                   ) : (
-                    `Confirm ${userStatus === 'Active' ? (modalMode === 'block' ? 'Blocking' : 'Suspension') : 'Activation'}`
-                   )}
-                 </Button>
+                    onClick={handleSuspendToggle}
+                    disabled={isSubmitting}
+                    className={`w-full h-12 rounded-xl font-bold shadow-lg transition-all active:scale-95 ${
+                      modalMode === 'delete' ? 'bg-[#7F1D1D] hover:bg-[#450a0a] text-white' : 
+                      userStatus === 'Active' ? (modalMode === 'block' ? 'bg-[#991B1B] hover:bg-[#7F1D1D] text-white shadow-red-900/10' : 'bg-[#D93F3F] hover:bg-[#C23535] text-white shadow-red-900/10') : 'bg-[#155D5F] hover:bg-[#0F4A4C] text-white shadow-primary/10'
+                    }`}
+                  >
+                    {isSubmitting ? (
+                      <Loader2 className="h-4 w-4 animate-spin mx-auto text-white/80" />
+                    ) : (
+                     `Confirm ${
+                       modalMode === 'delete' ? 'Deletion' :
+                       userStatus === 'Active' ? (modalMode === 'block' ? 'Blocking' : 'Suspension') : 'Activation'
+                     }`
+                    )}
+                  </Button>
               </div>
             )}
 

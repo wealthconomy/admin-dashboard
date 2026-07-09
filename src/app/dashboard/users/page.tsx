@@ -44,6 +44,25 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
+import { 
+  useGetUsersQuery, 
+  useSuspendUserMutation, 
+  useUnsuspendUserMutation,
+  useBlockUserMutation,
+  useUnblockUserMutation,
+  useLazyDownloadUsersReportQuery
+} from "@/lib/redux/features/usersApi";
+import { useGetTeamQuery } from "@/lib/redux/features/adminApi";
+
+// Helper to extract the safe array from backend response wrapper
+const getSafeArray = (data: any) => {
+  if (!data) return [];
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data.items)) return data.items;
+  if (Array.isArray(data.data?.items)) return data.data.items;
+  if (Array.isArray(data.data)) return data.data;
+  return [];
+};
 
 const INITIAL_USERS = [
   {
@@ -118,7 +137,6 @@ const WEALTH_PLANS = ["WealthFix", "WealthFlex", "WealthFlow", "WealthFam", "Wea
 
 export default function UsersPage() {
   const router = useRouter();
-  const [userList, setUserList] = useState(INITIAL_USERS);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedStatus, setSelectedStatus] = useState("All Status");
   const [selectedTransactionType, setSelectedTransactionType] = useState("All Types");
@@ -136,50 +154,88 @@ export default function UsersPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isStatsExpanded, setIsStatsExpanded] = useState(false);
 
-  const processedUsers = userList.filter((user) => {
-    const matchesSearch = 
-      user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      user.id.toLowerCase().includes(searchQuery.toLowerCase());
-    
-    const matchesStatus = selectedStatus === "All Status" || user.status === selectedStatus;
-    const matchesTransactionType = selectedTransactionType === "All Types" || user.transactionType === selectedTransactionType;
-    
-    return matchesSearch && matchesStatus && matchesTransactionType;
-  }).sort((a, b) => {
-    if (sortSavings === "Highest to Lowest") return b.totalSavings - a.totalSavings;
-    if (sortSavings === "Lowest to Highest") return a.totalSavings - b.totalSavings;
-    return 0;
+  // RTK Query hooks
+  const { data: usersData, isLoading, isFetching, refetch } = useGetUsersQuery({
+    q: searchQuery || undefined,
+    status: selectedStatus !== "All Status" ? selectedStatus : undefined,
+    transactionType: selectedTransactionType !== "All Types" ? selectedTransactionType : undefined,
+    sortBySavings: sortSavings !== "Default" ? sortSavings : undefined,
   });
 
-  const handleSuspendToggle = () => {
+  const [suspendUserMutation] = useSuspendUserMutation();
+  const [unsuspendUserMutation] = useUnsuspendUserMutation();
+  const [blockUserMutation] = useBlockUserMutation();
+  const [unblockUserMutation] = useUnblockUserMutation();
+  const [triggerDownload] = useLazyDownloadUsersReportQuery();
+
+  const { data: teamData } = useGetTeamQuery(undefined);
+  const teamEmails = new Set(getSafeArray(teamData).map((t: any) => t.user?.email || t.email));
+
+  const userList = getSafeArray(usersData)
+    .filter((u: any) => u.role !== "ADMIN" && u.role !== "SUPER_ADMIN" && !teamEmails.has(u.email))
+    .map((u: any) => {
+      // Determine effective status
+      let status = "Active";
+      if (u.blockedAt || u.disciplineStatus === "BLOCKED") status = "Blocked";
+      else if (u.suspendedUntil || u.disciplineStatus === "SUSPENDED") status = "Suspended";
+
+      // Determine transaction type visually
+      let tType = u.transactionType || "Mixed";
+      if (u.wealthPreference === "IMPACT_WEALTH") tType = "Impact Wealth";
+      else if (u.wealthPreference === "INTEREST") tType = "Interest";
+
+      return {
+        ...u,
+        name: `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.username || u.email,
+        status,
+        transactionType: tType,
+      };
+    });
+
+  const processedUsers = userList;
+
+  const handleSuspendToggle = async () => {
     if (!suspendUser) return;
     setIsSubmitting(true);
-    
-    setTimeout(() => {
-      const isActivating = suspendUser.status !== "Active";
-      setUserList(userList.map(u => 
-        u.id === suspendUser.id 
-        ? { 
-            ...u, 
-            status: isActivating 
-              ? "Active" 
-              : (modalMode === "block" ? "Blocked" : "Suspended") 
-          } 
-        : u
-      ));
+
+    // Parse duration string to number of days: "7 Days" → 7, "24 Hours" → 1, "Permanent" → 999
+    const parseDurationDays = (d: string): number => {
+      if (d === "Permanent") return 999;
+      if (d === "24 Hours") return 1;
+      const match = d.match(/(\d+)/);
+      return match ? parseInt(match[1]) : 30;
+    };
+
+    try {
+      if (suspendUser.status === "Active") {
+        if (modalMode === "block") {
+          await blockUserMutation({ id: suspendUser.id, reason: suspendData.reason }).unwrap();
+          toast.success(`${suspendUser.name} has been blocked.`);
+        } else {
+          await suspendUserMutation({
+            id: suspendUser.id,
+            reason: suspendData.reason,
+            durationDays: parseDurationDays(suspendData.duration),
+          }).unwrap();
+          toast.success(`${suspendUser.name} has been suspended for ${suspendData.duration}.`);
+        }
+      } else if (suspendUser.status === "Blocked") {
+        await unblockUserMutation(suspendUser.id).unwrap();
+        toast.success(`${suspendUser.name} has been unblocked.`);
+      } else {
+        // Suspended
+        await unsuspendUserMutation(suspendUser.id).unwrap();
+        toast.success(`${suspendUser.name}'s suspension has been lifted.`);
+      }
+      refetch();
+    } catch (err: any) {
+      toast.error(err?.data?.message || "Failed to update user status");
+    } finally {
       setIsSubmitting(false);
       setSuspendUser(null);
       setSuspendStep(1);
       setSuspendData({ reason: "", duration: "30 Days" });
-      toast.success(
-        `User successfully ${
-          isActivating 
-            ? "reactivated" 
-            : (modalMode === "block" ? "blocked" : "suspended")
-        }!`
-      );
-    }, 1500);
+    }
   };
 
   const closeSuspendModal = () => {
@@ -189,8 +245,22 @@ export default function UsersPage() {
     }
   };
 
-  const handleDownload = () => {
-    toast.success("Downloading user report...");
+  const handleDownload = async () => {
+    toast.info("Downloading user report...");
+    try {
+      const blob = await triggerDownload(undefined).unwrap();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `users_report_${new Date().toISOString().split("T")[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      toast.success("Download complete");
+    } catch (err) {
+      toast.error("Failed to download report");
+    }
   };
 
   return (
@@ -213,6 +283,15 @@ export default function UsersPage() {
             />
           </div>
 
+          <Button 
+            variant="outline" 
+            onClick={handleDownload}
+            className="h-11 px-4 rounded-xl border-border/50 font-bold text-slate hover:bg-surface transition-all gap-2"
+          >
+            <Download className="h-4 w-4" />
+            Export CSV
+          </Button>
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" className="h-11 px-4 rounded-xl border-border/50 font-bold text-slate hover:bg-surface transition-all gap-2 relative">
@@ -229,7 +308,7 @@ export default function UsersPage() {
               <div className="flex flex-col">
                 <h4 className="text-[10px] font-bold text-slate/50 uppercase tracking-wider mb-2 px-2">User Status</h4>
                 <div className="flex flex-col gap-1">
-                  {["All Status", "Active", "Suspended"].map(status => (
+                  {["All Status", "Active", "Suspended", "Blocked"].map(status => (
                     <button 
                       key={status}
                       onClick={() => setSelectedStatus(status)} 
@@ -314,7 +393,7 @@ export default function UsersPage() {
             </div>
             <div className="pt-2 border-t border-[#155D5F1A] flex items-center gap-1.5 text-[10px] text-slate/50 font-bold">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              2 accounts recently created
+              {userList.length} accounts total
             </div>
           </div>
 
@@ -323,7 +402,7 @@ export default function UsersPage() {
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-2xl font-bold font-outfit text-primary leading-none">
-                  {userList.filter((u) => u.status === "Active").length}
+                  {userList.filter((u: any) => u.status === "Active").length}
                 </p>
                 <p className="text-[11px] font-semibold text-primary/80 mt-2">
                   Active
@@ -344,7 +423,7 @@ export default function UsersPage() {
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-2xl font-bold font-outfit text-primary leading-none">
-                  {userList.filter((u) => u.status !== "Active").length}
+                  {userList.filter((u: any) => u.status !== "Active").length}
                 </p>
                 <p className="text-[11px] font-semibold text-primary/80 mt-2">
                   Suspended
@@ -368,7 +447,7 @@ export default function UsersPage() {
                 <div className="flex items-start justify-between">
                   <div>
                     <p className="text-2xl font-bold font-outfit text-primary leading-none">
-                      {userList.filter((u) => u.transactionType === "Interest").length}
+                      {userList.filter((u: any) => u.transactionType === "Interest").length}
                     </p>
                     <p className="text-[11px] font-semibold text-primary/80 mt-2">
                       Interest Type
@@ -390,7 +469,7 @@ export default function UsersPage() {
                   <div>
                     <p className="text-2xl font-bold font-outfit text-primary leading-none">
                       {
-                        userList.filter((u) => u.transactionType === "Impact Wealth")
+                        userList.filter((u: any) => u.transactionType === "Impact Wealth")
                           .length
                       }
                     </p>
@@ -413,7 +492,7 @@ export default function UsersPage() {
                 <div className="flex items-start justify-between">
                   <div>
                     <p className="text-2xl font-bold font-outfit text-primary leading-none">
-                      {userList.filter((u) => u.transactionType === "Mixed").length}
+                      {userList.filter((u: any) => u.transactionType === "Mixed").length}
                     </p>
                     <p className="text-[11px] font-semibold text-primary/80 mt-2">
                       Mixed Plan
@@ -450,7 +529,7 @@ export default function UsersPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {processedUsers.length > 0 ? processedUsers.map((user) => (
+              {processedUsers.length > 0 ? processedUsers.map((user: any) => (
                 <TableRow
                   key={user.id}
                   className="group border-border/50 hover:bg-surface/30 transition-all duration-200"
@@ -458,9 +537,9 @@ export default function UsersPage() {
                   <TableCell className="py-3 px-3 whitespace-nowrap">
                     <div className="flex items-center gap-3 cursor-pointer" onClick={() => router.push(`/dashboard/users/${user.id}`)}>
                       <Avatar className="h-8 w-8 border-2 border-white shadow-sm ring-1 ring-border/5 group-hover:scale-105 transition-transform">
-                        <AvatarImage src={`https://i.pravatar.cc/150?u=${user.id}`} />
-                        <AvatarFallback className="bg-primary/5 text-primary font-bold text-xs">
-                          {user.name.charAt(0)}
+                        <AvatarImage src={user.imageUrl || ""} />
+                        <AvatarFallback className="bg-primary/5 text-primary font-bold text-xs uppercase">
+                          {user.name?.charAt(0) || "U"}
                         </AvatarFallback>
                       </Avatar>
                       <div className="flex flex-col">
@@ -472,7 +551,7 @@ export default function UsersPage() {
                   </TableCell>
                   <TableCell className="py-3 px-3 whitespace-nowrap">
                     <span className="text-slate/70 text-[11px] font-medium leading-relaxed">
-                      {user.lastLogin}
+                      {user.lastLoginDate ? new Date(user.lastLoginDate).toLocaleDateString() : user.lastLogin || "Never"}
                     </span>
                   </TableCell>
                   <TableCell className="py-3 px-3 whitespace-nowrap">
@@ -502,14 +581,14 @@ export default function UsersPage() {
                   </TableCell>
                   <TableCell className="py-3 px-3 text-center whitespace-nowrap">
                      <span className={`text-[10px] font-bold px-2 py-1 rounded-lg ${user.transactionType === 'Interest' ? 'bg-[#86D7DA69] text-[#155D5F]' : user.transactionType === 'Mixed' ? 'bg-purple-100 text-purple-700' : 'bg-surface/50 text-slate/70'}`}>
-                        {user.transactionType}
+                        {user.transactionType || "N/A"}
                      </span>
                   </TableCell>
                   <TableCell className="py-3 px-3 text-center whitespace-nowrap">
-                     <span className="text-[11px] font-bold text-dark px-2 py-1 bg-surface/50 rounded-lg">₦{user.totalSavings.toLocaleString()}</span>
+                     <span className="text-[11px] font-bold text-dark px-2 py-1 bg-surface/50 rounded-lg">₦{Number(user.totalSavings || 0).toLocaleString()}</span>
                   </TableCell>
                   <TableCell className="py-3 px-3 text-center whitespace-nowrap">
-                     <span className="text-[11px] font-bold text-emerald-600 px-2 py-1 bg-emerald-50 border border-emerald-100 rounded-lg">+₦{user.totalInterest.toLocaleString()}</span>
+                     <span className="text-[11px] font-bold text-emerald-600 px-2 py-1 bg-emerald-50 border border-emerald-100 rounded-lg">+₦{Number(user.totalInterest || 0).toLocaleString()}</span>
                   </TableCell>
                   <TableCell className="py-3 px-3 text-right whitespace-nowrap">
                     <DropdownMenu>
@@ -529,19 +608,24 @@ export default function UsersPage() {
                         </DropdownMenuItem>
                         {user.status === "Active" ? (
                           <>
-                            <DropdownMenuItem onClick={() => { setSuspendUser(user); setModalMode("suspend"); }} className="py-2.5 px-4 text-xs font-bold text-red-500 focus:bg-red-50 cursor-pointer rounded-xl gap-2">
+                            <DropdownMenuItem onClick={() => { setSuspendUser(user); setModalMode("suspend"); }} className="py-2.5 px-4 text-xs font-bold text-orange-500 focus:bg-orange-50 cursor-pointer rounded-xl gap-2">
                                <Ban className="h-3.5 w-3.5" />
-                               Suspend User
+                               <span className="truncate">Suspend User</span>
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => { setSuspendUser(user); setModalMode("block"); }} className="py-2.5 px-4 text-xs font-bold text-red-700 focus:bg-red-100 cursor-pointer rounded-xl gap-2">
                                <Lock className="h-3.5 w-3.5" />
                                Block User
                             </DropdownMenuItem>
                           </>
-                        ) : (
-                          <DropdownMenuItem onClick={() => { setSuspendUser(user); setModalMode(user.status === "Blocked" ? "block" : "suspend"); }} className="py-2.5 px-4 text-xs font-bold text-emerald-600 focus:bg-emerald-50 cursor-pointer rounded-xl gap-2">
+                        ) : user.status === "Suspended" ? (
+                          <DropdownMenuItem onClick={() => { setSuspendUser(user); setModalMode("suspend"); }} className="py-2.5 px-4 text-xs font-bold text-emerald-600 focus:bg-emerald-50 cursor-pointer rounded-xl gap-2">
                              <ShieldAlert className="h-3.5 w-3.5" />
-                             Activate User
+                             Unsuspend User
+                          </DropdownMenuItem>
+                        ) : (
+                          <DropdownMenuItem onClick={() => { setSuspendUser(user); setModalMode("block"); }} className="py-2.5 px-4 text-xs font-bold text-emerald-600 focus:bg-emerald-50 cursor-pointer rounded-xl gap-2">
+                             <ShieldAlert className="h-3.5 w-3.5" />
+                             Unblock User
                           </DropdownMenuItem>
                         )}
                       </DropdownMenuContent>
@@ -550,10 +634,19 @@ export default function UsersPage() {
                 </TableRow>
               )) : (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-20 text-center">
+                  <TableCell colSpan={8} className="py-20 text-center">
                     <div className="flex flex-col items-center gap-2">
-                      <Search className="h-8 w-8 text-slate/20" />
-                      <p className="text-sm font-medium text-slate/40">No users found matching your criteria.</p>
+                      {isLoading || isFetching ? (
+                        <>
+                          <Loader2 className="h-8 w-8 text-primary animate-spin" />
+                          <p className="text-sm font-medium text-slate/60">Loading users...</p>
+                        </>
+                      ) : (
+                        <>
+                          <Search className="h-8 w-8 text-slate/20" />
+                          <p className="text-sm font-medium text-slate/40">No users found matching your criteria.</p>
+                        </>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -648,40 +741,58 @@ export default function UsersPage() {
                  <div className="bg-surface/30 border border-border/30 rounded-xl p-5 space-y-4">
                     <div className="flex items-center gap-3 pb-3 border-b border-border/20">
                        <Avatar className="h-10 w-10 border-2 border-white shadow-sm ring-1 ring-border/5">
-                          <AvatarImage src={`https://i.pravatar.cc/150?u=${suspendUser.id}`} />
-                          <AvatarFallback>{suspendUser.name[0]}</AvatarFallback>
+                          <AvatarImage src={suspendUser.imageUrl || ""} />
+                          <AvatarFallback className="bg-primary/5 text-primary font-bold text-xs uppercase">
+                            {suspendUser.name?.charAt(0) || suspendUser.firstName?.charAt(0) || "U"}
+                          </AvatarFallback>
                        </Avatar>
                        <div>
                           <p className="text-[10px] font-bold text-slate/30 uppercase tracking-tighter">User</p>
-                          <p className="text-sm font-bold text-dark leading-none mt-1">{suspendUser.name}</p>
+                          <p className="text-sm font-bold text-dark leading-none mt-1">{suspendUser.firstName} {suspendUser.lastName} {suspendUser.name ? suspendUser.name : ""}</p>
                        </div>
                     </div>
 
-                    <div className="space-y-3">
-                       <div className="flex justify-between items-start">
-                          <p className="text-[10px] font-bold text-slate/30 uppercase tracking-tighter">Action</p>
-                          <p className={`text-xs font-bold ${suspendUser.status === 'Active' ? 'text-red-500' : 'text-emerald-600'}`}>
-                             {suspendUser.status === 'Active' 
-                               ? (modalMode === "block" ? "Block (Permanent)" : `Suspend (${suspendData.duration})`) 
-                               : 'Reactivate'}
-                          </p>
-                       </div>
-                       <div className="space-y-1">
-                          <p className="text-[10px] font-bold text-slate/30 uppercase tracking-tighter">Reason</p>
-                          <p className="text-xs font-medium text-dark leading-relaxed line-clamp-3">"{suspendData.reason}"</p>
-                       </div>
-                    </div>
+                                    <div className="space-y-3">
+                     <div className="flex justify-between items-start">
+                        <p className="text-[10px] font-bold text-slate/30 uppercase tracking-tighter">Action</p>
+                        <p className={`text-xs font-bold ${
+                          suspendUser.status === 'Active' ? 'text-red-500' :
+                          suspendUser.status === 'Blocked' ? 'text-emerald-600' :
+                          'text-emerald-600'
+                        }`}>
+                           {suspendUser.status === 'Active'
+                             ? (modalMode === "block" ? "Block (Permanent)" : `Suspend (${suspendData.duration})`)
+                             : suspendUser.status === 'Blocked'
+                             ? 'Unblock Account'
+                             : 'Lift Suspension'}
+                        </p>
+                     </div>
+                     <div className="space-y-1">
+                        <p className="text-[10px] font-bold text-slate/30 uppercase tracking-tighter">Reason</p>
+                        <p className="text-xs font-medium text-dark leading-relaxed line-clamp-3">"{suspendData.reason}"</p>
+                     </div>
+                   </div>
                  </div>
 
                  <Button 
                    onClick={handleSuspendToggle}
                    disabled={isSubmitting}
-                   className={`w-full h-12 rounded-xl font-bold shadow-lg transition-all active:scale-95 ${suspendUser.status === 'Active' ? (modalMode === 'block' ? 'bg-[#991B1B] hover:bg-[#7F1D1D] text-white shadow-red-900/10' : 'bg-[#D93F3F] hover:bg-[#C23535] text-white shadow-red-900/10') : 'bg-[#155D5F] hover:bg-[#0F4A4C] text-white shadow-primary/10'}`}
+                   className={`w-full h-12 rounded-xl font-bold shadow-lg transition-all active:scale-95 ${
+                     suspendUser.status === 'Active'
+                       ? (modalMode === 'block' ? 'bg-[#991B1B] hover:bg-[#7F1D1D] text-white shadow-red-900/10' : 'bg-[#D93F3F] hover:bg-[#C23535] text-white shadow-red-900/10')
+                       : 'bg-[#155D5F] hover:bg-[#0F4A4C] text-white shadow-primary/10'
+                   }`}
                  >
                    {isSubmitting ? (
                      <Loader2 className="h-4 w-4 animate-spin mx-auto text-white/80" />
                    ) : (
-                    `Confirm ${suspendUser.status === 'Active' ? (modalMode === 'block' ? 'Blocking' : 'Suspension') : 'Activation'}`
+                     `Confirm ${
+                       suspendUser.status === 'Active'
+                         ? (modalMode === 'block' ? 'Block' : 'Suspension')
+                         : suspendUser.status === 'Blocked'
+                         ? 'Unblock'
+                         : 'Unsuspend'
+                     }`
                    )}
                  </Button>
               </div>

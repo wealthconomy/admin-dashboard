@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSelector } from "react-redux";
+import { useGetMeQuery } from "@/lib/redux/features/authApi";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
@@ -30,6 +32,7 @@ import {
   Lock,
   ArrowLeft,
   Send,
+  Sliders,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -85,76 +88,37 @@ const sidebarItems: SidebarItem[] = [
   { name: "Reports & Analytics", icon: BarChart, href: "/dashboard/reports" },
   { name: "Admin Management", icon: ShieldCheck, href: "/dashboard/admin" },
   { name: "System Audit Logs", icon: Terminal, href: "/dashboard/audit-logs" },
+  { name: "System Configuration", icon: Sliders, href: "/dashboard/system-config" },
   { name: "Account Settings", icon: Settings, href: "/dashboard/settings" },
 ];
 
-// Mock Admin Profiles for Testing RBAC page-level locks
-const MOCK_PROFILES = [
-  {
-    name: "Simon Olabiran",
-    role: "Super Admin",
-    email: "simon.olabiran@wealthconomy.com",
-    avatar: "https://i.pravatar.cc/150?u=1",
-    allowedPages: [
-      "*",
-      "/dashboard",
-      "/dashboard/users",
-      "/dashboard/users/activities",
-      "/dashboard/users/transactions",
-      "/dashboard/blog",
-      "/dashboard/library",
-      "/dashboard/reports",
-      "/dashboard/admin",
-      "/dashboard/audit-logs",
-      "/dashboard/referrals",
-      "/dashboard/push-notifications",
-      "/dashboard/settings",
-      "/dashboard/support",
-    ],
-  },
-  {
-    name: "Fatima Yusuf",
-    role: "Admin",
-    email: "fatima.y@wealthconomy.com",
-    avatar: "https://i.pravatar.cc/150?u=2",
-    allowedPages: [
-      "/dashboard/settings",
-    ],
-  },
-  {
-    name: "Adeleye Ayodeji",
-    role: "Content Writer",
-    email: "ayodeji.a@wealthconomy.com",
-    avatar: "https://i.pravatar.cc/150?u=6",
-    allowedPages: [
-      "/dashboard/settings",
-    ],
-  },
-];
+
 
 function DashboardHeader({ 
   setIsSidebarOpen, 
   setShowLogoutModal,
-  activeProfile,
-  handleProfileSwitch,
 }: { 
   setIsSidebarOpen: (val: boolean) => void;
   setShowLogoutModal: (val: boolean) => void;
-  activeProfile: any;
-  handleProfileSwitch: (profile: any) => void;
 }) {
   const router = useRouter();
   const { unreadCount, notifications } = useNotifications();
+  // Read the real logged-in user from Redux state first
+  const loggedInUser = useSelector((state: any) => state.auth.user);
+  const { data: meData } = useGetMeQuery(undefined);
+  const userMe = meData?.data || loggedInUser || {};
   const [adminName, setAdminName] = useState("Admin");
 
   useEffect(() => {
-    if (activeProfile) {
-      setAdminName(activeProfile.name.split(" ")[0]);
+    if (userMe?.firstName) {
+      setAdminName(userMe.firstName);
     } else {
-      const storedName = localStorage.getItem("adminName") || "Simon"; 
-      setAdminName(storedName);
+      const stored = localStorage.getItem("adminName");
+      if (stored) setAdminName(stored);
     }
-  }, [activeProfile]);
+  }, [userMe?.firstName]);
+
+  const adminAvatar = userMe?.imageUrl || "";
 
   return (
     <header className="h-[65px] w-full max-w-[1138.5px] mx-auto bg-white rounded-[20px] py-[10px] px-[15px] sm:px-[29px] flex items-center justify-between shadow-sm border border-border/50">
@@ -168,56 +132,16 @@ function DashboardHeader({
       </div>
 
       <div className="hidden lg:block">
-        <h2 className="text-lg font-bold font-outfit text-dark whitespace-nowrap">
+        <h2 className="text-lg font-bold font-outfit text-dark whitespace-nowrap" suppressHydrationWarning>
           Hi {adminName}
         </h2>
       </div>
 
       <div className="flex items-center gap-2 sm:gap-4">
-        {/* Sleek Simulated Session Switcher Popover */}
-        <Popover>
-          <PopoverTrigger asChild>
-            <button className="flex items-center gap-1.5 h-10 px-2.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 border border-amber-500/20 rounded-xl transition-all font-bold text-xs shrink-0 active:scale-95 cursor-pointer">
-              <ShieldAlert className="h-4 w-4 shrink-0 text-amber-500" />
-              <span className="hidden md:inline">Role: {activeProfile?.role || "Super Admin"}</span>
-              <ChevronDown className="h-3 w-3 shrink-0 opacity-70" />
-            </button>
-          </PopoverTrigger>
-          <PopoverContent
-            align="end"
-            className="w-[280px] p-2 bg-white border border-border/30 shadow-2xl rounded-2xl overflow-hidden animate-in zoom-in-95 duration-200"
-          >
-            <div className="p-3 pb-2 border-b border-border/20">
-              <h4 className="text-xs font-bold text-dark uppercase tracking-wide">Developer Simulation</h4>
-              <p className="text-[10px] text-slate/50 font-medium mt-0.5">Toggle active admin profile to test Access Denied views across different pages.</p>
-            </div>
-            <div className="py-1 space-y-1">
-              {MOCK_PROFILES.map((p) => {
-                const isSelected = activeProfile?.name === p.name;
-                return (
-                  <button
-                    key={p.name}
-                    onClick={() => handleProfileSwitch(p)}
-                    className={`w-full p-2 rounded-xl text-left transition-colors flex items-center gap-3 cursor-pointer border ${
-                      isSelected ? "bg-amber-500/5 text-amber-600 border-amber-500/20" : "hover:bg-surface text-slate border-transparent"
-                    }`}
-                  >
-                    <Avatar className="h-7 w-7 border border-border/50">
-                      <AvatarImage src={p.avatar} />
-                      <AvatarFallback className="bg-primary/5 text-primary text-[10px] font-bold">
-                        {p.name.charAt(0)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex flex-col min-w-0">
-                      <span className="text-[11px] font-bold leading-tight">{p.name}</span>
-                      <span className="text-[9px] font-bold text-slate/40 tracking-tight leading-none mt-1">{p.role}</span>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </PopoverContent>
-        </Popover>
+        <div className="flex items-center gap-1.5 h-10 px-2.5 bg-amber-500/10 text-amber-600 border border-amber-500/20 rounded-xl font-bold text-xs shrink-0 cursor-default">
+          <ShieldAlert className="h-4 w-4 shrink-0 text-amber-500" />
+          <span className="hidden md:inline">Role: {userMe?.role || "Super Admin"}</span>
+        </div>
 
         <Popover>
           <PopoverTrigger asChild>
@@ -297,11 +221,11 @@ function DashboardHeader({
         >
           <Avatar className="h-8 w-8 border border-border/50">
             <AvatarImage
-              src={activeProfile ? activeProfile.avatar : "https://i.pravatar.cc/150?u=simon"}
-              alt={activeProfile ? activeProfile.name : "Simon Smith"}
+              src={adminAvatar}
+              alt={adminName}
             />
             <AvatarFallback className="bg-primary/5 text-primary text-xs font-bold">
-              {activeProfile ? activeProfile.name.charAt(0) : "SS"}
+              {adminName.charAt(0)}
             </AvatarFallback>
           </Avatar>
         </Link>
@@ -337,64 +261,12 @@ export default function DashboardLayout({
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [expandedItems, setExpandedItems] = useState<string[]>([]);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
-  const [activeProfile, setActiveProfile] = useState<any>(null);
 
-  useEffect(() => {
-    // Load initial profile from localStorage, fallback to Super Admin
-    const storedProfile = localStorage.getItem("activeAdminProfile");
-    if (storedProfile) {
-      try {
-        setActiveProfile(JSON.parse(storedProfile));
-      } catch (e) {
-        const defaultProfile = MOCK_PROFILES[0];
-        localStorage.setItem("activeAdminProfile", JSON.stringify(defaultProfile));
-        localStorage.setItem("adminRole", defaultProfile.role);
-        localStorage.setItem("adminName", defaultProfile.name.split(" ")[0]);
-        setActiveProfile(defaultProfile);
-      }
-    } else {
-      const defaultProfile = MOCK_PROFILES[0];
-      localStorage.setItem("activeAdminProfile", JSON.stringify(defaultProfile));
-      localStorage.setItem("adminRole", defaultProfile.role);
-      localStorage.setItem("adminName", defaultProfile.name.split(" ")[0]);
-      setActiveProfile(defaultProfile);
-    }
-
-    // Proactively listen to internal role updates (e.g. from developer actions)
-    const handleStorageChange = () => {
-      const p = localStorage.getItem("activeAdminProfile");
-      if (p) setActiveProfile(JSON.parse(p));
-    };
-    window.addEventListener("storage", handleStorageChange);
-    return () => window.removeEventListener("storage", handleStorageChange);
-  }, []);
-
-  const handleProfileSwitch = (profile: any) => {
-    localStorage.setItem("activeAdminProfile", JSON.stringify(profile));
-    localStorage.setItem("adminRole", profile.role);
-    localStorage.setItem("adminName", profile.name.split(" ")[0]);
-    setActiveProfile(profile);
-    toast.success(`Switched session: ${profile.name} (${profile.role})`);
-    
-    // Dispatch manual storage change event so other same-page hooks/contexts (like Notifications) sync instantly
-    window.dispatchEvent(new Event("storage"));
-
-    // Check if the current page remains allowed after role switcher
-    const isAllowed = profile.allowedPages.includes("*") || profile.allowedPages.includes(pathname);
-    if (!isAllowed) {
-      // Find first allowed dashboard path to prevent instant locking
-      const firstAllowed = profile.allowedPages.find((p: string) => p.startsWith("/dashboard"));
-      if (firstAllowed) {
-        router.push(firstAllowed);
-      } else {
-        router.push("/dashboard");
-      }
-    }
-  };
-
-  const toggleExpand = (name: string) => {
+  const toggleExpand = (itemName: string) => {
     setExpandedItems((prev) =>
-      prev.includes(name) ? prev.filter((i) => i !== name) : [...prev, name],
+      prev.includes(itemName)
+        ? prev.filter((i) => i !== itemName)
+        : [...prev, itemName]
     );
   };
 
@@ -404,11 +276,7 @@ export default function DashboardLayout({
   };
 
   // RBAC Dynamic Route Check
-  const isPageAllowed = !activeProfile || 
-                        pathname === "/dashboard/notifications" || // Notification center is universally accessible for all profiles to read their messages
-                        pathname.startsWith("/dashboard/portfolio/") || // Portfolio plan detail pages inherit dashboard-level access
-                        activeProfile.allowedPages.includes("*") || 
-                        activeProfile.allowedPages.includes(pathname);
+  const isPageAllowed = true;
 
   return (
     <NotificationProvider>
@@ -616,68 +484,16 @@ export default function DashboardLayout({
         {/* Main Content Area */}
         <div className="flex-1 flex flex-col h-full overflow-hidden">
           {/* Header with Persistent Gap Area */}
-          <div className="z-30 pl-4 pr-8 pt-[21px] pb-5 bg-surface">
+          <div className="z-30 pl-4 pr-8 lg:pl-6 lg:pr-12 pt-[21px] pb-5 bg-surface">
             <DashboardHeader 
               setIsSidebarOpen={setIsSidebarOpen} 
-              setShowLogoutModal={setShowLogoutModal} 
-              activeProfile={activeProfile}
-              handleProfileSwitch={handleProfileSwitch}
+              setShowLogoutModal={setShowLogoutModal}
             />
           </div>
 
           {/* Page Content */}
           <main className="flex-1 overflow-y-auto pl-4 pr-8 pb-5 lg:pl-6 lg:pr-12 lg:pb-10">
-            {isPageAllowed ? (
-              children
-            ) : (
-              <div className="w-full max-w-[1140px] min-h-[650px] mx-auto bg-white rounded-[24px] border border-slate-100 p-8 sm:p-12 flex flex-col items-center justify-center shadow-lg relative overflow-hidden animate-in fade-in duration-500">
-                {/* Soft Colorful Glow Background Spheres */}
-                <div className="absolute top-[-20%] right-[-10%] w-[350px] h-[350px] bg-red-500/[0.03] rounded-full blur-[100px] pointer-events-none" />
-                <div className="absolute bottom-[-20%] left-[-10%] w-[350px] h-[350px] bg-[#155D5F]/[0.03] rounded-full blur-[100px] pointer-events-none" />
-
-                <div className="flex flex-col items-center text-center max-w-[480px] space-y-8 z-10">
-                  {/* Glowing Central AI Hologram Shield Card */}
-                  <div className="relative">
-                    <div className="absolute inset-0 rounded-[40px] bg-[#155D5F]/15 blur-2xl animate-pulse" />
-                    <div className="relative flex items-center justify-center h-40 w-40 rounded-[36px] overflow-hidden bg-white border border-slate-200/60 shadow-2xl hover:scale-105 transition-transform duration-500 p-1 group cursor-pointer">
-                      <div className="relative w-full h-full rounded-[30px] overflow-hidden bg-slate-50">
-                        <Image
-                          src="/access-denied-shield.png"
-                          alt="Security Shield"
-                          fill
-                          sizes="160px"
-                          className="object-cover scale-110"
-                          priority
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <Badge className="bg-red-50 text-red-500 hover:bg-red-50 border border-red-100 px-3.5 py-1 text-[11px] font-extrabold uppercase rounded-full">
-                      Restricted Area
-                    </Badge>
-                    <h1 className="text-3xl font-black font-outfit text-slate-800 tracking-tight">
-                      You don't have access to this page
-                    </h1>
-                    <p className="text-slate-500 text-sm font-medium leading-relaxed">
-                      Your administrator account doesn't have the permissions needed to view this folder. If you think this is a mistake, please contact your Super Admin to update your account role.
-                    </p>
-                  </div>
-
-                  {/* Primary Action Button */}
-                  <div className="flex justify-center w-full pt-2">
-                    <Button
-                      onClick={() => router.push("/dashboard")}
-                      className="h-12 px-8 rounded-xl bg-[#155D5F] hover:bg-[#0F4A4C] text-white font-bold transition-all active:scale-95 flex items-center gap-2 shadow-lg shadow-[#155D5F]/10 text-xs cursor-pointer"
-                    >
-                      <ArrowLeft className="h-4 w-4" />
-                      Go back to Dashboard
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            )}
+            {children}
           </main>
         </div>
 

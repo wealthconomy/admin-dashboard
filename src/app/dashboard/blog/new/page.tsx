@@ -107,19 +107,32 @@ const renderPreviewContent = (text: string) => {
   });
 };
 
+import { useCreateBlogMutation } from "@/lib/redux/features/blogApi";
+import { useUploadFileMutation } from "@/lib/redux/features/adminApi";
+import { Loader2 } from "lucide-react";
+
 export default function NewBlogPage() {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  const [createBlogMutation, { isLoading: isCreating }] = useCreateBlogMutation();
+  const [uploadFileMutation, { isLoading: isUploading }] = useUploadFileMutation();
+  
   const [formData, setFormData] = useState({
     author: "",
     title: "",
     content: "",
     category: "General",
     date: "",
-    image: "",
+    image: "", // Data URL for preview, URL string for final
     publishToApp: true,
     publishToWeb: true,
   });
+
+  const [imageFile, setImageFile] = useState<File | null>(null);
+
+  // Get current local time in YYYY-MM-DDThh:mm format for min date
+  const minDateTime = new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 
   const [previewData, setPreviewData] = useState<typeof formData | null>(null);
 
@@ -127,7 +140,7 @@ export default function NewBlogPage() {
     setPreviewData({ ...formData });
   };
 
-  const handlePost = () => {
+  const handlePost = async () => {
     if (!formData.title.trim()) { toast.error("Title is required."); return; }
     if (!formData.author.trim()) { toast.error("Author is required."); return; }
     if (!formData.content.trim()) { toast.error("Content is required."); return; }
@@ -135,14 +148,45 @@ export default function NewBlogPage() {
       toast.error("Please select at least one publishing target.");
       return;
     }
-    console.log("Post blog payload:", formData);
-    toast.success("Blog posted successfully!");
-    setTimeout(() => router.push("/dashboard/blog"), 800);
+
+    try {
+      let finalImageUrl = formData.image;
+      
+      // Upload image if a new file was selected
+      if (imageFile) {
+        const uploadData = new FormData();
+        uploadData.append("file", imageFile);
+        const res = await uploadFileMutation(uploadData).unwrap();
+        finalImageUrl = res.data?.url || res.url || finalImageUrl; // Adjust based on your API response structure
+      }
+
+      const payload = {
+        title: formData.title,
+        author: formData.author,
+        authorAvatar: "",
+        content: formData.content,
+        category: formData.category,
+        categoryColor: formData.category, // Simplification
+        image: finalImageUrl,
+        status: formData.date ? "scheduled" : "draft",
+        scheduledFor: formData.date ? new Date(formData.date).toISOString() : undefined,
+        publishToApp: formData.publishToApp,
+        publishToWeb: formData.publishToWeb,
+      };
+
+      await createBlogMutation(payload).unwrap();
+      
+      toast.success("Blog posted successfully!");
+      setTimeout(() => router.push("/dashboard/blog"), 800);
+    } catch (err: any) {
+      toast.error(err?.data?.message || "Failed to post blog");
+    }
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      setImageFile(file);
       const reader = new FileReader();
       reader.onloadend = () => {
         setFormData({ ...formData, image: reader.result as string });
@@ -153,6 +197,7 @@ export default function NewBlogPage() {
 
   const removeImage = (e: React.MouseEvent) => {
     e.stopPropagation();
+    setImageFile(null);
     setFormData({ ...formData, image: "" });
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -183,9 +228,10 @@ export default function NewBlogPage() {
           </span>
           <Button 
             onClick={handlePost}
-            className="bg-[#155D5F] hover:bg-[#155D5F]/90 text-white rounded-xl h-12 px-10 font-bold text-sm shadow-xl shadow-primary/20 transition-all active:scale-95"
+            disabled={isCreating || isUploading}
+            className="bg-[#155D5F] hover:bg-[#155D5F]/90 text-white rounded-xl h-12 px-10 font-bold text-sm shadow-xl shadow-primary/20 transition-all active:scale-95 disabled:opacity-50"
           >
-            Post
+            {(isCreating || isUploading) ? <Loader2 className="h-5 w-5 animate-spin" /> : "Post"}
           </Button>
         </div>
       </div>
@@ -257,11 +303,11 @@ export default function NewBlogPage() {
                 {formData.image ? (
                   <div className="relative w-full h-full flex items-center justify-center gap-4">
                     <div className="relative h-16 w-24 rounded-lg overflow-hidden border border-border/20 shadow-sm">
-                      <Image
+                      <img
                         src={formData.image}
-                        alt="Thumbnail"
-                        fill
-                        className="object-cover"
+                        alt="Cover"
+                        className="object-cover w-full h-full"
+                        onError={(e) => { e.currentTarget.src = "https://images.unsplash.com/photo-1554224155-6726b3ff858f?q=80&w=400&h=200&auto=format&fit=crop"; }}
                       />
                     </div>
                     <div className="flex flex-col items-start">
@@ -300,8 +346,9 @@ export default function NewBlogPage() {
                 </Label>
                 <div className="relative">
                   <Input
-                    type="date"
-                    className="h-12 bg-surface/50 border-border/30 rounded-xl px-5 text-sm font-medium focus-visible:ring-primary/20 transition-all border shadow-none pr-12"
+                    type="datetime-local"
+                    min={minDateTime}
+                    className="h-12 bg-surface/50 border-border/30 rounded-xl px-5 text-sm font-medium focus-visible:ring-primary/20 transition-all border shadow-none pr-4"
                     value={formData.date}
                     onChange={(e) =>
                       setFormData({ ...formData, date: e.target.value })
@@ -432,11 +479,11 @@ export default function NewBlogPage() {
               <div className="animate-in fade-in slide-in-from-right-4 duration-500 space-y-6">
                 <div className="relative h-[200px] w-full overflow-hidden bg-white shadow-sm border border-border/20 rounded-xl">
                   {previewData.image ? (
-                    <Image
+                    <img
                       src={previewData.image}
                       alt="Preview"
-                      fill
-                      className="object-cover"
+                      className="object-cover w-full h-full"
+                      onError={(e) => { e.currentTarget.src = "https://images.unsplash.com/photo-1554224155-6726b3ff858f?q=80&w=400&h=200&auto=format&fit=crop"; }}
                     />
                   ) : (
                     <div className="w-full h-full bg-surface flex items-center justify-center">

@@ -18,11 +18,14 @@ import {
   AlertCircle,
   Smartphone,
   Globe,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
+import { useCreateLibraryMutation } from "@/lib/redux/features/libraryApi";
+import { useUploadFileMutation } from "@/lib/redux/features/adminApi";
 import type { ContentType, FileType } from "@/types/library";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -216,11 +219,12 @@ export default function NewLibraryMaterialPage() {
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [youtubeError, setYoutubeError] = useState("");
 
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  // Target Platforms
   const [publishToApp, setPublishToApp] = useState(true);
   const [publishToWeb, setPublishToWeb] = useState(true);
+
+  const [createLibrary, { isLoading: isCreating }] = useCreateLibraryMutation();
+  const [uploadFile, { isLoading: isUploading }] = useUploadFileMutation();
+  const isSubmitting = isCreating || isUploading;
 
   // Handlers
   const handleCoverFile = useCallback((file: File) => {
@@ -292,42 +296,59 @@ export default function NewLibraryMaterialPage() {
       return;
     }
 
-    setIsSubmitting(true);
+    try {
+      // 1. Upload Cover Image
+      const coverFormData = new FormData();
+      coverFormData.append("file", coverFile);
+      const coverRes = await uploadFile(coverFormData).unwrap();
+      const coverUrl = coverRes.data?.url;
 
-    // Build the record payload (simulated — in production upload files first to get URLs)
-    const record = {
-      id: crypto.randomUUID(),
-      contentType,
-      title: title.trim(),
-      description: description.trim(),
-      image: coverPreview ?? "", // would be cloud URL after upload
-      timePosted: new Date().toISOString(),
-      readingDuration: readingDuration.trim(),
-      ...(contentType === "document"
-        ? {
-            documentUrl: "#", // would be cloud URL after upload
-            fileType: documentFile ? getFileType(documentFile) : undefined,
-            fileSize: documentFile
-              ? formatFileSize(documentFile.size)
-              : undefined,
-            isDownloadable,
-          }
-        : {
-            youtubeUrl: youtubeUrl.trim(),
-          }),
-      likesCount: 0,
-      commentsCount: 0,
-      publishToApp,
-      publishToWeb,
-    };
+      if (!coverUrl) {
+        throw new Error("Failed to get cover image URL after upload");
+      }
 
-    console.log("Library material record to save:", record);
+      // 2. Upload Document (if applicable)
+      let docUrl = "";
+      if (contentType === "document" && documentFile) {
+        const docFormData = new FormData();
+        docFormData.append("file", documentFile);
+        const docRes = await uploadFile(docFormData).unwrap();
+        docUrl = docRes.data?.url;
 
-    // Simulate async save
-    await new Promise((res) => setTimeout(res, 1200));
+        if (!docUrl) {
+          throw new Error("Failed to get document URL after upload");
+        }
+      }
 
-    toast.success("Material uploaded successfully!");
-    setTimeout(() => router.push("/dashboard/library"), 800);
+      // 3. Build the record payload
+      const record = {
+        contentType,
+        title: title.trim(),
+        description: description.trim(),
+        image: coverUrl,
+        readingDuration: readingDuration.trim(),
+        ...(contentType === "document"
+          ? {
+              documentUrl: docUrl,
+              fileType: documentFile ? getFileType(documentFile) : "PDF",
+              fileSize: documentFile
+                ? formatFileSize(documentFile.size)
+                : "0 MB",
+              isDownloadable,
+            }
+          : {
+              youtubeUrl: youtubeUrl.trim(),
+            }),
+        publishToApp,
+        publishToWeb,
+      };
+
+      await createLibrary(record).unwrap();
+      toast.success("Material uploaded successfully!");
+      setTimeout(() => router.push("/dashboard/library"), 800);
+    } catch (err: any) {
+      toast.error(err?.data?.message || "Failed to upload material");
+    }
   };
 
   const descCharCount = description.length;

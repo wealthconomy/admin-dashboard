@@ -30,36 +30,9 @@ interface BlogReactionComment {
   likes: number;
 }
 
-export const MOCK_BLOG_ENGAGEMENT: Record<
-  number,
-  {
-    likes: { user: string; role: string }[];
-    comments: BlogReactionComment[];
-  }
-> = {
-  1: {
-    likes: [
-      { user: "Sarah Jenkins", role: "Investor" },
-      { user: "Michael Chen", role: "Entrepreneur" },
-    ],
-    comments: [
-      {
-        id: "bc1",
-        userName: "Sarah Jenkins",
-        userRole: "Investor",
-        content: "Super helpful breakdown of how much emergency savings to keep. 3-6 months is definitely a sweet spot!",
-        timeAgo: "2 days ago",
-        likes: 4,
-      },
-    ],
-  },
-  2: {
-    likes: [
-      { user: "Jessica Taylor", role: "Investor" },
-    ],
-    comments: [],
-  },
-};
+
+
+import { useGetBlogEngagementQuery } from "@/lib/redux/features/blogApi";
 
 export function BlogCommentsModal({
   article,
@@ -68,9 +41,11 @@ export function BlogCommentsModal({
   article: Article;
   onClose: () => void;
 }) {
-  const engagement = MOCK_BLOG_ENGAGEMENT[article.id] || {
-    likes: [],
-    comments: [],
+  const { data: engagementData, isLoading } = useGetBlogEngagementQuery(article.id.toString());
+  
+  const engagement = {
+    likes: (Array.isArray(engagementData?.data?.likes) ? engagementData.data.likes : []) as { user: string; role: string }[],
+    comments: (Array.isArray(engagementData?.data?.comments) ? engagementData.data.comments : []) as BlogReactionComment[],
   };
 
   const [activeTab, setActiveTab] = useState<"likes" | "comments">("comments");
@@ -129,7 +104,12 @@ export function BlogCommentsModal({
 
         {/* Tab Content */}
         <div className="flex-1 overflow-y-auto pr-1">
-          {activeTab === "comments" ? (
+          {isLoading ? (
+            <div className="h-full flex flex-col items-center justify-center text-slate/40">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mb-3"></div>
+              <p className="text-xs font-semibold">Loading engagement...</p>
+            </div>
+          ) : activeTab === "comments" ? (
             engagement.comments.length > 0 ? (
               <div className="space-y-4">
                 {engagement.comments.map((comment) => (

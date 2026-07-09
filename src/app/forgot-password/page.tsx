@@ -4,38 +4,27 @@ import Image from "next/image";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useDispatch } from "react-redux";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Mail, Lock, Eye, EyeOff } from "lucide-react";
+import { Mail, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
-import { useLoginMutation } from "@/lib/redux/features/authApi";
-import { setCredentials } from "@/lib/redux/features/authSlice";
 
-export default function LoginPage() {
-  const [showPassword, setShowPassword] = useState(false);
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
+import { useForgotPasswordMutation } from "@/lib/redux/features/authApi";
+
+export default function ForgotPasswordPage() {
+  const [email, setEmail] = useState("");
   const router = useRouter();
-  const dispatch = useDispatch();
-  const [login, { isLoading }] = useLoginMutation();
+  const [forgotPassword, { isLoading }] = useForgotPasswordMutation();
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
 
     try {
-      const result = await login({ email: username, password }).unwrap();
-      dispatch(
-        setCredentials({
-          user: result.data.user,
-          accessToken: result.data.accessToken,
-          refreshToken: result.data.refreshToken,
-        })
-      );
-      toast.success(result.message || "Login successful!");
-      router.push("/dashboard");
+      const result = await forgotPassword({ destination: email }).unwrap();
+      toast.success(result.message || "Verification code sent to your email!");
+      router.push(`/verify-code?email=${encodeURIComponent(email)}`);
     } catch (err: any) {
-      const errorMsg = err?.data?.message || err?.message || "Login failed";
+      const errorMsg = err?.data?.message || err?.message || "Failed to send verification code";
       toast.error(errorMsg);
     }
   };
@@ -45,7 +34,6 @@ export default function LoginPage() {
       {/* Left Side - Teal Background */}
       <div className="hidden lg:flex lg:w-1/2 bg-primary flex-col items-center justify-center text-white px-12 relative">
         <div className="z-10 flex flex-col items-center w-[302px] text-center">
-          {/* Logo representation */}
           <div className="w-full">
             <div className="relative w-full h-[180px] flex items-center justify-center">
               <Image
@@ -63,12 +51,11 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {/* Subtle background circles for depth */}
         <div className="absolute top-0 left-0 w-64 h-64 bg-white/5 rounded-full -translate-x-1/2 -translate-y-1/2 blur-3xl"></div>
         <div className="absolute bottom-0 right-0 w-96 h-96 bg-white/5 rounded-full translate-x-1/3 translate-y-1/3 blur-3xl"></div>
       </div>
 
-      {/* Right Side - Login Form */}
+      {/* Right Side - Forgot Password Form */}
       <div className="w-full lg:w-1/2 flex items-center justify-center bg-white p-8">
         <div className="w-full max-w-md lg:max-w-[324px] flex flex-col items-center">
           {/* Logo */}
@@ -86,77 +73,49 @@ export default function LoginPage() {
           </div>
 
           <div className="w-full flex flex-col items-center mb-6">
-            <h3 className="text-3xl font-bold font-outfit text-dark mb-2">
-              Log In
+            <h3 className="text-3xl font-bold font-outfit text-dark mb-2 text-center">
+              Forgot Password
             </h3>
             <p className="text-slate text-center text-sm leading-relaxed">
-              To sign in to your account in the application, enter your email
-              and your password
+              Enter the email address associated with your account and we will send you a verification code
             </p>
           </div>
 
-          <form onSubmit={handleLogin} className="w-full space-y-6">
+          <form onSubmit={handleForgotPassword} className="w-full space-y-6">
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-slate ml-1">
-               Username or Email
+                Email Address
               </label>
               <div className="relative">
                 <Mail className="absolute left-3 top-3 h-5 w-5 text-slate/40" />
                 <Input
-                  type="text"
-                  placeholder="Email or Mobile"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  type="email"
+                  placeholder="name@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   className="pl-10 py-6 bg-surface border-none rounded-xl focus-visible:ring-primary/20"
                   required
                 />
               </div>
             </div>
-
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-slate ml-1">
-                Password
-              </label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-3 h-5 w-5 text-slate/40" />
-                <Input
-                  type={showPassword ? "text" : "password"}
-                  placeholder="Password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="pl-10 py-6 bg-surface border-none rounded-xl focus-visible:ring-primary/20"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-3.5 text-slate/40 hover:text-slate"
-                >
-                  {showPassword ? (
-                    <EyeOff className="h-5 w-5" />
-                  ) : (
-                    <Eye className="h-5 w-5" />
-                  )}
-                </button>
-              </div>
-              <div className="flex justify-end pr-1">
-                <Link
-                  href="/forgot-password"
-                  className="text-sm font-semibold text-primary hover:underline transition-all"
-                >
-                  Forgot Password?
-                </Link>
-              </div>
-            </div>
-
 
             <Button
               type="submit"
               className="w-full py-7 bg-primary hover:bg-primary/90 text-white rounded-xl text-lg font-outfit transition-all duration-300"
               disabled={isLoading}
             >
-              {isLoading ? "Logging in..." : "Log in"}
+              {isLoading ? "Sending..." : "Send Verification Code"}
             </Button>
+
+            <div className="flex justify-center mt-4">
+              <Link
+                href="/login"
+                className="inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline transition-all"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                Back to Log In
+              </Link>
+            </div>
           </form>
         </div>
       </div>

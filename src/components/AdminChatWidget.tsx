@@ -7,6 +7,11 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { 
+  useGetInternalTeamQuery, 
+  useGetInternalMessagesQuery, 
+  useSendInternalMessageMutation 
+} from "@/lib/redux/features/chatApi";
 
 const ADMINS = [
   {
@@ -15,7 +20,7 @@ const ADMINS = [
     lastMessage: "Quick update on the... ",
     time: "10:00am",
     status: "online",
-    image: "https://i.pravatar.cc/150?u=1",
+    image: "",
     isAdmin: true,
     role: "Super Admin",
   },
@@ -25,7 +30,7 @@ const ADMINS = [
     lastMessage: "Ready when you are",
     time: "11:30am",
     status: "online",
-    image: "https://i.pravatar.cc/150?u=2",
+    image: "",
     isAdmin: true,
     role: "Admin",
   },
@@ -35,7 +40,7 @@ const ADMINS = [
     lastMessage: "Let's review the... ",
     time: "9:45am",
     status: "online",
-    image: "https://i.pravatar.cc/150?u=3",
+    image: "",
     isAdmin: true,
     role: "Support Lead",
   },
@@ -45,7 +50,7 @@ const ADMINS = [
     lastMessage: "I'll handle the... ",
     time: "12:00pm",
     status: "offline",
-    image: "https://i.pravatar.cc/150?u=4",
+    image: "",
     isAdmin: true,
     role: "SysAdmin",
   },
@@ -55,7 +60,7 @@ const ADMINS = [
     lastMessage: "Meeting in 5",
     time: "2:00pm",
     status: "online",
-    image: "https://i.pravatar.cc/150?u=5",
+    image: "",
     isAdmin: true,
     role: "Content Writer",
   },
@@ -63,42 +68,46 @@ const ADMINS = [
 
 const MOCK_MESSAGES: Record<number, any[]> = {
   1: [
-    { id: 1, sender: "Simon", text: "Hey! Did you check the new analytics?", time: "9:55am", isMe: false, senderImage: "https://i.pravatar.cc/150?u=1" },
+    { id: 1, sender: "Simon", text: "Hey! Did you check the new analytics?", time: "9:55am", isMe: false, senderImage: "" },
     { id: 2, sender: "Me", text: "Yes, looks great. Quick update on the new feature release?", time: "10:00am", isMe: true }
   ],
   2: [
-    { id: 1, sender: "Fatima", text: "I've reviewed the customer disputes.", time: "11:25am", isMe: false, senderImage: "https://i.pravatar.cc/150?u=2" },
+    { id: 1, sender: "Fatima", text: "I've reviewed the customer disputes.", time: "11:25am", isMe: false, senderImage: "" },
     { id: 2, sender: "Me", text: "Awesome. Ready when you are to hop on a call.", time: "11:30am", isMe: true }
   ]
 };
 
 export function AdminChatWidget() {
+  const { data: teamData, isLoading: isTeamLoading } = useGetInternalTeamQuery();
+  const team = Array.isArray(teamData) ? teamData : (teamData?.data || []);
+
   const [isOpen, setIsOpen] = useState(false);
   const [selectedAdmin, setSelectedAdmin] = useState<any | null>(null);
   const [inputText, setInputText] = useState("");
-  const [messagesMap, setMessagesMap] = useState(MOCK_MESSAGES);
+
+  const currentAdminId = selectedAdmin?.id || selectedAdmin?._id;
+  const { data: messagesData } = useGetInternalMessagesQuery(currentAdminId, {
+    skip: !selectedAdmin,
+    pollingInterval: isOpen && selectedAdmin ? 5000 : 0,
+  });
+
+  const [sendMessage] = useSendInternalMessageMutation();
 
   const toggleOpen = () => setIsOpen(!isOpen);
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (!inputText.trim() || !selectedAdmin) return;
     
-    const newMsg = {
-      id: Date.now(),
-      sender: "Me",
-      text: inputText,
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }).toLowerCase(),
-      isMe: true,
-    };
-
-    setMessagesMap(prev => ({
-      ...prev,
-      [selectedAdmin.id]: [...(prev[selectedAdmin.id] || []), newMsg]
-    }));
-    setInputText("");
+    try {
+      const currentAdminId = selectedAdmin.id || selectedAdmin._id;
+      await sendMessage({ receiverId: currentAdminId, text: inputText }).unwrap();
+      setInputText("");
+    } catch (err) {
+      console.error("Failed to send message: ", err);
+    }
   };
 
-  const activeMessages = selectedAdmin ? (messagesMap[selectedAdmin.id] || []) : [];
+  const activeMessages = Array.isArray(messagesData) ? messagesData : (messagesData?.data || []);
 
   return (
     <>
@@ -139,9 +148,11 @@ export function AdminChatWidget() {
               <div className="px-2 py-3">
                 <span className="text-[11px] font-bold text-slate/50 uppercase tracking-widest">Active Team Members</span>
               </div>
-              {ADMINS.map(admin => (
+              {team.map((admin: any) => {
+                const adminId = admin.id || admin._id;
+                return (
                 <div 
-                  key={admin.id} 
+                  key={adminId} 
                   onClick={() => setSelectedAdmin(admin)}
                   className="flex items-center gap-3 p-3 rounded-xl hover:bg-surface/60 cursor-pointer transition-colors group"
                 >
@@ -167,7 +178,8 @@ export function AdminChatWidget() {
                     </div>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             /* Direct Chat View */
@@ -199,7 +211,7 @@ export function AdminChatWidget() {
                     <p className="text-xs font-medium text-slate">Start conversation with {selectedAdmin.name}</p>
                   </div>
                 ) : (
-                  activeMessages.map(msg => (
+                  activeMessages.map((msg: any) => (
                     <div key={msg.id} className={`flex flex-col max-w-[85%] ${msg.isMe ? "self-end items-end" : "self-start items-start"}`}>
                       <div className={`p-3 rounded-2xl text-[12px] font-medium leading-relaxed shadow-sm ${msg.isMe ? "bg-[#155D5F] text-white rounded-tr-sm" : "bg-white border border-border/30 text-dark rounded-tl-sm"}`}>
                         <p className="whitespace-pre-wrap">{msg.text}</p>

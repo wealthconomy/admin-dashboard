@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
 import Image from "next/image";
@@ -22,6 +22,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
+import { useGetLibraryByIdQuery, useUpdateLibraryMutation } from "@/lib/redux/features/libraryApi";
+import { useUploadFileMutation } from "@/lib/redux/features/adminApi";
+import { Loader2 } from "lucide-react";
 import type { ContentType, FileType, LibraryMaterial } from "@/types/library";
 
 // ─── Helpers (same as new/page) ───────────────────────────────────────────────
@@ -78,68 +81,7 @@ function Tooltip({ text }: { text: string }) {
 
 // ─── Mock data loader (replace with real API call) ───────────────────────────
 
-const MOCK_MATERIALS: Record<string, LibraryMaterial> = {
-  "1": {
-    id: "1",
-    contentType: "document",
-    title: "The Psychology of Money",
-    description: "Timeless lessons on wealth, greed, and happiness.",
-    image:
-      "https://images.unsplash.com/photo-1589829085413-56de8ae18c73?q=80&w=400&h=600&auto=format&fit=crop",
-    timePosted: "2026-05-10T08:00:00Z",
-    readingDuration: "4 hrs read",
-    documentUrl: "#",
-    fileType: "PDF",
-    fileSize: "2.4 MB",
-    isDownloadable: true,
-    likesCount: 124,
-    commentsCount: 18,
-  },
-  "2": {
-    id: "2",
-    contentType: "video",
-    title: "Understanding Compound Interest",
-    description:
-      "A quick guide to how compound interest builds wealth over time.",
-    image:
-      "https://images.unsplash.com/photo-1611162617474-5b21e879e113?q=80&w=400&h=300&auto=format&fit=crop",
-    timePosted: "2026-05-12T09:00:00Z",
-    readingDuration: "15 min watch",
-    youtubeUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-    likesCount: 89,
-    commentsCount: 5,
-  },
-  "3": {
-    id: "3",
-    contentType: "document",
-    title: "Real Estate Investing 101",
-    description: "The fundamentals of investing in physical properties.",
-    image:
-      "https://images.unsplash.com/photo-1560518883-ce09059eeffa?q=80&w=400&h=600&auto=format&fit=crop",
-    timePosted: "2026-05-15T11:00:00Z",
-    readingDuration: "6 hrs read",
-    documentUrl: "#",
-    fileType: "EPUB",
-    fileSize: "5.1 MB",
-    isDownloadable: false,
-    likesCount: 256,
-    commentsCount: 42,
-  },
-  "4": {
-    id: "4",
-    contentType: "video",
-    title: "Stock Market Basics for Beginners",
-    description:
-      "Everything you need to know to start investing in the stock market.",
-    image:
-      "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?q=80&w=400&h=300&auto=format&fit=crop",
-    timePosted: "2026-05-18T14:00:00Z",
-    readingDuration: "22 min watch",
-    youtubeUrl: "https://www.youtube.com/watch?v=example2",
-    likesCount: 312,
-    commentsCount: 67,
-  },
-};
+
 
 // ─── Edit Form ────────────────────────────────────────────────────────────────
 
@@ -148,43 +90,44 @@ export default function EditLibraryMaterialPage() {
   const params = useParams<{ id: string }>();
   const id = params?.id ?? "";
 
-  // Load existing data
-  const existing = MOCK_MATERIALS[id];
+  const { data: response, isLoading: isFetching, isError } = useGetLibraryByIdQuery(id, { skip: !id });
+  const existing = Array.isArray(response?.data) ? response.data[0] : response?.data || response;
 
-  const [contentType] = useState<ContentType>(
-    existing?.contentType ?? "document"
-  );
-  const [title, setTitle] = useState(existing?.title ?? "");
-  const [description, setDescription] = useState(existing?.description ?? "");
-  const [readingDuration, setReadingDuration] = useState(
-    existing?.readingDuration ?? ""
-  );
+  const [updateLibrary, { isLoading: isUpdating }] = useUpdateLibraryMutation();
+  const [uploadFile, { isLoading: isUploading }] = useUploadFileMutation();
 
-  // Cover image
+  const [contentType, setContentType] = useState<ContentType>("document");
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [readingDuration, setReadingDuration] = useState("");
+
   const [coverFile, setCoverFile] = useState<File | null>(null);
-  const [coverPreview, setCoverPreview] = useState<string | null>(
-    existing?.image ?? null
-  );
+  const [coverPreview, setCoverPreview] = useState<string | null>(null);
 
-  // Document-specific
   const [documentFile, setDocumentFile] = useState<File | null>(null);
-  const [isDownloadable, setIsDownloadable] = useState(
-    existing?.isDownloadable ?? true
-  );
+  const [isDownloadable, setIsDownloadable] = useState(true);
 
-  // Target Platforms
-  const [publishToApp, setPublishToApp] = useState(
-    existing?.publishToApp ?? true
-  );
-  const [publishToWeb, setPublishToWeb] = useState(
-    existing?.publishToWeb ?? true
-  );
+  const [publishToApp, setPublishToApp] = useState(true);
+  const [publishToWeb, setPublishToWeb] = useState(true);
 
-  // Video-specific
-  const [youtubeUrl, setYoutubeUrl] = useState(existing?.youtubeUrl ?? "");
+  const [youtubeUrl, setYoutubeUrl] = useState("");
   const [youtubeError, setYoutubeError] = useState("");
 
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const isSubmitting = isUpdating || isUploading;
+
+  useEffect(() => {
+    if (existing && !isFetching) {
+      setContentType(existing.contentType || "document");
+      setTitle(existing.title || "");
+      setDescription(existing.description || "");
+      setReadingDuration(existing.readingDuration || "");
+      setCoverPreview(existing.image?.replace(/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/, process.env.NEXT_PUBLIC_API_URL || "") || null);
+      setIsDownloadable(existing.isDownloadable ?? true);
+      setPublishToApp(existing.publishToApp ?? true);
+      setPublishToWeb(existing.publishToWeb ?? true);
+      setYoutubeUrl(existing.youtubeUrl || "");
+    }
+  }, [existing, isFetching]);
 
   const coverInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
@@ -220,40 +163,71 @@ export default function EditLibraryMaterialPage() {
       return;
     }
 
-    setIsSubmitting(true);
+    try {
+      // 1. Upload new cover image if user selected one
+      let finalImage = coverPreview ?? existing?.image ?? "";
+      if (coverFile) {
+        const coverFormData = new FormData();
+        coverFormData.append("file", coverFile);
+        const coverRes = await uploadFile(coverFormData).unwrap();
+        if (coverRes.data?.url) {
+          finalImage = coverRes.data.url;
+        } else {
+          throw new Error("Failed to upload new cover image");
+        }
+      }
 
-    const updatedRecord = {
-      id,
-      contentType,
-      title: title.trim(),
-      description: description.trim(),
-      image: coverPreview ?? existing?.image ?? "",
-      timePosted: existing?.timePosted ?? new Date().toISOString(),
-      readingDuration: readingDuration.trim(),
-      ...(contentType === "document"
-        ? {
-            documentUrl: existing?.documentUrl ?? "#",
-            fileType: documentFile ? getFileType(documentFile) : existing?.fileType,
-            fileSize: documentFile
-              ? formatFileSize(documentFile.size)
-              : existing?.fileSize,
-            isDownloadable,
-          }
-        : { youtubeUrl: youtubeUrl.trim() }),
-      likesCount: existing?.likesCount ?? 0,
-      commentsCount: existing?.commentsCount ?? 0,
-      publishToApp,
-      publishToWeb,
-    };
+      // 2. Upload new document if user selected one
+      let finalDocumentUrl = existing?.documentUrl ?? "";
+      if (contentType === "document" && documentFile) {
+        const docFormData = new FormData();
+        docFormData.append("file", documentFile);
+        const docRes = await uploadFile(docFormData).unwrap();
+        if (docRes.data?.url) {
+          finalDocumentUrl = docRes.data.url;
+        } else {
+          throw new Error("Failed to upload new document");
+        }
+      }
 
-    console.log("Updated library record:", updatedRecord);
-    await new Promise((res) => setTimeout(res, 1000));
+      const updatedRecord = {
+        contentType,
+        title: title.trim(),
+        description: description.trim(),
+        image: finalImage,
+        readingDuration: readingDuration.trim(),
+        ...(contentType === "document"
+          ? {
+              documentUrl: finalDocumentUrl,
+              fileType: documentFile ? getFileType(documentFile) : existing?.fileType,
+              fileSize: documentFile
+                ? formatFileSize(documentFile.size)
+                : existing?.fileSize,
+              isDownloadable,
+            }
+          : { youtubeUrl: youtubeUrl.trim() }),
+        publishToApp,
+        publishToWeb,
+      };
 
-    toast.success("Material updated successfully!");
-    setTimeout(() => router.push("/dashboard/library"), 800);
+      await updateLibrary({ id, ...updatedRecord }).unwrap();
+      toast.success("Material updated successfully!");
+      setTimeout(() => router.push("/dashboard/library"), 800);
+    } catch (err: any) {
+      toast.error(err?.data?.message || "Failed to update material");
+    }
   };
 
-  if (!existing) {
+  if (isFetching) {
+    return (
+      <div className="bg-white rounded-[20px] p-24 border border-border/50 shadow-sm w-full text-center flex flex-col items-center justify-center">
+        <Loader2 className="h-10 w-10 animate-spin text-slate/40 mb-4" />
+        <p className="text-sm font-bold text-slate/60">Loading material details...</p>
+      </div>
+    );
+  }
+
+  if (!existing && !isFetching) {
     return (
       <div className="bg-white rounded-[20px] p-8 border border-border/50 shadow-sm w-full text-center space-y-4">
         <p className="text-lg font-bold text-dark">Material not found.</p>
@@ -334,11 +308,11 @@ export default function EditLibraryMaterialPage() {
               />
               {coverPreview ? (
                 <>
-                  <Image
+                  <img
                     src={coverPreview}
                     alt="Cover Preview"
-                    fill
-                    className="object-cover"
+                    className="object-cover h-full w-full"
+                    onError={(e) => { e.currentTarget.src = "https://images.unsplash.com/photo-1554224155-6726b3ff858f?q=80&w=400&h=200&auto=format&fit=crop" }}
                   />
                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                     <span className="text-white font-bold text-sm bg-black/50 px-4 py-2 rounded-xl">

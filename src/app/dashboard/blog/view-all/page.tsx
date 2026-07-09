@@ -14,33 +14,46 @@ import {
 import { toast } from "sonner";
 import { ArticleStatus, Article, BlogCommentsModal, ConfirmActionModal } from "../shared";
 
-// Seed articles matching the main page
-const SEED_ARTICLES = [
-  { id: 1,  title: "Emergency Funds 101",         author: "Ayo Ogunseinde", authorAvatar: "https://i.pravatar.cc/150?u=ayo1",  timeAgo: "7 hours ago", bookmarks: 2, views: 4, category: "WealthFlex", categoryColor: "WealthFlex", image: "https://images.unsplash.com/photo-1554224155-6726b3ff858f?q=80&w=400&h=200&auto=format&fit=crop", status: "published" },
-  { id: 2,  title: "Automation Secrets",           author: "Ayo Ogunseinde", authorAvatar: "https://i.pravatar.cc/150?u=ayo2",  timeAgo: "7 hours ago", bookmarks: 2, views: 4, category: "WealthFam",  categoryColor: "WealthFam",  image: "https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=400&h=200&auto=format&fit=crop", status: "published" },
-  { id: 3,  title: "Automation Secrets",           author: "Ayo Ogunseinde", authorAvatar: "https://i.pravatar.cc/150?u=ayo3",  timeAgo: "7 hours ago", bookmarks: 2, views: 4, category: "WealthFam",  categoryColor: "WealthFam",  image: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=400&h=200&auto=format&fit=crop", status: "published" },
-  { id: 4,  title: "Emergency Funds 101",         author: "Ayo Ogunseinde", authorAvatar: "https://i.pravatar.cc/150?u=ayo4",  timeAgo: "7 hours ago", bookmarks: 2, views: 4, category: "WealthFlex", categoryColor: "WealthFlex", image: "https://images.unsplash.com/photo-1579621970563-ebec7560ff3e?q=80&w=400&h=200&auto=format&fit=crop", status: "published" },
-  { id: 5,  title: "Emergency Funds 101",         author: "Ayo Ogunseinde", authorAvatar: "https://i.pravatar.cc/150?u=ayo5",  timeAgo: "7 hours ago", bookmarks: 2, views: 4, category: "WealthFlex", categoryColor: "WealthFlex", image: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?q=80&w=400&h=200&auto=format&fit=crop", status: "published" },
-  { id: 6,  title: "Automation Secrets",           author: "Ayo Ogunseinde", authorAvatar: "https://i.pravatar.cc/150?u=ayo6",  timeAgo: "7 hours ago", bookmarks: 2, views: 4, category: "WealthFam",  categoryColor: "WealthFam",  image: "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=400&h=200&auto=format&fit=crop", status: "published" },
-  { id: 7,  title: "Automation Secrets",           author: "Ayo Ogunseinde", authorAvatar: "https://i.pravatar.cc/150?u=ayo7",  timeAgo: "7 hours ago", bookmarks: 2, views: 4, category: "WealthFam",  categoryColor: "WealthFam",  image: "https://images.unsplash.com/photo-1504868584819-f8e8b4b6d7e3?q=80&w=400&h=200&auto=format&fit=crop", status: "published" },
-  { id: 8,  title: "Emergency Funds 101",         author: "Ayo Ogunseinde", authorAvatar: "https://i.pravatar.cc/150?u=ayo8",  timeAgo: "7 hours ago", bookmarks: 2, views: 4, category: "WealthFlex", categoryColor: "WealthFlex", image: "https://images.unsplash.com/photo-1526304640581-d334cdbbf45e?q=80&w=400&h=200&auto=format&fit=crop", status: "published" },
-  { id: 9,  title: "Emergency Funds 101",         author: "Ayo Ogunseinde", authorAvatar: "https://i.pravatar.cc/150?u=ayo9",  timeAgo: "7 hours ago", bookmarks: 2, views: 4, category: "WealthFlex", categoryColor: "WealthFlex", image: "https://images.unsplash.com/photo-1554224155-6726b3ff858f?q=80&w=400&h=200&auto=format&fit=crop", status: "scheduled", scheduledFor: "May 15, 2026 · 9:00 AM" },
-  { id: 10, title: "Automation Secrets",           author: "Ayo Ogunseinde", authorAvatar: "https://i.pravatar.cc/150?u=ayo10", timeAgo: "7 hours ago", bookmarks: 2, views: 4, category: "WealthFam",  categoryColor: "WealthFam",  image: "https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=400&h=200&auto=format&fit=crop", status: "scheduled", scheduledFor: "May 16, 2026 · 2:00 PM" },
-  { id: 11, title: "Automation Secrets",           author: "Ayo Ogunseinde", authorAvatar: "https://i.pravatar.cc/150?u=ayo11", timeAgo: "7 hours ago", bookmarks: 2, views: 4, category: "WealthFam",  categoryColor: "WealthFam",  image: "https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=400&h=200&auto=format&fit=crop", status: "scheduled", scheduledFor: "May 18, 2026 · 10:00 AM" },
-  { id: 12, title: "Emergency Funds 101",         author: "Ayo Ogunseinde", authorAvatar: "https://i.pravatar.cc/150?u=ayo12", timeAgo: "7 hours ago", bookmarks: 2, views: 4, category: "WealthFlex", categoryColor: "WealthFlex", image: "https://images.unsplash.com/photo-1579621970563-ebec7560ff3e?q=80&w=400&h=200&auto=format&fit=crop", status: "scheduled", scheduledFor: "May 20, 2026 · 8:00 AM" },
-  { id: 13, title: "Emergency Funds 101",         author: "Ayo Ogunseinde", authorAvatar: "https://i.pravatar.cc/150?u=ayo13", timeAgo: "3 hours ago",  bookmarks: 0, views: 0, category: "WealthFlex", categoryColor: "WealthFlex", image: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?q=80&w=400&h=200&auto=format&fit=crop", status: "draft" },
-  { id: 14, title: "Automation Secrets",           author: "Ayo Ogunseinde", authorAvatar: "https://i.pravatar.cc/150?u=ayo14", timeAgo: "1 hour ago",   bookmarks: 0, views: 0, category: "WealthFam",  categoryColor: "WealthFam",  image: "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=400&h=200&auto=format&fit=crop", status: "draft" },
-  { id: 15, title: "Automation Secrets",           author: "Ayo Ogunseinde", authorAvatar: "https://i.pravatar.cc/150?u=ayo15", timeAgo: "2 hours ago",  bookmarks: 0, views: 0, category: "WealthFam",  categoryColor: "WealthFam",  image: "https://images.unsplash.com/photo-1504868584819-f8e8b4b6d7e3?q=80&w=400&h=200&auto=format&fit=crop", status: "draft" },
-  { id: 16, title: "Emergency Funds 101",         author: "Ayo Ogunseinde", authorAvatar: "https://i.pravatar.cc/150?u=ayo16", timeAgo: "5 hours ago",  bookmarks: 0, views: 0, category: "WealthFlex", categoryColor: "WealthFlex", image: "https://images.unsplash.com/photo-1526304640581-d334cdbbf45e?q=80&w=400&h=200&auto=format&fit=crop", status: "draft" },
-];
+import { useGetBlogsQuery, useUpdateBlogMutation, useDeleteBlogMutation } from "@/lib/redux/features/blogApi";
+import { Loader2 } from "lucide-react";
 
 function BlogViewAllContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const statusParam = (searchParams.get("status") || "published") as ArticleStatus;
   const [searchQuery, setSearchQuery] = useState("");
-  const [articles, setArticles] = useState<Article[]>(SEED_ARTICLES as Article[]);
   
+  const { data: blogsResponse, isLoading } = useGetBlogsQuery({
+    status: statusParam,
+    q: searchQuery,
+  });
+
+  const [updateBlogMutation] = useUpdateBlogMutation();
+  const [deleteBlogMutation] = useDeleteBlogMutation();
+
+  const rawArticles = Array.isArray(blogsResponse) 
+    ? blogsResponse 
+    : Array.isArray(blogsResponse?.data) 
+      ? blogsResponse.data 
+      : Array.isArray(blogsResponse?.data?.items)
+        ? blogsResponse.data.items
+        : [];
+  
+  const articles: Article[] = rawArticles.map((a: any) => ({
+    id: a.id || a._id,
+    title: a.title || "Untitled",
+    author: a.author || "Unknown",
+    authorAvatar: a.authorAvatar || "",
+    timeAgo: a.createdAt ? new Date(a.createdAt).toLocaleDateString() : "Just now",
+    bookmarks: a.bookmarks || 0,
+    views: a.views || 0,
+    category: a.category || "General",
+    categoryColor: a.categoryColor || "General",
+    image: a.image?.replace(/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/, process.env.NEXT_PUBLIC_API_URL || "") || "https://images.unsplash.com/photo-1554224155-6726b3ff858f?q=80&w=400&h=200&auto=format&fit=crop",
+    status: (a.status || "draft") as ArticleStatus,
+    scheduledFor: a.scheduledFor ? new Date(a.scheduledFor).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : undefined,
+  }));
+
   const [viewingBlogComments, setViewingBlogComments] = useState<Article | null>(null);
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
@@ -57,19 +70,18 @@ function BlogViewAllContent() {
     onConfirm: () => {}
   });
 
-  const filteredArticles = articles.filter((article) => {
-    const matchesStatus = article.status === statusParam;
-    const matchesSearch =
-      article.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      article.category.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesStatus && matchesSearch;
-  });
+  const filteredArticles = articles.filter(article => 
+    article.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    article.category.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
-  const handlePublish = (id: number) => {
-    setArticles((prev) =>
-      prev.map((a) => a.id === id ? { ...a, status: "published" as ArticleStatus } : a)
-    );
-    toast.success("Article published successfully!");
+  const handlePublish = async (id: number) => {
+    try {
+      await updateBlogMutation({ id: id.toString(), status: "published" }).unwrap();
+      toast.success("Article published successfully!");
+    } catch (err: any) {
+      toast.error(err?.data?.message || "Failed to publish article");
+    }
     setConfirmModal((prev) => ({ ...prev, isOpen: false }));
   };
 
@@ -84,22 +96,24 @@ function BlogViewAllContent() {
     });
   };
 
-  const handleReschedule = () => {
-    router.push(`/dashboard/blog/edit`);
+  const handleReschedule = (id: number) => {
+    router.push(`/dashboard/blog/edit/${id}`);
   };
 
-  const handleUnpublish = (id: number) => {
+  const handleUnpublish = async (id: number) => {
     setConfirmModal({
       isOpen: true,
       title: "Unpublish Article",
       description: "Are you sure you want to unpublish this article? It will be moved to drafts.",
       confirmText: "Unpublish",
       isDanger: false,
-      onConfirm: () => {
-        setArticles((prev) =>
-          prev.map((a) => a.id === id ? { ...a, status: "draft" as ArticleStatus } : a)
-        );
-        toast.success("Article unpublished and moved to drafts.");
+      onConfirm: async () => {
+        try {
+          await updateBlogMutation({ id: id.toString(), status: "draft" }).unwrap();
+          toast.success("Article unpublished and moved to drafts.");
+        } catch (err: any) {
+          toast.error(err?.data?.message || "Failed to unpublish article");
+        }
         setConfirmModal((prev) => ({ ...prev, isOpen: false }));
       }
     });
@@ -112,9 +126,13 @@ function BlogViewAllContent() {
       description: "Are you sure you want to delete this article? This action cannot be undone.",
       confirmText: "Delete",
       isDanger: true,
-      onConfirm: () => {
-        setArticles((prev) => prev.filter((a) => a.id !== id));
-        toast.success("Article deleted successfully.");
+      onConfirm: async () => {
+        try {
+          await deleteBlogMutation(id.toString()).unwrap();
+          toast.success("Article deleted successfully.");
+        } catch (err: any) {
+          toast.error(err?.data?.message || "Failed to delete article");
+        }
         setConfirmModal((prev) => ({ ...prev, isOpen: false }));
       }
     });
@@ -188,8 +206,12 @@ function BlogViewAllContent() {
         </div>
       </div>
 
-      {/* Grid of articles */}
-      {filteredArticles.length > 0 ? (
+      {isLoading ? (
+        <div className="py-24 flex flex-col items-center justify-center text-slate/40">
+          <Loader2 className="h-10 w-10 animate-spin mb-2" />
+          <p className="text-sm font-semibold">Loading articles...</p>
+        </div>
+      ) : filteredArticles.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {filteredArticles.map((article) => (
             <div
@@ -202,6 +224,7 @@ function BlogViewAllContent() {
                   src={article.image}
                   alt={article.title}
                   className="object-cover h-full w-full group-hover:scale-105 transition-transform duration-500"
+                  onError={(e) => { e.currentTarget.src = "https://images.unsplash.com/photo-1554224155-6726b3ff858f?q=80&w=400&h=200&auto=format&fit=crop" }}
                 />
                 <span className="absolute top-3 left-3 text-[10px] font-extrabold uppercase bg-white/90 backdrop-blur-sm px-2.5 py-1 rounded-full text-primary shadow-sm border border-border/20">
                   {article.category}
@@ -216,12 +239,12 @@ function BlogViewAllContent() {
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-44 rounded-[14px] border-border/50 shadow-xl p-1 bg-white">
                       {article.status !== "scheduled" && (
-                        <DropdownMenuItem onClick={() => router.push(`/dashboard/blog/edit`)} className="py-2 px-3 text-xs font-bold focus:bg-surface text-dark cursor-pointer rounded-xl gap-2">
+                        <DropdownMenuItem onClick={() => router.push(`/dashboard/blog/edit/${article.id}`)} className="py-2 px-3 text-xs font-bold focus:bg-surface text-dark cursor-pointer rounded-xl gap-2">
                           <FileEdit className="h-3.5 w-3.5 text-primary" /> Edit Article
                         </DropdownMenuItem>
                       )}
                       {article.status === "scheduled" && (
-                        <DropdownMenuItem onClick={() => handleReschedule()} className="py-2 px-3 text-xs font-bold focus:bg-surface text-orange-500 cursor-pointer rounded-xl gap-2">
+                        <DropdownMenuItem onClick={() => handleReschedule(article.id)} className="py-2 px-3 text-xs font-bold focus:bg-surface text-orange-500 cursor-pointer rounded-xl gap-2">
                           <Calendar className="h-3.5 w-3.5" /> Reschedule
                         </DropdownMenuItem>
                       )}
@@ -268,9 +291,12 @@ function BlogViewAllContent() {
                       <AvatarImage src={article.authorAvatar} />
                       <AvatarFallback className="text-[9px] bg-primary/10 text-primary font-bold">AO</AvatarFallback>
                     </Avatar>
-                    <div className="flex flex-col">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="text-[10px] font-bold text-dark">{article.author}</span>
-                      <span className="text-[9px] text-slate/40">{article.timeAgo}</span>
+                      {article.status !== "scheduled" && (
+                         <><span className="text-[9px] text-slate/30">•</span>
+                         <span className="text-[9px] text-slate/40">{article.timeAgo}</span></>
+                      )}
                     </div>
                   </div>
 

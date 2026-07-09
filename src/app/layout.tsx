@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, Outfit } from "next/font/google";
 import { Toaster } from "sonner";
 import "./globals.css";
+import StoreProvider from "@/lib/redux/StoreProvider";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -29,7 +30,9 @@ export default function RootLayout({
         className={`${inter.variable} ${outfit.variable} font-sans min-h-full flex flex-col`}
         suppressHydrationWarning
       >
-        {children}
+        <StoreProvider>
+          {children}
+        </StoreProvider>
         <Toaster
           position="top-right"
           toastOptions={{
@@ -46,3 +49,4 @@ export default function RootLayout({
     </html>
   );
 }
+

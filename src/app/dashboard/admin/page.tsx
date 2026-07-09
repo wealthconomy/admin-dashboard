@@ -37,6 +37,26 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
+import {
+  useGetTeamQuery,
+  useGetRolesQuery,
+  useProvisionTeamMemberMutation,
+  useUpdateTeamMemberMutation,
+  useDeleteTeamMemberMutation,
+  useCreateRoleMutation,
+  useUpdateRoleMutation,
+  useDeleteRoleMutation
+} from "@/lib/redux/features/adminApi";
+
+// Helper to extract the safe array from backend response wrapper
+const getSafeArray = (data: any) => {
+  if (!data) return [];
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data.items)) return data.items;
+  if (Array.isArray(data.data?.items)) return data.data.items;
+  if (Array.isArray(data.data)) return data.data;
+  return [];
+};
 
 // Standard Dashboard Pages List for Permissions Mapping
 const DASHBOARD_PAGES = [
@@ -51,6 +71,7 @@ const DASHBOARD_PAGES = [
   { path: "/dashboard/audit-logs", label: "System Audit Logs" },
   { path: "/dashboard/referrals", label: "Users Referrals" },
   { path: "/dashboard/settings", label: "Account Settings" },
+  { path: "/dashboard/system-config", label: "System Configuration" },
   { path: "/dashboard/support", label: "Support Centre" },
 ];
 
@@ -101,7 +122,7 @@ const INITIAL_ADMINS = [
     email: "simon.olabiran@wealthconomy.com",
     status: "Online",
     timestamp: "Currently Active",
-    image: "https://i.pravatar.cc/150?u=1",
+    image: "",
     role: "Super Admin",
     allowedPages: ["/dashboard", "/dashboard/users", "/dashboard/users/activities", "/dashboard/users/transactions", "/dashboard/blog", "/dashboard/library", "/dashboard/reports", "/dashboard/admin", "/dashboard/audit-logs", "/dashboard/referrals", "/dashboard/settings", "/dashboard/support"],
   },
@@ -111,7 +132,7 @@ const INITIAL_ADMINS = [
     email: "fatima.y@wealthconomy.com",
     status: "Online",
     timestamp: "Currently Active",
-    image: "https://i.pravatar.cc/150?u=2",
+    image: "",
     role: "Admin",
     allowedPages: ["/dashboard/settings"],
   },
@@ -121,7 +142,7 @@ const INITIAL_ADMINS = [
     email: "j.smith@wealthconomy.com",
     status: "Online",
     timestamp: "Currently Active",
-    image: "https://i.pravatar.cc/150?u=3",
+    image: "",
     role: "Editor",
     allowedPages: ["/dashboard/settings"],
   },
@@ -131,7 +152,7 @@ const INITIAL_ADMINS = [
     email: "ayodeji.a@wealthconomy.com",
     status: "Offline",
     timestamp: "10 mins ago",
-    image: "https://i.pravatar.cc/150?u=6",
+    image: "",
     role: "Content Writer",
     allowedPages: ["/dashboard/settings"],
   },
@@ -139,9 +160,41 @@ const INITIAL_ADMINS = [
 
 export default function AdminManagementPage() {
   const [activeTab, setActiveTab] = useState<"admins" | "roles">("admins");
-  const [admins, setAdmins] = useState(INITIAL_ADMINS);
-  const [roles, setRoles] = useState(INITIAL_ROLES);
+  const { data: teamData, isLoading: teamLoading, refetch: refetchTeam } = useGetTeamQuery(undefined);
+  const { data: rolesData, isLoading: rolesLoading, refetch: refetchRoles } = useGetRolesQuery(undefined);
+  const admins = getSafeArray(teamData).map((admin: any) => {
+    const userObj = admin.user || admin;
+    return {
+      ...admin,
+      id: admin.id || admin._id,
+      name: `${userObj.firstName || ""} ${userObj.lastName || ""}`.trim() || userObj.name || userObj.email,
+      status: admin.isActive === false ? "Offline" : "Online",
+      timestamp: admin.lastLogin || "Currently Active",
+      image: userObj.imageUrl || admin.imageUrl || "",
+      role: admin.role === "CUSTOM" && admin.customRole ? admin.customRole.name : admin.role,
+      allowedPages: admin.allowedPages || [],
+      email: userObj.email || admin.email,
+    };
+  });
+  const roles = [
+    ...getSafeArray(rolesData).map((role: any) => ({
+      ...role,
+      id: role.id || role._id,
+      name: role.name,
+      description: role.description,
+      allowedPages: role.permissions || role.allowedPages || [],
+      isSystem: role.isBuiltIn || role.isSystem || false,
+    }))
+  ];
+
   const [searchQuery, setSearchQuery] = useState("");
+
+  const [provisionTeamMember] = useProvisionTeamMemberMutation();
+  const [updateTeamMember] = useUpdateTeamMemberMutation();
+  const [deleteTeamMember] = useDeleteTeamMemberMutation();
+  const [createRole] = useCreateRoleMutation();
+  const [updateRole] = useUpdateRoleMutation();
+  const [deleteRoleMutation] = useDeleteRoleMutation();
 
   // Modals state for admin accounts
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -174,16 +227,21 @@ export default function AdminManagementPage() {
 
   // Pre-fill pages checkboxes when selected role changes in admin forms
   useEffect(() => {
-    const selectedRoleObj = roles.find((r) => r.name === adminFormData.role);
+    const selectedRoleObj = getSafeArray(rolesData).find((r: any) => r.name === adminFormData.role);
     if (selectedRoleObj) {
+      const perms = selectedRoleObj.permissions || selectedRoleObj.allowedPages || [];
+      const expandedPages = perms.includes("*") 
+        ? DASHBOARD_PAGES.map(p => p.path) 
+        : [...perms];
+      
       setAdminFormData((prev) => ({
         ...prev,
-        allowedPages: [...selectedRoleObj.allowedPages],
+        allowedPages: expandedPages,
       }));
     }
-  }, [adminFormData.role, roles]);
+  }, [adminFormData.role, rolesData]);
 
-  const handleCreateAdmin = (e: React.FormEvent) => {
+  const handleCreateAdmin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!adminFormData.name || !adminFormData.email || !adminFormData.password) {
       toast.error("Please fill in all fields");
@@ -191,62 +249,96 @@ export default function AdminManagementPage() {
     }
 
     setIsSubmitting(true);
-    setTimeout(() => {
-      const newAdmin = {
-        id: (admins.length + 1).toString(),
-        name: adminFormData.name,
-        email: adminFormData.email,
-        status: "Offline",
-        timestamp: "Just now",
-        image: `https://i.pravatar.cc/150?u=${admins.length + 1}`,
-        role: adminFormData.role,
-        allowedPages: adminFormData.allowedPages,
-      };
-
-      setAdmins([newAdmin, ...admins]);
-      setIsSubmitting(false);
-      setIsCreateModalOpen(false);
+    try {
+      const [firstName, ...lastNameParts] = adminFormData.name.split(" ");
+      const lastName = lastNameParts.join(" ");
       
-      // Update simulated profiles dynamically if editing the logged-in mock profile
-      updateSimulatedProfiles(newAdmin);
+      const builtinRolesList = ["SUPER_ADMIN", "ADMIN", "EDITOR", "VIEWER"];
+      let rolePayload = adminFormData.role;
+      let customRoleId = undefined;
 
+      if (!builtinRolesList.includes(rolePayload)) {
+        const selectedRoleObj = roles.find((r: any) => r.name === rolePayload);
+        rolePayload = "CUSTOM";
+        if (selectedRoleObj) {
+           customRoleId = selectedRoleObj.id;
+        }
+      }
+
+      await provisionTeamMember({
+        email: adminFormData.email,
+        firstName,
+        lastName,
+        password: adminFormData.password,
+        role: rolePayload,
+        customRoleId,
+        allowedPages: adminFormData.allowedPages,
+      }).unwrap();
+
+      toast.success("Admin account created successfully!");
+      setIsCreateModalOpen(false);
       setAdminFormData({ name: "", email: "", password: "", role: "Admin", allowedPages: [] });
-      toast.success(`Admin account created! Allowed ${newAdmin.allowedPages.length} dashboard modules.`);
-    }, 800);
+      refetchTeam();
+    } catch (err: any) {
+      toast.error(err?.data?.message || "Failed to create admin");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleUpdateAdmin = (e: React.FormEvent) => {
+  const handleUpdateAdmin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editAdmin) return;
 
     setIsSubmitting(true);
-    setTimeout(() => {
-      setAdmins(
-        admins.map((a) => (a.id === editAdmin.id ? { ...a, ...editAdmin } : a))
-      );
-      
-      // Sync simulated profile state so active simulator changes instantly
-      updateSimulatedProfiles(editAdmin);
+    try {
+      const builtinRolesList = ["SUPER_ADMIN", "ADMIN", "EDITOR", "VIEWER"];
+      let rolePayload = editAdmin.role;
+      let customRoleId = undefined;
 
-      setIsSubmitting(false);
-      setEditAdmin(null);
+      if (!builtinRolesList.includes(rolePayload)) {
+        const selectedRoleObj = roles.find((r: any) => r.name === rolePayload);
+        rolePayload = "CUSTOM";
+        if (selectedRoleObj) {
+           customRoleId = selectedRoleObj.id;
+        }
+      }
+
+      await updateTeamMember({
+        id: editAdmin.id,
+        role: rolePayload,
+        customRoleId,
+        allowedPages: editAdmin.allowedPages,
+      }).unwrap();
+
+      updateSimulatedProfiles(editAdmin);
       toast.success("Administrator privileges updated successfully!");
-    }, 800);
+      setEditAdmin(null);
+      refetchTeam();
+    } catch (err: any) {
+      toast.error(err?.data?.message || "Failed to update admin");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleDeleteAdmin = () => {
+  const handleDeleteAdmin = async () => {
     if (!deleteAdmin) return;
     setIsSubmitting(true);
-    setTimeout(() => {
-      setAdmins(admins.filter((a) => a.id !== deleteAdmin.id));
-      setIsSubmitting(false);
-      setDeleteAdmin(null);
+    try {
+      await deleteTeamMember(deleteAdmin.id).unwrap();
       toast.success("Administrator profile removed.");
-    }, 600);
+      setDeleteAdmin(null);
+      refetchTeam();
+    } catch (err: any) {
+      toast.error(err?.data?.message || "Failed to delete admin");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Roles CRUD logic
-  const handleCreateRole = (e: React.FormEvent) => {
+  const handleCreateRole = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!roleFormData.name || !roleFormData.description) {
       toast.error("Please enter a role name and description");
@@ -254,41 +346,57 @@ export default function AdminManagementPage() {
     }
 
     setIsSubmitting(true);
-    setTimeout(() => {
-      const newRole = {
-        id: `role_${roles.length + 1}`,
+    try {
+      await createRole({
         name: roleFormData.name,
         description: roleFormData.description,
-        allowedPages: roleFormData.allowedPages,
-        isSystem: false,
-      };
+        permissions: roleFormData.allowedPages,
+      }).unwrap();
 
-      setRoles([...roles, newRole]);
-      setIsSubmitting(false);
+      toast.success(`Role '${roleFormData.name}' added!`);
       setIsCreateRoleOpen(false);
       setRoleFormData({ name: "", description: "", allowedPages: ["/dashboard/settings"] });
-      toast.success(`Role '${newRole.name}' added with ${newRole.allowedPages.length} default pages!`);
-    }, 800);
+      refetchRoles();
+    } catch (err: any) {
+      toast.error(err?.data?.message || "Failed to create role");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleUpdateRole = (e: React.FormEvent) => {
+  const handleUpdateRole = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editRole) return;
 
     setIsSubmitting(true);
-    setTimeout(() => {
-      setRoles(roles.map((r) => (r.id === editRole.id ? editRole : r)));
-      setIsSubmitting(false);
-      setEditRole(null);
+    try {
+      await updateRole({
+        id: editRole.id,
+        name: editRole.name,
+        description: editRole.description,
+        permissions: editRole.allowedPages,
+      }).unwrap();
+
       toast.success("Role permissions updated successfully!");
-    }, 800);
+      setEditRole(null);
+      refetchRoles();
+    } catch (err: any) {
+      toast.error(err?.data?.message || "Failed to update role");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleDeleteRole = () => {
+  const handleDeleteRole = async () => {
     if (!deleteRole) return;
-    setRoles(roles.filter((r) => r.id !== deleteRole.id));
-    setDeleteRole(null);
-    toast.success("Role deleted.");
+    try {
+      await deleteRoleMutation(deleteRole.id).unwrap();
+      toast.success("Role deleted.");
+      setDeleteRole(null);
+      refetchRoles();
+    } catch (err: any) {
+      toast.error(err?.data?.message || "Failed to delete role");
+    }
   };
 
   // Sync state with active developer simulator in layout storage
@@ -333,10 +441,10 @@ export default function AdminManagementPage() {
 
   // Filter accounts
   const filteredAdmins = admins.filter(
-    (admin) =>
-      admin.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      admin.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      admin.role.toLowerCase().includes(searchQuery.toLowerCase())
+    (admin: any) =>
+      (admin?.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (admin?.email || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (admin?.role || "").toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
@@ -422,15 +530,24 @@ export default function AdminManagementPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredAdmins.length > 0 ? (
-                    filteredAdmins.map((admin) => (
+                  {teamLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="py-20 text-center">
+                        <div className="flex flex-col items-center gap-2">
+                          <Loader2 className="h-8 w-8 animate-spin text-primary/40 mx-auto" />
+                          <p className="text-sm font-medium text-slate/40">Loading administrators...</p>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : filteredAdmins.length > 0 ? (
+                    filteredAdmins.map((admin: any) => (
                       <TableRow key={admin.id} className="group border-border/50 hover:bg-surface/30 transition-all duration-200">
                         <TableCell className="py-4 px-4">
                           <div className="flex items-center gap-2.5 min-w-0 cursor-pointer" onClick={() => setViewAdmin(admin)}>
                             <Avatar className="h-9 w-9 border border-primary/5 shadow-sm shrink-0">
                               <AvatarImage src={admin.image} />
                               <AvatarFallback className="bg-primary/5 text-primary text-[11px] font-bold">
-                                {admin.name.charAt(0)}
+                                {(admin?.name || "U").charAt(0)}
                               </AvatarFallback>
                             </Avatar>
                             <div className="flex flex-col min-w-0">
@@ -466,17 +583,17 @@ export default function AdminManagementPage() {
                         </TableCell>
                         <TableCell className="py-4 px-4">
                           <div className="flex flex-wrap gap-1 max-w-[280px]">
-                            {admin.allowedPages.length === DASHBOARD_PAGES.length ? (
+                            {admin.allowedPages.includes("*") || admin.allowedPages.length === DASHBOARD_PAGES.length ? (
                               <span className="px-2 py-1 bg-emerald-50 border border-emerald-100 text-emerald-600 text-[10px] font-bold rounded">Full Dynamic Access</span>
                             ) : (
-                              admin.allowedPages.slice(0, 3).map((p) => {
+                              admin.allowedPages.slice(0, 3).map((p: any) => {
                                 const matched = DASHBOARD_PAGES.find((dp) => dp.path === p);
                                 return matched ? (
                                   <span key={p} className="px-2 py-1 bg-[#E8F3F3] border border-[#155D5F]/10 text-[#155D5F] text-[10px] font-bold rounded">{matched.label}</span>
                                 ) : null;
                               })
                             )}
-                            {admin.allowedPages.length > 3 && admin.allowedPages.length !== DASHBOARD_PAGES.length && (
+                            {admin.allowedPages.length > 3 && !admin.allowedPages.includes("*") && admin.allowedPages.length !== DASHBOARD_PAGES.length && (
                               <span className="px-2 py-1 bg-slate-50 border border-slate-100 text-slate/40 text-[10px] font-bold rounded">+{admin.allowedPages.length - 3} more</span>
                             )}
                           </div>
@@ -518,7 +635,12 @@ export default function AdminManagementPage() {
       {/* Tab content 2: ROLES & PERMISSIONS MATRIX */}
       {activeTab === "roles" && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-in fade-in duration-300">
-          {roles.map((role) => (
+          {rolesLoading ? (
+            <div className="col-span-full py-20 text-center flex flex-col items-center gap-2">
+              <Loader2 className="h-8 w-8 animate-spin text-primary/40 mx-auto" />
+              <p className="text-sm font-medium text-slate/40">Loading roles and permissions...</p>
+            </div>
+          ) : roles.map((role: any) => (
             <div key={role.id} className="bg-surface/30 border border-border/40 hover:border-[#155D5F]/30 hover:bg-white rounded-[20px] p-6 flex flex-col justify-between gap-6 transition-all duration-300 shadow-[0px_4px_10px_0px_rgba(0,0,0,0.01)] hover:shadow-md">
               <div className="space-y-4">
                 <div className="flex items-center justify-between flex-wrap gap-2">
@@ -537,18 +659,27 @@ export default function AdminManagementPage() {
                 <div className="border-t border-border/20 pt-4 space-y-2">
                   <span className="text-[11px] font-bold text-slate/40 uppercase tracking-widest block">Dashboard Modules Permission Matrix</span>
                   <div className="flex flex-wrap gap-1.5 max-h-[105px] overflow-y-auto custom-scrollbar pr-1">
-                    {role.allowedPages.map((p) => {
-                      const matched = DASHBOARD_PAGES.find((dp) => dp.path === p);
-                      return matched ? (
-                        <span key={p} className="px-2.5 py-1 bg-white border border-border/30 text-dark/75 text-[10.5px] font-bold rounded-lg shadow-sm">{matched.label}</span>
-                      ) : null;
-                    })}
+                    {role.allowedPages.includes("*") ? (
+                      <span className="px-2.5 py-1 bg-emerald-50 border border-emerald-100 text-emerald-600 text-[10.5px] font-bold rounded-lg shadow-sm">Full Dynamic Access</span>
+                    ) : (
+                      role.allowedPages.map((p: any) => {
+                        const matched = DASHBOARD_PAGES.find((dp) => dp.path === p);
+                        return matched ? (
+                          <span key={p} className="px-2.5 py-1 bg-white border border-border/30 text-dark/75 text-[10.5px] font-bold rounded-lg shadow-sm">{matched.label}</span>
+                        ) : null;
+                      })
+                    )}
                   </div>
                 </div>
 
                 <div className="flex items-center justify-end gap-2 border-t border-border/20 pt-4">
                   <Button
-                    onClick={() => setEditRole(role)}
+                    onClick={() => {
+                      const perms = role.allowedPages.includes("*") 
+                        ? DASHBOARD_PAGES.map(p => p.path) 
+                        : [...role.allowedPages];
+                      setEditRole({ ...role, allowedPages: perms });
+                    }}
                     className="h-9 rounded-lg px-4 bg-[#E8F3F3] text-[#155D5F] hover:bg-[#155D5F]/15 text-[11.5px] font-bold border border-transparent shadow-none cursor-pointer"
                   >
                     Edit Role
@@ -632,7 +763,7 @@ export default function AdminManagementPage() {
                 <div className="space-y-1">
                   <label className="text-[11px] font-extrabold text-dark/70 ml-0.5">Primary Administrative Role</label>
                   <div className="grid grid-cols-3 gap-2">
-                    {roles.map((r) => (
+                    {roles.map((r: any) => (
                       <button
                         key={r.id}
                         type="button"
@@ -652,21 +783,21 @@ export default function AdminManagementPage() {
                 <div className="space-y-2 border-t border-border/10 pt-4">
                   <div className="flex items-center justify-between">
                     <label className="text-[11px] font-extrabold text-dark/70 ml-0.5">Custom Module Permissions Overrides</label>
-                    <span className="text-[9px] font-bold text-slate/40 bg-surface px-2 py-0.5 rounded-full">{adminFormData.allowedPages.length} permitted</span>
+                    <span className="text-[9px] font-bold text-slate/40 bg-surface px-2 py-0.5 rounded-full">{adminFormData.allowedPages.includes("*") ? "All" : adminFormData.allowedPages.length} permitted</span>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2 bg-surface/30 border border-border/20 p-3 rounded-xl max-h-[170px] overflow-y-auto custom-scrollbar">
                     {DASHBOARD_PAGES.map((page) => {
-                      const isChecked = adminFormData.allowedPages.includes(page.path);
+                      const isChecked = adminFormData.allowedPages.includes("*") || adminFormData.allowedPages.includes(page.path);
                       return (
-                        <label key={page.path} className="flex items-center gap-2.5 p-2 bg-white rounded-lg border border-border/15 hover:border-[#155D5F]/20 cursor-pointer select-none">
+                        <label key={page.path} className={`flex items-center gap-2.5 p-2 bg-white rounded-lg border ${isChecked ? "border-[#155D5F]/20" : "border-border/15"} hover:border-[#155D5F]/20 cursor-pointer select-none`}>
                           <input
                             type="checkbox"
                             checked={isChecked}
                             onChange={() => togglePageSelection(page.path, false)}
                             className="h-3.5 w-3.5 rounded-md border-slate-300 text-[#155D5F] focus:ring-0 focus:ring-offset-0 cursor-pointer accent-[#155D5F]"
                           />
-                          <span className="text-[10px] font-bold text-dark/70 truncate">{page.label}</span>
+                          <span className={`text-[10px] font-bold ${isChecked ? "text-[#155D5F]" : "text-dark/70"} truncate`}>{page.label}</span>
                         </label>
                       );
                     })}
@@ -710,7 +841,7 @@ export default function AdminManagementPage() {
                 <div className="flex items-center gap-3.5 bg-surface/30 border border-border/20 p-3.5 rounded-xl">
                   <Avatar className="h-12 w-12 border-2 border-white shadow-sm shrink-0">
                     <AvatarImage src={editAdmin.image} />
-                    <AvatarFallback className="bg-primary/5 text-primary text-sm font-bold">{editAdmin.name.charAt(0)}</AvatarFallback>
+                    <AvatarFallback className="bg-primary/5 text-primary text-sm font-bold">{(editAdmin?.name || "U").charAt(0)}</AvatarFallback>
                   </Avatar>
                   <div>
                     <h4 className="text-xs font-bold text-dark">{editAdmin.name}</h4>
@@ -721,11 +852,16 @@ export default function AdminManagementPage() {
                 <div className="space-y-1">
                   <label className="text-[11px] font-extrabold text-dark/70 ml-0.5">Update Active Administrative Role</label>
                   <div className="grid grid-cols-3 gap-2">
-                    {roles.map((r) => (
+                    {roles.map((r: any) => (
                       <button
                         key={r.id}
                         type="button"
-                        onClick={() => setEditAdmin({ ...editAdmin, role: r.name, allowedPages: [...r.allowedPages] })}
+                        onClick={() => {
+                          const perms = r.allowedPages.includes("*") 
+                            ? DASHBOARD_PAGES.map(p => p.path) 
+                            : [...r.allowedPages];
+                          setEditAdmin({ ...editAdmin, role: r.name, allowedPages: perms });
+                        }}
                         className={`h-9 px-3 rounded-lg text-[10px] font-bold border transition-all text-left flex items-center justify-between ${
                           editAdmin.role === r.name ? "bg-[#E8F3F3] border-[#155D5F] text-[#155D5F]" : "bg-white border-border/30 text-slate hover:border-slate/30"
                         }`}
@@ -741,21 +877,21 @@ export default function AdminManagementPage() {
                 <div className="space-y-2 border-t border-border/10 pt-4">
                   <div className="flex items-center justify-between">
                     <label className="text-[11px] font-extrabold text-dark/70 ml-0.5">Configure Custom Page Mapping</label>
-                    <span className="text-[9px] font-bold text-slate/40 bg-surface px-2 py-0.5 rounded-full">{(editAdmin.allowedPages || []).length} permitted</span>
+                    <span className="text-[9px] font-bold text-slate/40 bg-surface px-2 py-0.5 rounded-full">{(editAdmin.allowedPages || []).includes("*") ? "All" : (editAdmin.allowedPages || []).length} permitted</span>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2 bg-surface/30 border border-border/20 p-3 rounded-xl max-h-[170px] overflow-y-auto custom-scrollbar">
                     {DASHBOARD_PAGES.map((page) => {
-                      const isChecked = (editAdmin.allowedPages || []).includes(page.path);
+                      const isChecked = (editAdmin.allowedPages || []).includes("*") || (editAdmin.allowedPages || []).includes(page.path);
                       return (
-                        <label key={page.path} className="flex items-center gap-2.5 p-2 bg-white rounded-lg border border-border/15 hover:border-[#155D5F]/20 cursor-pointer select-none">
+                        <label key={page.path} className={`flex items-center gap-2.5 p-2 bg-white rounded-lg border ${isChecked ? "border-[#155D5F]/20" : "border-border/15"} hover:border-[#155D5F]/20 cursor-pointer select-none`}>
                           <input
                             type="checkbox"
                             checked={isChecked}
                             onChange={() => togglePageSelection(page.path, true, editAdmin)}
                             className="h-3.5 w-3.5 rounded-md border-slate-300 text-[#155D5F] focus:ring-0 focus:ring-offset-0 cursor-pointer accent-[#155D5F]"
                           />
-                          <span className="text-[10px] font-bold text-dark/70 truncate">{page.label}</span>
+                          <span className={`text-[10px] font-bold ${isChecked ? "text-[#155D5F]" : "text-dark/70"} truncate`}>{page.label}</span>
                         </label>
                       );
                     })}

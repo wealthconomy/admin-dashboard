@@ -35,162 +35,19 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useGetActivitiesQuery } from "@/lib/redux/features/usersApi";
+import { useGetTeamQuery } from "@/lib/redux/features/adminApi";
+import { format } from "date-fns";
 
-const INITIAL_ACTIVITIES = [
-  {
-    id: "ID5372527",
-    timestamp: "05:45, April 12, 2023",
-    name: "Simon Olabiran Odunayo",
-    email: "simon.olabiran@gmail.com",
-    action: "Account Suspend",
-    status: "Locked",
-    details: "Multiple password attempts",
-    category: "Security",
-    ip: "192.168.1.10",
-    loggedVia: "Web Browser",
-    performedBy: "System",
-    accountGrade: "KYC Level 3",
-    logId: "#LOG56789",
-    logRecorded: "05:45, April 12, 2023",
-    emailConfirmation: "Approved at 2024-03-04 09:58 UTC",
-  },
-  {
-    id: "ID5372527",
-    timestamp: "05:45, April 12, 2023",
-    name: "Simon Olabiran Odunayo",
-    email: "simon.olabiran@gmail.com",
-    action: "Logged in",
-    status: "Failed",
-    details: "Incorrect Password\nIP: 192.168.1.1",
-    category: "Security",
-    ip: "192.168.1.10",
-    loggedVia: "Face ID",
-    performedBy: "User",
-    accountGrade: "KYC Level 3",
-    logId: "#LOG56789",
-    logRecorded: "05:45, April 12, 2023",
-    emailConfirmation: "Approved at 2024-03-04 09:58 UTC",
-  },
-  {
-    id: "ID5372527",
-    timestamp: "05:45, April 12, 2023",
-    name: "Simon Olabiran Odunayo",
-    email: "simon.olabiran@gmail.com",
-    action: "Email verification",
-    status: "Pending",
-    details: "IP: 192.168.1.1",
-    category: "Account",
-    ip: "192.168.1.10",
-    loggedVia: "Email Link",
-    performedBy: "User",
-    accountGrade: "KYC Level 2",
-    logId: "#LOG56790",
-    logRecorded: "05:45, April 12, 2023",
-    emailConfirmation: "Approved at 2024-03-04 09:58 UTC",
-  },
-  {
-    id: "ID5372527",
-    timestamp: "05:45, April 12, 2023",
-    name: "Simon Olabiran Odunayo",
-    email: "simon.olabiran@gmail.com",
-    action: "Password reset",
-    status: "Successful",
-    details: "-",
-    category: "Security",
-    ip: "192.168.1.10",
-    loggedVia: "OTP Code",
-    performedBy: "User",
-    accountGrade: "KYC Level 3",
-    logId: "#LOG56791",
-    logRecorded: "05:45, April 12, 2023",
-    emailConfirmation: "Approved at 2024-03-04 09:58 UTC",
-  },
-  {
-    id: "ID5372527",
-    timestamp: "05:45, April 12, 2023",
-    name: "Simon Olabiran Odunayo",
-    email: "simon.olabiran@gmail.com",
-    action: "Email verification pending",
-    status: "Successful",
-    details: "IP: 192.168.1.1",
-    category: "Account",
-    ip: "192.168.1.10",
-    loggedVia: "Email Link",
-    performedBy: "User",
-    accountGrade: "KYC Level 2",
-    logId: "#LOG56792",
-    logRecorded: "05:45, April 12, 2023",
-    emailConfirmation: "Approved at 2024-03-04 09:58 UTC",
-  },
-  {
-    id: "ID5372527",
-    timestamp: "05:45, April 12, 2023",
-    name: "Simon Olabiran Odunayo",
-    email: "simon.olabiran@gmail.com",
-    action: "Logged in",
-    status: "Successful",
-    details: "Incorrect Password\nIP: 192.168.1.1",
-    category: "Security",
-    ip: "192.168.1.10",
-    loggedVia: "Face ID",
-    performedBy: "User",
-    accountGrade: "KYC Level 3",
-    logId: "#LOG56793",
-    logRecorded: "05:45, April 12, 2023",
-    emailConfirmation: "Approved at 2024-03-04 09:58 UTC",
-  },
-  {
-    id: "ID5372527",
-    timestamp: "05:45, April 12, 2023",
-    name: "Simon Olabiran Odunayo",
-    email: "simon.olabiran@gmail.com",
-    action: "2 - Factor Authentication",
-    status: "Successful",
-    details: "Via Email Code",
-    category: "Security",
-    ip: "192.168.1.10",
-    loggedVia: "Authenticator App",
-    performedBy: "User",
-    accountGrade: "KYC Level 3",
-    logId: "#LOG56794",
-    logRecorded: "05:45, April 12, 2023",
-    emailConfirmation: "Approved at 2024-03-04 09:58 UTC",
-  },
-  {
-    id: "ID5372527",
-    timestamp: "05:45, April 12, 2023",
-    name: "Simon Olabiran Odunayo",
-    email: "simon.olabiran@gmail.com",
-    action: "Logged in (OTP)",
-    status: "Successful",
-    details: "IP: 192.168.1.1",
-    category: "Security",
-    ip: "192.168.1.10",
-    loggedVia: "OTP Code",
-    performedBy: "User",
-    accountGrade: "KYC Level 3",
-    logId: "#LOG56795",
-    logRecorded: "05:45, April 12, 2023",
-    emailConfirmation: "Approved at 2024-03-04 09:58 UTC",
-  },
-  {
-    id: "ID5372527",
-    timestamp: "05:45, April 12, 2023",
-    name: "Simon Olabiran Odunayo",
-    email: "simon.olabiran@gmail.com",
-    action: "Wealth TopUp",
-    status: "Successful",
-    details: "IP: 192.168.1.1",
-    category: "Transaction",
-    ip: "192.168.1.10",
-    loggedVia: "Mobile App",
-    performedBy: "User",
-    accountGrade: "KYC Level 3",
-    logId: "#LOG56796",
-    logRecorded: "05:45, April 12, 2023",
-    emailConfirmation: "Approved at 2024-03-04 09:58 UTC",
-  },
-];
+const getSafeArray = (data: any) => {
+  if (!data) return [];
+  if (Array.isArray(data)) return data;
+  if (data.data && Array.isArray(data.data)) return data.data;
+  if (data.items && Array.isArray(data.items)) return data.items;
+  return [];
+};
+
+
 
 const CATEGORIES = ["All Categories", "Security", "Transaction", "Account"];
 
@@ -198,19 +55,35 @@ export default function ActivitiesPage() {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All Categories");
-  const [selectedLog, setSelectedLog] = useState<(typeof INITIAL_ACTIVITIES)[0] | null>(null);
+  const [selectedLog, setSelectedLog] = useState<any | null>(null);
 
-  const filteredActivities = INITIAL_ACTIVITIES.filter((act) => {
+  const { data: activitiesData, isLoading, isError } = useGetActivitiesQuery({
+    q: searchQuery || undefined,
+    category: selectedCategory !== "All Categories" ? selectedCategory : undefined,
+    limit: 50
+  });
+  const { data: teamData } = useGetTeamQuery(undefined);
+  const teamEmails = new Set(getSafeArray(teamData).map((t: any) => t.user?.email || t.email));
+
+  const activitiesList = getSafeArray(activitiesData).filter((act: any) => {
+    const actEmail = act.email || act.user?.email || "";
+    if (teamEmails.has(actEmail)) return false;
+    return true;
+  });
+
+  const filteredActivities = activitiesList.filter((act: any) => {
+    const actName = act.userName || "";
+    const actEmail = act.email || "";
+    const actId = act.id || "";
+    const actAction = act.action || "";
+
     const matchesSearch =
-      act.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      act.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      act.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      act.action.toLowerCase().includes(searchQuery.toLowerCase());
+      actName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      actEmail.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      actId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      actAction.toLowerCase().includes(searchQuery.toLowerCase());
 
-    const matchesCategory =
-      selectedCategory === "All Categories" || act.category === selectedCategory;
-
-    return matchesSearch && matchesCategory;
+    return matchesSearch;
   });
 
   const renderStatusBadge = (status: string) => {
@@ -302,38 +175,56 @@ export default function ActivitiesPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredActivities.length > 0 ? (
-                filteredActivities.map((act, i) => (
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="py-20 text-center">
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+                      <p className="text-sm font-medium text-slate/40">Loading activities...</p>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : isError ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="py-20 text-center text-red-500 font-medium">
+                    Failed to load activities.
+                  </TableCell>
+                </TableRow>
+              ) : filteredActivities.length > 0 ? (
+                filteredActivities.map((act: any, i: number) => {
+                  const formattedDate = act.timestamp ? format(new Date(act.timestamp), "HH:mm, MMM dd, yyyy") : "-";
+                  const status = act.status || "Successful";
+                  return (
                   <TableRow key={i} className="group border-border/50 hover:bg-surface/30 transition-all duration-200">
                     <TableCell className="py-5 px-4">
                       <span className="text-[11px] font-semibold text-slate/60 block leading-snug">
-                        {act.timestamp}
+                        {formattedDate}
                       </span>
                     </TableCell>
                     <TableCell className="py-5 px-4">
                       <div className="flex items-center gap-2.5 min-w-0">
                         <Avatar className="h-7 w-7 border border-primary/5 shadow-sm shrink-0">
-                          <AvatarImage src={`https://i.pravatar.cc/150?u=${act.id}`} />
+                          <AvatarImage src={act.user?.imageUrl || act.imageUrl || ""} />
                           <AvatarFallback className="bg-primary/5 text-primary text-[10px] font-bold">
-                            {act.name.charAt(0)}
+                            {(act.userName || act.email || "U").charAt(0)}
                           </AvatarFallback>
                         </Avatar>
-                        <span className="font-semibold text-[12px] text-dark truncate">{act.name}</span>
+                        <span className="font-semibold text-[12px] text-dark truncate">{act.userName || act.email || "-"}</span>
                       </div>
                     </TableCell>
                     <TableCell className="py-5 px-4">
                       <a href={`mailto:${act.email}`} className="text-[#1D84D9] text-[12px] font-semibold hover:underline truncate block max-w-[185px]">
-                        {act.email}
+                        {act.email || "-"}
                       </a>
                     </TableCell>
                     <TableCell className="py-5 px-4">
-                      <span className="text-[12px] font-semibold text-dark">{act.action}</span>
+                      <span className="text-[12px] font-semibold text-dark">{act.action || "-"}</span>
                     </TableCell>
                     <TableCell className="py-5 px-4">
-                      {renderStatusBadge(act.status)}
+                      {renderStatusBadge(status)}
                     </TableCell>
                     <TableCell className="py-5 px-4">
-                      <span className="text-[11px] text-slate/50 font-medium whitespace-pre-line leading-snug">{act.details}</span>
+                      <span className="text-[11px] text-slate/50 font-medium whitespace-pre-line leading-snug">{act.details || "-"}</span>
                     </TableCell>
                     <TableCell className="py-5 px-4 text-right">
                       <DropdownMenu>
@@ -344,7 +235,7 @@ export default function ActivitiesPage() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end" className="w-44 rounded-[14px] border-border/50 shadow-xl p-1 bg-white">
                           <DropdownMenuItem
-                            onClick={() => router.push(`/dashboard/users/${act.id}`)}
+                            onClick={() => router.push(`/dashboard/users/${act.userId || act.id}`)}
                             className="py-2.5 px-4 text-xs font-bold focus:bg-surface text-dark cursor-pointer rounded-xl gap-2"
                           >
                             <User className="h-3.5 w-3.5 text-primary" />
@@ -361,7 +252,7 @@ export default function ActivitiesPage() {
                       </DropdownMenu>
                     </TableCell>
                   </TableRow>
-                ))
+                );})
               ) : (
                 <TableRow>
                   <TableCell colSpan={7} className="py-20 text-center">
@@ -427,49 +318,41 @@ export default function ActivitiesPage() {
                   <div className="space-y-4">
                     <div>
                       <p className="text-[12px] font-bold text-dark">User&apos;s Name</p>
-                      <p className="text-[13px] text-slate/60 font-medium mt-0.5">{selectedLog.name}</p>
+                      <p className="text-[13px] text-slate/60 font-medium mt-0.5">{selectedLog.userName || selectedLog.email || "-"}</p>
                     </div>
                     <div>
                       <p className="text-[12px] font-bold text-dark">User&apos;s ID</p>
                       <p className="text-[13px] text-[#1D84D9] font-semibold mt-0.5 cursor-pointer hover:underline"
-                        onClick={() => { setSelectedLog(null); router.push(`/dashboard/users/${selectedLog.id}`); }}>
-                        {selectedLog.id}
+                        onClick={() => { setSelectedLog(null); router.push(`/dashboard/users/${selectedLog.userId || selectedLog.id}`); }}>
+                        {selectedLog.userId || selectedLog.id || "-"}
                       </p>
                     </div>
                     <div>
                       <p className="text-[12px] font-bold text-dark">Email</p>
                       <a href={`mailto:${selectedLog.email}`} className="text-[13px] text-[#1D84D9] font-semibold mt-0.5 hover:underline block">
-                        {selectedLog.email}
+                        {selectedLog.email || "-"}
                       </a>
                     </div>
                     <div>
                       <p className="text-[12px] font-bold text-dark">Action</p>
-                      <p className="text-[13px] text-slate/60 font-medium mt-0.5">{selectedLog.action}</p>
+                      <p className="text-[13px] text-slate/60 font-medium mt-0.5">{selectedLog.action || "-"}</p>
                     </div>
                     <div>
                       <p className="text-[12px] font-bold text-dark">Status</p>
                       <p className={`text-[13px] font-semibold mt-0.5 ${
-                        selectedLog.status === "Successful" ? "text-emerald-500" :
+                        (selectedLog.status || "Successful") === "Successful" ? "text-emerald-500" :
                         selectedLog.status === "Failed" ? "text-red-500" :
                         selectedLog.status === "Pending" ? "text-orange-500" :
                         "text-slate/60"
-                      }`}>{selectedLog.status}</p>
-                    </div>
-                    <div>
-                      <p className="text-[12px] font-bold text-dark">Logged via</p>
-                      <p className="text-[13px] text-slate/60 font-medium mt-0.5">{selectedLog.loggedVia}</p>
+                      }`}>{selectedLog.status || "Successful"}</p>
                     </div>
                     <div>
                       <p className="text-[12px] font-bold text-dark">Timestamp</p>
-                      <p className="text-[13px] text-slate/60 font-medium mt-0.5">{selectedLog.timestamp}</p>
-                    </div>
-                    <div>
-                      <p className="text-[12px] font-bold text-dark">Performed By</p>
-                      <p className="text-[13px] text-slate/60 font-medium mt-0.5">{selectedLog.performedBy}</p>
+                      <p className="text-[13px] text-slate/60 font-medium mt-0.5">{selectedLog.timestamp ? format(new Date(selectedLog.timestamp), "HH:mm, MMM dd, yyyy") : "-"}</p>
                     </div>
                     <div>
                       <p className="text-[12px] font-bold text-dark">Details</p>
-                      <p className="text-[13px] text-slate/60 font-medium mt-0.5 whitespace-pre-line">{selectedLog.details}</p>
+                      <p className="text-[13px] text-slate/60 font-medium mt-0.5 whitespace-pre-line">{selectedLog.details || "-"}</p>
                     </div>
                   </div>
                 </div>
@@ -480,19 +363,12 @@ export default function ActivitiesPage() {
                     <h3 className="text-[15px] font-bold text-dark mb-4">Security Verification</h3>
                     <div className="space-y-4">
                       <div>
-                        <p className="text-[12px] font-bold text-dark">Email Confirmation</p>
-                        <p className="text-[13px] mt-0.5">
-                          <span className="text-emerald-500 font-semibold">Approved</span>
-                          <span className="text-slate/60 font-medium"> at {selectedLog.emailConfirmation.replace("Approved at ", "")}</span>
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-[12px] font-bold text-dark">Account Grade</p>
-                        <p className="text-[13px] text-emerald-500 font-semibold mt-0.5">{selectedLog.accountGrade}</p>
-                      </div>
-                      <div>
                         <p className="text-[12px] font-bold text-dark">IP Address</p>
-                        <p className="text-[13px] text-slate/60 font-medium mt-0.5">{selectedLog.ip}</p>
+                        <p className="text-[13px] text-slate/60 font-medium mt-0.5">{selectedLog.ip || "N/A"}</p>
+                      </div>
+                      <div>
+                        <p className="text-[12px] font-bold text-dark">User Agent</p>
+                        <p className="text-[13px] text-slate/60 font-medium mt-0.5 break-words">{selectedLog.userAgent || "N/A"}</p>
                       </div>
                     </div>
                   </div>
@@ -502,15 +378,11 @@ export default function ActivitiesPage() {
                     <div className="space-y-4">
                       <div>
                         <p className="text-[12px] font-bold text-dark">Log Entry ID</p>
-                        <p className="text-[13px] text-slate/60 font-medium mt-0.5">{selectedLog.logId}</p>
+                        <p className="text-[13px] text-slate/60 font-medium mt-0.5">{selectedLog.id || "-"}</p>
                       </div>
                       <div>
                         <p className="text-[12px] font-bold text-dark">Log Recorded</p>
-                        <p className="text-[13px] text-slate/60 font-medium mt-0.5">{selectedLog.logRecorded}</p>
-                      </div>
-                      <div>
-                        <p className="text-[12px] font-bold text-dark">Notified Users</p>
-                        <p className="text-[13px] text-slate/60 font-medium mt-0.5">Admin received confirmation email</p>
+                        <p className="text-[13px] text-slate/60 font-medium mt-0.5">{selectedLog.timestamp ? format(new Date(selectedLog.timestamp), "HH:mm, MMM dd, yyyy") : "-"}</p>
                       </div>
                     </div>
                   </div>

@@ -41,7 +41,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import type { LibraryMaterial, ContentType } from "@/types/library";
-
+import { useGetLibrariesQuery, useDeleteLibraryMutation, useGetLibraryStatsQuery, useRecordLibraryDownloadMutation } from "@/lib/redux/features/libraryApi";
+import { Loader2 } from "lucide-react";
 // ─── Seed Data ────────────────────────────────────────────────────────────────
 
 const SEED_MATERIALS: LibraryMaterial[] = [
@@ -468,8 +469,47 @@ function DeleteModal({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function LibraryPage() {
-  const [materials, setMaterials] =
-    useState<LibraryMaterial[]>(SEED_MATERIALS);
+  const { data: response, isLoading } = useGetLibrariesQuery({ limit: 50 });
+  const rawMaterials = Array.isArray(response) 
+    ? response 
+    : Array.isArray(response?.data) 
+      ? response.data 
+      : Array.isArray(response?.data?.items)
+        ? response.data.items
+        : [];
+
+  const materials: LibraryMaterial[] = rawMaterials.map((m: any) => ({
+    id: m.id || m._id,
+    contentType: m.contentType || "document",
+    title: m.title || "Untitled",
+    description: m.description,
+    image: m.image?.replace(/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/, process.env.NEXT_PUBLIC_API_URL || "") || "https://images.unsplash.com/photo-1554224155-6726b3ff858f?q=80&w=400&h=200&auto=format&fit=crop",
+    timePosted: m.createdAt || new Date().toISOString(),
+    readingDuration: m.readingDuration || "",
+    documentUrl: m.documentUrl?.replace(/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/, process.env.NEXT_PUBLIC_API_URL || ""),
+    fileType: m.fileType,
+    fileSize: m.fileSize,
+    isDownloadable: m.isDownloadable,
+    youtubeUrl: m.youtubeUrl,
+    likesCount: m.likesCount || 0,
+    commentsCount: m.commentsCount || 0,
+    publishToApp: m.publishToApp,
+    publishToWeb: m.publishToWeb,
+  }));
+
+  const [deleteLibrary] = useDeleteLibraryMutation();
+  const [recordDownload] = useRecordLibraryDownloadMutation();
+
+  const handleDownload = async (material: LibraryMaterial) => {
+    if (!material.documentUrl) return;
+    try {
+      // Fire-and-forget: record the download event on the backend for accurate KPI stats
+      await recordDownload(material.id).unwrap();
+    } catch {
+      // Non-blocking — don't prevent the download if tracking fails
+    }
+    window.open(material.documentUrl, "_blank", "noopener,noreferrer");
+  };
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<ContentType | "all">("all");
   const [deleteTarget, setDeleteTarget] = useState<LibraryMaterial | null>(
@@ -481,27 +521,25 @@ export default function LibraryPage() {
   const [timeFilter, setTimeFilter] = useState<"today" | "week" | "month" | "all">("all");
   const [isStatsExpanded, setIsStatsExpanded] = useState(false);
 
-  // Stats
-  const totalDocs = materials.filter((m) => m.contentType === "document").length;
-  const totalVideos = materials.filter((m) => m.contentType === "video").length;
-  const totalDownloadable = materials.filter(
-    (m) => m.contentType === "document" && m.isDownloadable
-  ).length;
-  const totalMaterials = materials.length;
+  const { data: statsResponse, isLoading: isLoadingStats } = useGetLibraryStatsQuery(timeFilter);
+  const backendStats = statsResponse?.data;
+
+  // Stats from backend API (no dummy calculations)
+  const totalMaterials = backendStats?.materials?.totalCount ?? 0;
+  const uploadsThisMonth = backendStats?.materials?.uploadsThisMonth ?? 0;
+
+  const totalDocs = backendStats?.documentsCount ?? 0;
+  const totalVideos = backendStats?.videosCount ?? 0;
+  const totalDownloadable = backendStats?.totalDownloads ?? 0;
 
   // New & Returning Library Users based on timeFilter
   const getUserStats = () => {
-    switch (timeFilter) {
-      case "today":
-        return { newUsers: 8, returningUsers: 24, label: "today" };
-      case "week":
-        return { newUsers: 54, returningUsers: 142, label: "this week" };
-      case "month":
-        return { newUsers: 210, returningUsers: 580, label: "this month" };
-      case "all":
-      default:
-        return { newUsers: 1420, returningUsers: 3850, label: "all time" };
-    }
+    const timeKey = timeFilter === "all" ? "allTime" : timeFilter;
+    return {
+      newUsers: backendStats?.users?.[timeKey]?.newUsers || 0,
+      returningUsers: backendStats?.users?.[timeKey]?.returningUsers || 0,
+      label: timeFilter === "all" ? "all time" : timeFilter === "today" ? "today" : `this ${timeFilter}`
+    };
   };
 
   const { newUsers, returningUsers, label: filterLabel } = getUserStats();
@@ -521,23 +559,17 @@ export default function LibraryPage() {
     return matchesSearch && matchesType;
   });
 
-  // Toggle downloadable inline (document-only)
-  const handleToggleDownloadable = (id: string, current: boolean) => {
-    setMaterials((prev) =>
-      prev.map((m) =>
-        m.id === id ? { ...m, isDownloadable: !current } : m
-      )
-    );
-    toast.success(
-      `Material is now ${!current ? "downloadable" : "read-only in-app"}`
-    );
-  };
+
 
   // Delete
-  const confirmDelete = () => {
+  const confirmDelete = async () => {
     if (!deleteTarget) return;
-    setMaterials((prev) => prev.filter((m) => m.id !== deleteTarget.id));
-    toast.success("Material deleted successfully");
+    try {
+      await deleteLibrary(deleteTarget.id).unwrap();
+      toast.success("Material deleted successfully");
+    } catch (err: any) {
+      toast.error(err?.data?.message || "Failed to delete material");
+    }
     setDeleteTarget(null);
   };
 
@@ -637,7 +669,7 @@ export default function LibraryPage() {
               </div>
               <div className="pt-2 border-t border-[#155D5F1A] flex items-center gap-1.5 text-[10px] text-slate/50 font-bold">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                {materials.filter(m => new Date(m.timePosted).getMonth() === new Date().getMonth()).length} uploads this month
+                {uploadsThisMonth} uploads this month
               </div>
             </div>
 
@@ -788,6 +820,12 @@ export default function LibraryPage() {
 
           {/* Table */}
           <div className="border border-border/40 rounded-[20px] overflow-hidden bg-white shadow-sm">
+            {isLoading ? (
+              <div className="py-24 flex flex-col items-center justify-center text-slate/40">
+                <Loader2 className="h-10 w-10 animate-spin mb-2" />
+                <p className="text-sm font-semibold">Loading materials...</p>
+              </div>
+            ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm text-left">
                 <thead className="bg-surface/50 text-slate/60 text-[11px] font-semibold uppercase tracking-wider border-b border-border/40">
@@ -813,12 +851,11 @@ export default function LibraryPage() {
                       {/* Cover Image */}
                       <td className="px-3 py-2.5">
                         <div className="relative h-12 w-16 shrink-0 rounded-lg overflow-hidden bg-surface border border-border/50 shadow-sm">
-                          <Image
+                          <img
                             src={material.image}
                             alt={material.title}
-                            fill
-                            className="object-cover"
-                            sizes="64px"
+                            className="object-cover h-full w-full"
+                            onError={(e) => { e.currentTarget.src = "https://images.unsplash.com/photo-1554224155-6726b3ff858f?q=80&w=400&h=200&auto=format&fit=crop" }}
                           />
                           {material.contentType === "video" && (
                             <div className="absolute inset-0 bg-black/25 flex items-center justify-center">
@@ -957,6 +994,14 @@ export default function LibraryPage() {
                                   <MessageSquare className="h-3.5 w-3.5" /> View Engagement
                                 </DropdownMenuItem>
                               )}
+                              {material.contentType === "document" && material.isDownloadable && material.documentUrl && (
+                                <DropdownMenuItem
+                                  onClick={() => handleDownload(material)}
+                                  className="py-2.5 px-3 text-xs font-bold focus:bg-surface text-blue-600 cursor-pointer rounded-xl gap-2"
+                                >
+                                  <Download className="h-3.5 w-3.5" /> Download File
+                                </DropdownMenuItem>
+                              )}
                               <DropdownMenuItem
                                 asChild
                                 className="focus:bg-surface rounded-xl"
@@ -998,6 +1043,7 @@ export default function LibraryPage() {
                 </div>
               )}
             </div>
+            )}
           </div>
 
           {/* Row count */}

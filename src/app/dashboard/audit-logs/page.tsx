@@ -34,124 +34,91 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { useGetAuditLogsQuery, useGetTeamQuery } from "@/lib/redux/features/adminApi";
+import { useGetMeQuery } from "@/lib/redux/features/authApi";
+import { useGetUsersQuery } from "@/lib/redux/features/usersApi";
 
-// Mock Audit Logs Data
-const INITIAL_LOGS = [
-  {
-    id: "log_aud_928374",
-    timestamp: "05:45, May 28, 2026",
-    admin: {
-      id: "1",
-      name: "Simon Olabiran",
-      role: "Super Admin",
-      email: "simon.olabiran@wealthconomy.com",
-      avatarUrl: "https://i.pravatar.cc/150?u=1",
-    },
-    category: "User Management",
-    action: "Suspended User 'Simon Smith' (ID5372527)",
-    reason: "Suspicious login attempts detected from overseas.",
-    duration: "30 Days",
-    ipAddress: "197.210.8.42",
-    device: "Windows (Chrome)",
-    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/125.0.0.0",
-  },
-  {
-    id: "log_aud_928375",
-    timestamp: "05:32, May 28, 2026",
-    admin: {
-      id: "2",
-      name: "Fatima Yusuf",
-      role: "Admin",
-      email: "fatima.y@wealthconomy.com",
-      avatarUrl: "https://i.pravatar.cc/150?u=2",
-    },
-    category: "Support Operations",
-    action: "Claimed Support Chat with 'Alice Thompson' (#101)",
-    reason: "Queue request escalation.",
-    ipAddress: "102.89.43.11",
-    device: "macOS (Safari)",
-    userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/17.4",
-  },
-  {
-    id: "log_aud_928376",
-    timestamp: "04:15, May 28, 2026",
-    admin: {
-      id: "6",
-      name: "Adeleye Ayodeji",
-      role: "Content Writer",
-      email: "ayodeji.a@wealthconomy.com",
-      avatarUrl: "https://i.pravatar.cc/150?u=6",
-    },
-    category: "Content Engine",
-    action: "Uploaded Blog Material 'Modern Wealth Management Strategies'",
-    reason: "Scheduled newsletter campaign.",
-    ipAddress: "197.210.15.68",
-    device: "Windows (Firefox)",
-    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:126.0)",
-  },
-  {
-    id: "log_aud_928377",
-    timestamp: "02:10, May 28, 2026",
-    admin: {
-      id: "1",
-      name: "Simon Olabiran",
-      role: "Super Admin",
-      email: "simon.olabiran@wealthconomy.com",
-      avatarUrl: "https://i.pravatar.cc/150?u=1",
-    },
-    category: "Team Management",
-    action: "Created new Custom Role: 'Content Writer'",
-    reason: "Assigned permissions: Blog Engine, Library Management.",
-    ipAddress: "197.210.8.42",
-    device: "Windows (Chrome)",
-    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/125.0.0.0",
-  },
-  {
-    id: "log_aud_928378",
-    timestamp: "11:20, May 27, 2026",
-    admin: {
-      id: "3",
-      name: "Jessica Smith",
-      role: "Editor",
-      email: "j.smith@wealthconomy.com",
-      avatarUrl: "https://i.pravatar.cc/150?u=3",
-    },
-    category: "Content Engine",
-    action: "Uploaded Library Book: 'Guide to Real Estate Wealth'",
-    reason: "Asset deployment schedule.",
-    ipAddress: "102.91.4.150",
-    device: "iOS (Mobile App)",
-    userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X)",
-  },
-  {
-    id: "log_aud_928379",
-    timestamp: "09:45, May 27, 2026",
-    admin: {
-      id: "1",
-      name: "Simon Olabiran",
-      role: "Super Admin",
-      email: "simon.olabiran@wealthconomy.com",
-      avatarUrl: "https://i.pravatar.cc/150?u=1",
-    },
-    category: "User Management",
-    action: "Permanently Blocked User 'Kofi Mensah' (ID5372535)",
-    reason: "Repeated chargeback policy violations.",
-    ipAddress: "197.210.8.42",
-    device: "Windows (Chrome)",
-    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/125.0.0.0",
-  },
-];
+// Helper to extract the safe array from backend response wrapper
+const getSafeArray = (data: any) => {
+  if (!data) return [];
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data.items)) return data.items;
+  if (Array.isArray(data.data?.items)) return data.data.items;
+  if (Array.isArray(data.data)) return data.data;
+  return [];
+};
+
+
 
 const CATEGORIES = ["All Categories", "Authentication", "User Management", "Team Management", "Content Engine", "Support Operations", "Settings Update"];
 
 export default function AuditLogsPage() {
   const router = useRouter();
-  const [logs, setLogs] = useState(INITIAL_LOGS);
+  const { data: auditLogsData, isLoading } = useGetAuditLogsQuery(undefined);
+  const { data: teamData } = useGetTeamQuery(undefined);
+  const { data: meData } = useGetMeQuery(undefined);
+  const { data: usersData } = useGetUsersQuery({ limit: 100 });
+
+  const team = getSafeArray(teamData);
+  const me = meData?.data || meData;
+  const usersList = getSafeArray(usersData?.data?.items || usersData?.data || usersData);
+
+  const logs = getSafeArray(auditLogsData).map((log: any) => {
+    // Find admin details from team, me, or users
+    const adminId = log.adminId || log.userId;
+    let matchingAdmin = team.find((member: any) => member.id === adminId);
+    
+    // If not found in team, but matches current user
+    if (!matchingAdmin && me?.id === adminId) {
+      matchingAdmin = me;
+    }
+
+    // If still not found, check the regular users list (since sometimes regular users trigger audit logs, or it was a deleted admin that is still in the users table)
+    if (!matchingAdmin) {
+      matchingAdmin = usersList.find((u: any) => u.id === adminId);
+    }
+
+    const adminName = matchingAdmin ? `${matchingAdmin.firstName || ""} ${matchingAdmin.lastName || ""}`.trim() : (log.admin?.name || log.adminName || log.user?.firstName || log.user?.name || "Unknown Admin");
+    const adminRole = matchingAdmin ? (matchingAdmin.role || "Admin") : (log.adminRole || "Admin");
+    const adminEmail = matchingAdmin ? matchingAdmin.email : (log.admin?.email || log.adminEmail || log.user?.email || "Admin");
+    const adminAvatar = matchingAdmin?.imageUrl || log.admin?.imageUrl || log.adminImageUrl || log.user?.imageUrl || "";
+
+    // Resolve Target Name
+    let targetName = "";
+    if (log.targetId) {
+      let matchingTarget = usersList.find((u: any) => u.id === log.targetId) || team.find((u: any) => u.id === log.targetId);
+      if (matchingTarget) {
+        targetName = `${matchingTarget.firstName || ""} ${matchingTarget.lastName || ""}`.trim();
+      } else if (log.targetId === me?.id) {
+        targetName = `${me.firstName || ""} ${me.lastName || ""}`.trim();
+      }
+    }
+
+    return {
+      ...log,
+      id: log.id || log._id,
+      timestamp: log.createdAt ? new Date(log.createdAt).toLocaleString() : log.timestamp,
+      admin: {
+        id: adminId || "1",
+        name: adminName || "Unknown Admin",
+        role: adminRole || "Admin",
+        email: adminEmail,
+        avatarUrl: adminAvatar,
+      },
+      category: log.category || log.model || "System Activity",
+      action: log.action || log.description || "Performed an action",
+      targetName: targetName,
+      reason: log.changes ? JSON.stringify(log.changes) : log.reason || log.details || (log.targetId ? `Target ID: ${log.targetId}` : ""),
+      ipAddress: log.ip || log.ipAddress || "Unknown",
+      device: log.device || "Unknown",
+      userAgent: log.userAgent || "Unknown",
+    };
+  });
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All Categories");
   const [selectedLog, setSelectedLog] = useState<any | null>(null);
 
-  const filteredLogs = logs.filter((log) => {
+  const filteredLogs = logs.filter((log: any) => {
     const matchesSearch =
       log.admin.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       log.admin.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -164,8 +131,43 @@ export default function AuditLogsPage() {
     return matchesSearch && matchesCategory;
   });
 
+  const totalEvents = logs.length;
+  const flaggedIncidents = logs.filter((l: any) => l.action.toLowerCase().includes("fail") || l.action.toLowerCase().includes("flag") || l.category.toLowerCase().includes("security")).length;
+  const permissionsAltered = logs.filter((l: any) => l.category.toLowerCase().includes("role") || l.action.toLowerCase().includes("role") || l.action.toLowerCase().includes("permission")).length;
+
   const handleDownloadReport = () => {
-    toast.success("Downloading security audit report...");
+    toast.info("Preparing security audit report...");
+    try {
+      const headers = ["ID", "Admin Name", "Admin Email", "Action", "Category", "IP Address", "Device", "Date"];
+      const rows = filteredLogs.map((log: any) => [
+        log.id,
+        `"${log.admin.name}"`,
+        `"${log.admin.email}"`,
+        `"${log.action}"`,
+        log.category,
+        log.ipAddress,
+        `"${log.device}"`,
+        `"${log.date} ${log.time}"`
+      ]);
+
+      const csvContent = [
+        headers.join(","),
+        ...rows.map((row: string[]) => row.join(","))
+      ].join("\n");
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `audit-logs-export-${new Date().toISOString().split("T")[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      toast.success("Security audit report downloaded!");
+    } catch (err) {
+      toast.error("Failed to generate report.");
+    }
   };
 
   return (
@@ -230,7 +232,7 @@ export default function AuditLogsPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-[#F2FFFF] border border-[#155D5F4D] rounded-[20px] p-5 flex items-start justify-between shadow-[0px_4px_10px_0px_rgba(0,0,0,0.02)]">
           <div className="space-y-1">
-            <p className="text-[26px] font-extrabold text-[#155D5F] leading-none">1,242</p>
+            <p className="text-[26px] font-extrabold text-[#155D5F] leading-none">{totalEvents}</p>
             <p className="text-[11px] font-bold text-[#155D5F] pt-1">Total Audit Events Traced</p>
           </div>
           <div className="h-9 w-9 bg-[#155D5F] text-white rounded-full flex items-center justify-center shrink-0">
@@ -240,7 +242,7 @@ export default function AuditLogsPage() {
 
         <div className="bg-[#F2FFFF] border border-[#155D5F4D] rounded-[20px] p-5 flex items-start justify-between shadow-[0px_4px_10px_0px_rgba(0,0,0,0.02)]">
           <div className="space-y-1">
-            <p className="text-[26px] font-extrabold text-[#155D5F] leading-none">4</p>
+            <p className="text-[26px] font-extrabold text-[#155D5F] leading-none">{flaggedIncidents}</p>
             <p className="text-[11px] font-bold text-[#155D5F] pt-1">Flagged Access Incidents</p>
           </div>
           <div className="h-9 w-9 bg-red-500 text-white rounded-full flex items-center justify-center shrink-0 shadow-sm shadow-red-500/10">
@@ -250,7 +252,7 @@ export default function AuditLogsPage() {
 
         <div className="bg-[#F2FFFF] border border-[#155D5F4D] rounded-[20px] p-5 flex items-start justify-between shadow-[0px_4px_10px_0px_rgba(0,0,0,0.02)]">
           <div className="space-y-1">
-            <p className="text-[26px] font-extrabold text-[#155D5F] leading-none">28</p>
+            <p className="text-[26px] font-extrabold text-[#155D5F] leading-none">{permissionsAltered}</p>
             <p className="text-[11px] font-bold text-[#155D5F] pt-1">Team Permissions Altered</p>
           </div>
           <div className="h-9 w-9 bg-amber-500 text-white rounded-full flex items-center justify-center shrink-0 shadow-sm">
@@ -266,15 +268,24 @@ export default function AuditLogsPage() {
             <TableHeader className="bg-surface/50">
               <TableRow className="border-border/50 hover:bg-transparent">
                 <TableHead className="py-4 px-4 text-slate/50 font-bold text-[10px] uppercase tracking-widest hidden md:table-cell w-[160px]">Timestamp</TableHead>
-                <TableHead className="py-4 px-4 text-slate/50 font-bold text-[10px] uppercase tracking-widest w-[200px] md:w-[220px]">Administrator</TableHead>
-                <TableHead className="py-4 px-4 text-slate/50 font-bold text-[10px] uppercase tracking-widest hidden sm:table-cell w-[140px]">Event Category</TableHead>
+                <TableHead className="py-4 px-4 text-slate/50 font-bold text-[10px] uppercase tracking-widest w-[200px] md:w-[250px]">Administrator</TableHead>
+                <TableHead className="py-4 px-4 text-slate/50 font-bold text-[10px] uppercase tracking-widest hidden sm:table-cell w-[180px]">Event Category</TableHead>
                 <TableHead className="py-4 px-4 text-slate/50 font-bold text-[10px] uppercase tracking-widest">Activity Traced</TableHead>
                 <TableHead className="py-4 px-4 w-[60px]"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredLogs.length > 0 ? (
-                filteredLogs.map((log) => (
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="py-20 text-center">
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto"></div>
+                      <p className="text-sm font-medium text-slate/40">Loading audit logs...</p>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : filteredLogs.length > 0 ? (
+                filteredLogs.map((log: any) => (
                   <TableRow key={log.id} className="group border-border/50 hover:bg-surface/30 transition-all duration-200">
                     <TableCell className="py-4 px-4 hidden md:table-cell">
                       <span className="text-[11px] font-bold text-slate/50 block">{log.timestamp}</span>
@@ -331,7 +342,14 @@ export default function AuditLogsPage() {
                           {log.category}
                         </span>
                       </div>
-                      <span className="text-[12px] font-extrabold text-dark leading-snug block">{log.action}</span>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[12px] font-extrabold text-dark leading-snug block">{log.action}</span>
+                        {log.targetName && (
+                          <span className="text-[10px] font-medium text-slate/50">
+                            Target: <span className="font-bold text-primary">{log.targetName}</span>
+                          </span>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="py-4 px-4 text-right">
                       <DropdownMenu>
@@ -366,7 +384,7 @@ export default function AuditLogsPage() {
 
       {/* Pagination indicators */}
       <div className="flex justify-between items-center text-xs font-bold text-slate/40 pt-2 px-1">
-        <span>Showing 1 to {filteredLogs.length} of 1,242 records</span>
+        <span>Showing {filteredLogs.length} records</span>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" className="h-8 text-[11px] px-3 font-semibold text-slate/40 border-slate-200 cursor-not-allowed">Previous</Button>
           <Button variant="outline" size="sm" className="h-8 text-[11px] px-3 font-semibold text-[#155D5F] border-[#155D5F]/20 hover:bg-[#E8F3F3]">Next</Button>
@@ -429,9 +447,39 @@ export default function AuditLogsPage() {
                 </div>
                 <div className="col-span-2">
                   <p className="text-[10px] font-bold text-slate/40 uppercase tracking-wider">Reason / Parameters</p>
-                  <p className="text-xs font-semibold text-slate/60 mt-1 leading-relaxed whitespace-pre-wrap">
-                    "{selectedLog.reason}"
-                  </p>
+                  <div className="mt-1">
+                    {(() => {
+                      try {
+                        const parsed = JSON.parse(selectedLog.reason);
+                        return typeof parsed === "object" && parsed !== null ? (
+                          <div className="flex flex-col gap-2.5 bg-surface/30 p-4 rounded-xl border border-border/20">
+                            {Object.entries(parsed).map(([key, value]) => (
+                              <div key={key} className="flex items-start gap-2">
+                                <span className="text-[11px] font-bold text-slate/40 capitalize w-[110px] shrink-0">
+                                  {key.replace(/([A-Z])/g, ' $1').trim()}
+                                </span>
+                                <span className="text-[11px] font-semibold text-dark break-words flex-1">
+                                  {typeof value === "string" && (value.endsWith("Z") || value.includes("T0"))
+                                    ? new Date(value).toLocaleString() 
+                                    : String(value)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs font-semibold text-slate/60 leading-relaxed whitespace-pre-wrap">
+                            {selectedLog.reason}
+                          </p>
+                        );
+                      } catch {
+                        return (
+                          <p className="text-xs font-semibold text-slate/60 leading-relaxed whitespace-pre-wrap">
+                            {selectedLog.reason}
+                          </p>
+                        );
+                      }
+                    })()}
+                  </div>
                 </div>
               </div>
 

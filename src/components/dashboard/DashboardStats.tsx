@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useGetDashboardStatsQuery } from "@/lib/redux/features/dashboardApi";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,67 +15,97 @@ interface DashboardStatsProps {
   setTimeFilter: (filter: string) => void;
 }
 
+const mapFilterToPeriod = (filter: string) => {
+  switch (filter) {
+    case "Today": return "today";
+    case "Last Week": return "last_week";
+    case "Last Month": return "month";
+    case "6 Months": return "last_6_months";
+    case "A Year": return "year";
+    case "All Time": return "all_time";
+    default: return "today";
+  }
+};
+
 const filters = ["Today", "Last Week", "Last Month", "6 Months", "A Year", "All Time"];
 
-// Mock generator based on filter
-const getStats = (filter: string) => {
-  const multiplier = filter === "Today" ? 1 : filter === "Last Week" ? 7 : filter === "Last Month" ? 30 : filter === "6 Months" ? 180 : filter === "A Year" ? 365 : 1000;
-  
-  return [
+export function DashboardStats({ timeFilter, setTimeFilter }: DashboardStatsProps) {
+  const { data: rawData, isLoading, isError } = useGetDashboardStatsQuery(mapFilterToPeriod(timeFilter));
+  const data = rawData?.data; // Extract nested data
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  // Helper to format currency/value
+  const formatValue = (apiField: any, fallback: string, forceCurrency?: boolean) => {
+    if (isLoading) return "—";
+    if (isError) return "Error";
+    if (!apiField) return fallback;
+    const val = apiField.value?.value || apiField.value || 0;
+    
+    // Convert NGN to ₦, or use ₦ if forceCurrency is true
+    const currencyStr = apiField.currency === "NGN" ? "₦" : (apiField.currency || (forceCurrency ? "₦" : ""));
+    
+    return currencyStr 
+      ? `${currencyStr}${Number(val).toLocaleString(undefined, { minimumFractionDigits: 0 })}`
+      : Number(val).toLocaleString(undefined, { maximumFractionDigits: 0 });
+  };
+
+  const formatSubtext = (apiField: any, fallback: string) => {
+    if (isLoading) return "Loading...";
+    if (isError) return "Failed to load";
+    if (!apiField) return fallback;
+    return apiField.subtext || apiField.todayValue || apiField.trend || fallback;
+  };
+
+  const stats = [
     {
       title: "Total registered users",
-      value: (7363 * (multiplier > 30 ? multiplier / 30 : 1)).toLocaleString(undefined, { maximumFractionDigits: 0 }),
-      subtext: "2 new accounts recently created",
+      value: formatValue(data?.totalRegisteredUsers, "0"),
+      subtext: formatSubtext(data?.totalRegisteredUsers, "Pending API"),
       icon: ClipboardList,
       color: "bg-[#E6F9F9] text-[#155D5F]",
       dotColor: "bg-[#155D5F]"
     },
     {
       title: "Active users",
-      value: (7233 * (multiplier > 30 ? multiplier / 30 : 1)).toLocaleString(undefined, { maximumFractionDigits: 0 }),
-      subtext: "3723 online users",
+      value: formatValue(data?.activeUsers, "Pending API"),
+      subtext: formatSubtext(data?.activeUsers, "Pending API"),
       icon: Users,
       color: "bg-[#E6F9F9] text-[#155D5F]",
       dotColor: "bg-[#65D36A]"
     },
     {
       title: "New sign-ups today",
-      value: (223 * multiplier).toLocaleString(undefined, { maximumFractionDigits: 0 }),
-      subtext: "54 Recently",
+      value: formatValue(data?.newSignupsToday, "Pending API"),
+      subtext: formatSubtext(data?.newSignupsToday, "Pending API"),
       icon: UserPlus,
       color: "bg-[#E6F9F9] text-[#155D5F]",
       dotColor: "bg-[#65D36A]"
     },
     {
       title: "Total savings deposit",
-      value: `₦${(300735.42 * multiplier).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-      subtext: "Today's deposit is ₦30,381.93 ↑",
+      value: formatValue(data?.activeInvestmentVolume, "₦0.00"), // Mapped to active investment volume
+      subtext: formatSubtext(data?.activeInvestmentVolume, "Pending API"),
       icon: Briefcase,
       color: "bg-[#E6F9F9] text-[#155D5F]",
       subtextStyle: "text-[#65D36A]"
     },
     {
       title: "Total Withdrawal",
-      value: `₦${(300735.42 * multiplier).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-      subtext: "Today's withdraw is ₦30,381.93 ↑",
+      value: formatValue(data?.totalWithdrawal, "Pending API"),
+      subtext: formatSubtext(data?.totalWithdrawal, "Pending API"),
       icon: CreditCard,
       color: "bg-[#E6F9F9] text-[#155D5F]",
       subtextStyle: "text-[#65D36A]"
     },
     {
       title: "Overall revenue across all wallets and savers",
-      value: `₦${(34200735.42 * multiplier).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-      subtext: "Today's revenue is ₦30,381.93 ↑",
+      value: formatValue(data?.totalTransactionVolume, "₦0", true), // Mapped to total transaction volume
+      subtext: formatSubtext(data?.totalTransactionVolume, "Pending API"),
       icon: Wallet,
       color: "bg-[#E6F9F9] text-[#155D5F]",
       subtextStyle: "text-[#65D36A]"
     },
   ];
-};
-
-export function DashboardStats({ timeFilter, setTimeFilter }: DashboardStatsProps) {
-  const stats = getStats(timeFilter);
-  const [isExpanded, setIsExpanded] = useState(false);
   
   const visibleStats = isExpanded ? stats : stats.slice(0, 3);
 

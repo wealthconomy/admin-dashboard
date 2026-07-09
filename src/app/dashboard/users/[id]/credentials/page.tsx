@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, use } from "react";
 import { useRouter } from "next/navigation";
 import {
   ChevronLeft,
@@ -23,6 +23,12 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import {
+  useGetUserDetailsQuery,
+  useApproveKycDocMutation,
+  useRejectKycDocMutation,
+  useResetKycDocMutation
+} from "@/lib/redux/features/usersApi";
 
 interface DocumentDetail {
   id: string;
@@ -33,8 +39,17 @@ interface DocumentDetail {
   extractedFields: { label: string; value: string; icon: any }[];
 }
 
-export default function CredentialsVerificationPage({ params }: { params: { id: string } }) {
+export default function CredentialsVerificationPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
+  const resolvedParams = use(params);
+  const resolvedId = resolvedParams.id;
+
+  const { data: userDataResponse } = useGetUserDetailsQuery(resolvedId);
+  const user = userDataResponse?.data?.data || userDataResponse?.data || userDataResponse;
+
+  const [approveKycDoc] = useApproveKycDocMutation();
+  const [rejectKycDoc] = useRejectKycDocMutation();
+  const [resetKycDoc] = useResetKycDocMutation();
 
   // Document states
   const [ninStatus, setNinStatus] = useState<"Pending" | "Approved" | "Rejected">("Pending");
@@ -48,19 +63,19 @@ export default function CredentialsVerificationPage({ params }: { params: { id: 
   const [rejectionInput, setRejectionInput] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState<string | null>(null); // tracks loading doc type
 
-  // Mock Extracted Fields
+  // Dynamically populated Extracted Fields from user data
   const ninFields = [
-    { label: "Full Name", value: "SIMON SMITH", icon: User },
-    { label: "NIN Number", value: "3847-2947-1048", icon: CreditCard },
-    { label: "Date of Birth", value: "12 Oct 1993", icon: Calendar },
-    { label: "Expiry Date", value: "28 Feb 2029", icon: Calendar }
+    { label: "Full Name", value: `${user?.firstName || ""} ${user?.lastName || ""}`.trim().toUpperCase() || "NOT PROVIDED", icon: User },
+    { label: "NIN Number", value: user?.nin || user?.kycData?.nin || "NOT PROVIDED", icon: CreditCard },
+    { label: "Date of Birth", value: user?.dob ? new Date(user.dob).toLocaleDateString() : "NOT PROVIDED", icon: Calendar },
+    { label: "Expiry Date", value: user?.ninExpiry || user?.kycData?.ninExpiry || "NOT PROVIDED", icon: Calendar }
   ];
 
   const utilityFields = [
-    { label: "Account Name", value: "Simon Smith", icon: User },
-    { label: "Service Address", value: "Plot 12, Admiralty Way, Lekki Phase 1, Lagos", icon: MapPin },
-    { label: "Provider", value: "Eko Electricity Distribution (EKEDP)", icon: Building },
-    { label: "Issue Date", value: "14 Mar 2026", icon: Calendar }
+    { label: "Account Name", value: `${user?.firstName || ""} ${user?.lastName || ""}`.trim().toUpperCase() || "NOT PROVIDED", icon: User },
+    { label: "Service Address", value: user?.address || user?.kycData?.address || "NOT PROVIDED", icon: MapPin },
+    { label: "Provider", value: user?.utilityProvider || user?.kycData?.utilityProvider || "NOT PROVIDED", icon: Building },
+    { label: "Issue Date", value: user?.utilityIssueDate || user?.kycData?.utilityIssueDate || "NOT PROVIDED", icon: Calendar }
   ];
 
   const presetReasons = [
@@ -71,9 +86,15 @@ export default function CredentialsVerificationPage({ params }: { params: { id: 
     "Incorrect document type uploaded"
   ];
 
-  const handleApprove = (doc: "nin" | "utility") => {
+  const handleApprove = async (doc: "nin" | "utility") => {
     setIsSubmitting(doc);
-    setTimeout(() => {
+    try {
+      await approveKycDoc({
+        id: resolvedId,
+        documentType: doc.toUpperCase(),
+        reason: "Document verified successfully",
+      }).unwrap();
+
       if (doc === "nin") {
         setNinStatus("Approved");
         setNinReason("");
@@ -81,7 +102,7 @@ export default function CredentialsVerificationPage({ params }: { params: { id: 
         setUtilityStatus("Approved");
         setUtilityReason("");
       }
-      setIsSubmitting(null);
+      
       toast.success(`${doc === "nin" ? "National ID Card" : "Utility Bill"} successfully approved!`);
 
       // Celebration toast if both approved
@@ -94,10 +115,14 @@ export default function CredentialsVerificationPage({ params }: { params: { id: 
           });
         }, 800);
       }
-    }, 1200);
+    } catch (err: any) {
+      toast.error(err?.data?.message || `Failed to approve ${doc}`);
+    } finally {
+      setIsSubmitting(null);
+    }
   };
 
-  const handleRejectSubmit = () => {
+  const handleRejectSubmit = async () => {
     if (!rejectionInput.trim()) {
       toast.error("Please provide or select a rejection reason");
       return;
@@ -107,7 +132,13 @@ export default function CredentialsVerificationPage({ params }: { params: { id: 
     if (!doc) return;
 
     setIsSubmitting(doc);
-    setTimeout(() => {
+    try {
+      await rejectKycDoc({
+        id: resolvedId,
+        documentType: doc.toUpperCase(),
+        reason: rejectionInput,
+      }).unwrap();
+
       if (doc === "nin") {
         setNinStatus("Rejected");
         setNinReason(rejectionInput);
@@ -115,18 +146,44 @@ export default function CredentialsVerificationPage({ params }: { params: { id: 
         setUtilityStatus("Rejected");
         setUtilityReason(rejectionInput);
       }
-      setIsSubmitting(null);
+      
       setRejectingDoc(null);
       setRejectionInput("");
       toast.warning(`${doc === "nin" ? "National ID Card" : "Utility Bill"} has been rejected.`);
-    }, 1000);
+    } catch (err: any) {
+      toast.error(err?.data?.message || `Failed to reject ${doc}`);
+    } finally {
+      setIsSubmitting(null);
+    }
   };
+
+  const isKycNotStarted = user?.kycStatus === "NOT_STARTED" || !user?.kycData;
 
   // Compute Overall Status
   const getOverallStatus = () => {
+    if (isKycNotStarted) return "Not Started";
     if (ninStatus === "Approved" && utilityStatus === "Approved") return "Verified";
     if (ninStatus === "Rejected" || utilityStatus === "Rejected") return "Action Required";
     return "Pending Review";
+  };
+
+  const handleReset = async (doc: "nin" | "utility") => {
+    try {
+      await resetKycDoc({
+        id: resolvedId,
+        documentType: doc.toUpperCase(),
+        reason: "Resetting verification status",
+      }).unwrap();
+      
+      if (doc === "nin") {
+        setNinStatus("Pending");
+      } else {
+        setUtilityStatus("Pending");
+      }
+      toast.success("Document verification status reset to Pending");
+    } catch (err: any) {
+      toast.error(err?.data?.message || "Failed to reset status");
+    }
   };
 
   return (
@@ -135,7 +192,7 @@ export default function CredentialsVerificationPage({ params }: { params: { id: 
       {/* Navigation & Header */}
       <div className="flex flex-col space-y-6">
         <button
-          onClick={() => router.push(`/dashboard/users/${params.id}`)}
+          onClick={() => router.push(`/dashboard/users/${resolvedId}`)}
           className="flex items-center gap-2 text-slate/60 hover:text-primary transition-all font-medium text-sm group self-start"
         >
           <div className="p-1.5 rounded-lg group-hover:bg-primary/5 transition-all">
@@ -147,12 +204,14 @@ export default function CredentialsVerificationPage({ params }: { params: { id: 
         <div className="flex flex-col md:flex-row md:items-center justify-between w-full bg-surface/30 border border-border/30 rounded-[20px] p-6 gap-6">
           <div className="flex items-center gap-5">
             <Avatar className="h-16 w-16 border-2 border-white shadow-md">
-              <AvatarImage src={`https://i.pravatar.cc/150?u=${params.id}`} />
-              <AvatarFallback className="bg-primary/5 text-primary text-xl font-bold">S</AvatarFallback>
+              <AvatarImage src={user?.imageUrl || ""} />
+              <AvatarFallback className="bg-primary/5 text-primary text-xl font-bold uppercase">
+                {user?.firstName?.[0] || user?.name?.[0] || "U"}
+              </AvatarFallback>
             </Avatar>
             <div className="space-y-1.5">
               <div className="flex items-center gap-3 flex-wrap">
-                <h1 className="text-xl font-bold font-outfit text-dark leading-none">Simon Smith</h1>
+                <h1 className="text-xl font-bold font-outfit text-dark leading-none">{`${user?.firstName || ""} ${user?.lastName || ""}`.trim() || user?.name || "User"}</h1>
                 <Badge className={`${
                   getOverallStatus() === "Verified" 
                     ? "bg-emerald-50 text-emerald-600 border-emerald-100" 
@@ -163,14 +222,14 @@ export default function CredentialsVerificationPage({ params }: { params: { id: 
                   {getOverallStatus()}
                 </Badge>
               </div>
-              <p className="text-slate/60 text-xs font-semibold">User ID: <span className="text-dark font-bold">{params.id || "ID5372527"}</span></p>
+              <p className="text-slate/60 text-xs font-semibold">User ID: <span className="text-dark font-bold">{resolvedId}</span></p>
             </div>
           </div>
 
           <div className="flex items-center gap-8 border-t md:border-t-0 pt-4 md:pt-0 border-border/20">
             <div className="text-center">
               <p className="text-[10px] font-bold text-slate/40 uppercase tracking-wider">Submitted</p>
-              <p className="text-lg font-extrabold text-dark mt-1">2 Documents</p>
+              <p className="text-lg font-extrabold text-dark mt-1">{isKycNotStarted ? "0 Documents" : "2 Documents"}</p>
             </div>
             <div className="h-8 w-px bg-border/40" />
             <div className="text-center">
@@ -178,8 +237,8 @@ export default function CredentialsVerificationPage({ params }: { params: { id: 
               <p className={`text-lg font-extrabold mt-1 ${
                 getOverallStatus() === "Verified" ? "text-emerald-500" : "text-primary"
               }`}>
-                {ninStatus === "Approved" && utilityStatus === "Approved" ? "100%" : 
-                 (ninStatus === "Approved" || utilityStatus === "Approved" ? "50%" : "0%")}
+                {isKycNotStarted ? "0%" : (ninStatus === "Approved" && utilityStatus === "Approved" ? "100%" : 
+                 (ninStatus === "Approved" || utilityStatus === "Approved" ? "50%" : "0%"))}
               </p>
             </div>
           </div>
@@ -187,10 +246,21 @@ export default function CredentialsVerificationPage({ params }: { params: { id: 
       </div>
 
       {/* Main Grid: Documents side-by-side */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        
-        {/* Document 1: NIN National ID */}
-        <div className="border border-border/50 rounded-2xl overflow-hidden shadow-sm bg-white hover:shadow-md transition-shadow duration-300 flex flex-col h-full">
+      {isKycNotStarted ? (
+        <div className="flex flex-col items-center justify-center p-16 mt-4 bg-surface/30 border border-border/30 rounded-3xl text-center space-y-5 shadow-sm">
+          <div className="h-20 w-20 bg-white border border-border/50 rounded-full flex items-center justify-center shadow-sm">
+            <AlertTriangle className="h-8 w-8 text-amber-500" />
+          </div>
+          <div className="space-y-1">
+            <h3 className="text-xl font-bold text-dark font-outfit">No Documents Uploaded</h3>
+            <p className="text-slate/60 text-sm max-w-[400px]">This user has not yet submitted any KYC documents for verification from the mobile application.</p>
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          
+          {/* Document 1: NIN National ID */}
+          <div className="border border-border/50 rounded-2xl overflow-hidden shadow-sm bg-white hover:shadow-md transition-shadow duration-300 flex flex-col h-full">
           {/* Doc Header */}
           <div className="p-6 border-b border-border/30 bg-surface/30 flex items-center justify-between">
             <div className="space-y-1">
@@ -255,7 +325,7 @@ export default function CredentialsVerificationPage({ params }: { params: { id: 
                   {/* Photo area */}
                   <div className="h-20 w-16 bg-slate-900/60 rounded-md border border-white/20 overflow-hidden shrink-0 relative flex items-center justify-center">
                     <Avatar className="h-full w-full rounded-none">
-                      <AvatarImage src={`https://i.pravatar.cc/150?u=${params.id}`} className="grayscale" />
+                      <AvatarImage src={user?.imageUrl || ""} className="grayscale" />
                       <AvatarFallback>S</AvatarFallback>
                     </Avatar>
                     <div className="absolute bottom-1 right-1 bg-emerald-500 h-2 w-2 rounded-full animate-pulse" />
@@ -320,7 +390,7 @@ export default function CredentialsVerificationPage({ params }: { params: { id: 
               </>
             ) : (
               <Button 
-                onClick={() => setNinStatus("Pending")} 
+                onClick={() => handleReset("nin")} 
                 variant="outline" 
                 className="w-full h-11 rounded-xl text-xs font-bold text-slate/50 hover:text-dark hover:bg-surface border-border/50 transition-all cursor-pointer"
               >
@@ -467,7 +537,7 @@ export default function CredentialsVerificationPage({ params }: { params: { id: 
               </>
             ) : (
               <Button 
-                onClick={() => setUtilityStatus("Pending")} 
+                onClick={() => handleReset("utility")} 
                 variant="outline" 
                 className="w-full h-11 rounded-xl text-xs font-bold text-slate/50 hover:text-dark hover:bg-surface border-border/50 transition-all cursor-pointer"
               >
@@ -477,7 +547,8 @@ export default function CredentialsVerificationPage({ params }: { params: { id: 
           </div>
         </div>
 
-      </div>
+        </div>
+      )}
 
       {/* Lightbox Zoom Modals */}
       {activeLightbox && (
@@ -516,7 +587,7 @@ export default function CredentialsVerificationPage({ params }: { params: { id: 
                     <div className="flex items-end gap-6">
                       <div className="h-24 w-20 bg-slate-900/60 rounded-md border border-white/20 overflow-hidden shrink-0 relative flex items-center justify-center">
                         <Avatar className="h-full w-full rounded-none">
-                          <AvatarImage src={`https://i.pravatar.cc/150?u=${params.id}`} className="grayscale scale-105" />
+                          <AvatarImage src={user?.imageUrl || ""} className="grayscale scale-105" />
                           <AvatarFallback>S</AvatarFallback>
                         </Avatar>
                       </div>

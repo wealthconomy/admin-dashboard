@@ -1,13 +1,22 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useEffect, useState } from "react";
 import {
   ArrowRightLeft,
   ShieldCheck,
   Users,
   Info,
   AlertTriangle,
+  Bell
 } from "lucide-react";
+import { 
+  useGetAdminNotificationsQuery,
+  useMarkNotificationReadMutation,
+  useMarkAllNotificationsReadMutation,
+  useDeleteAdminNotificationMutation,
+  useClearAllAdminNotificationsMutation
+} from "@/lib/redux/features/adminApi";
+import { toast } from "sonner";
 
 export type NotificationType =
   | "financial"
@@ -34,70 +43,8 @@ interface NotificationContextType {
   markAllAsRead: () => void;
   clearAll: () => void;
   deleteNotification: (id: string) => void;
+  isLoading: boolean;
 }
-
-const INITIAL_NOTIFICATIONS: Notification[] = [
-  {
-    id: "1",
-    title: "Large Withdrawal Request",
-    description:
-      "Simon Smith requested a withdrawal of N120,000 from WealthFix plan. Review required.",
-    time: "2 mins ago",
-    date: "April 27, 2026",
-    type: "financial",
-    status: "unread",
-    icon: ArrowRightLeft,
-    color: "emerald",
-  },
-  {
-    id: "2",
-    title: "New Admin Login",
-    description:
-      "Jessica Smith logged into the admin dashboard from a new device in Lagos, NG.",
-    time: "1 hour ago",
-    date: "April 27, 2026",
-    type: "security",
-    status: "unread",
-    icon: ShieldCheck,
-    color: "blue",
-  },
-  {
-    id: "3",
-    title: "Pending User KYC",
-    description:
-      "5 new users have uploaded sensitive documents and are awaiting administrator verification.",
-    time: "4 hours ago",
-    date: "April 27, 2026",
-    type: "management",
-    status: "unread",
-    icon: Users,
-    color: "orange",
-  },
-  {
-    id: "4",
-    title: "System Update Scheduled",
-    description:
-      "The dashboard will undergo routine maintenance on May 1st at 02:00 AM UTC.",
-    time: "1 day ago",
-    date: "April 26, 2026",
-    type: "system",
-    status: "read",
-    icon: Info,
-    color: "slate",
-  },
-  {
-    id: "5",
-    title: "Suspicious Activity Detected",
-    description:
-      "Multiple failed login attempts detected on account for user ID: 527351.",
-    time: "2 days ago",
-    date: "April 25, 2026",
-    type: "security",
-    status: "read",
-    icon: AlertTriangle,
-    color: "red",
-  },
-];
 
 const NotificationContext = createContext<NotificationContextType | undefined>(
   undefined,
@@ -108,97 +55,133 @@ export function NotificationProvider({
 }: {
   children: React.ReactNode;
 }) {
-  const [notifications, setNotifications] = useState<Notification[]>(
-    INITIAL_NOTIFICATIONS,
+  // Use RTK Query to fetch notifications (Poll every 60 seconds)
+  const { data: apiData, isLoading, refetch } = useGetAdminNotificationsQuery(
+    { limit: 50 },
+    { pollingInterval: 60000 }
   );
-  const [activeProfile, setActiveProfile] = useState<any>(null);
 
+  const [markReadMut] = useMarkNotificationReadMutation();
+  const [markAllReadMut] = useMarkAllNotificationsReadMutation();
+  const [deleteMut] = useDeleteAdminNotificationMutation();
+  const [clearAllMut] = useClearAllAdminNotificationsMutation();
+
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  // Map API response to our UI Notification interface safely
   useEffect(() => {
-    // Read the active administrative profile
-    const getProfile = () => {
-      const p = localStorage.getItem("activeAdminProfile");
-      if (p) {
-        try {
-          setActiveProfile(JSON.parse(p));
-        } catch (e) {
-          setActiveProfile(null);
-        }
-      } else {
-        setActiveProfile(null);
+    try {
+      const rawData = apiData?.data || apiData;
+      
+      // Fallback robust check while backend API is not fully deployed/integrated
+      if (!rawData || !Array.isArray(rawData)) {
+        setNotifications([]);
+        setUnreadCount(apiData?.unreadCount || 0); // In case backend implements unreadCount at root
+        return;
       }
-    };
 
-    getProfile();
+      const mapped: Notification[] = rawData.map((n: any) => ({
+        id: n.id || n._id || Math.random().toString(),
+        title: n.title || "Notification",
+        description: n.description || n.message || "You have a new notification",
+        time: n.createdAt ? new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Just now",
+        date: n.createdAt ? new Date(n.createdAt).toLocaleDateString() : new Date().toLocaleDateString(),
+        type: (n.type || "system") as NotificationType,
+        status: (n.isRead || n.status === "read" ? "read" : "unread") as "read" | "unread",
+        icon: getIconForType(n.type),
+        color: getColorForType(n.type),
+      }));
 
-    // Dynamically update context whenever simulated role switcher is toggled
-    const handleStorageChange = () => {
-      getProfile();
-    };
-    window.addEventListener("storage", handleStorageChange);
-    return () => window.removeEventListener("storage", handleStorageChange);
-  }, []);
-
-  // Filter notifications according to the active administrator's module privileges
-  const filteredNotifications = notifications.filter((n) => {
-    if (!activeProfile) return true; // Fallback to full list during initial layout mount
-    if (activeProfile.role === "Super Admin") return true; // Super Admin sees all
-
-    const allowed = activeProfile.allowedPages || [];
-
-    // Financial Withdrawal Request alerts
-    if (n.type === "financial") {
-      return allowed.includes("/dashboard/users/transactions") || allowed.includes("*");
+      setNotifications(mapped);
+      
+      // If the backend doesn't send a global unread count, calculate it locally
+      const computedUnread = apiData?.unreadCount !== undefined 
+        ? apiData.unreadCount 
+        : mapped.filter((x: Notification) => x.status === "unread").length;
+        
+      setUnreadCount(computedUnread);
+      
+    } catch (err) {
+      console.error("Error parsing notifications:", err);
+      setNotifications([]);
+      setUnreadCount(0);
     }
+  }, [apiData]);
 
-    // Pending KYC uploads lists alerts
-    if (n.type === "management") {
-      return allowed.includes("/dashboard/users") || allowed.includes("*");
+  // Helper functions for UI mapping
+  const getIconForType = (type: string) => {
+    switch (type?.toLowerCase()) {
+      case "financial": return ArrowRightLeft;
+      case "security": return ShieldCheck;
+      case "management": return Users;
+      case "system": return Info;
+      default: return Bell;
     }
-
-    // Security audits login alerts
-    if (n.type === "security") {
-      return activeProfile.role === "Super Admin" || allowed.includes("*");
-    }
-
-    // General maintenance system alerts
-    if (n.type === "system") {
-      return true;
-    }
-
-    return false;
-  });
-
-  const unreadCount = filteredNotifications.filter((n) => n.status === "unread").length;
-
-  const markAsRead = (id: string) => {
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, status: "read" as const } : n)),
-    );
   };
 
-  const markAllAsRead = () => {
-    setNotifications((prev) =>
-      prev.map((n) => ({ ...n, status: "read" as const })),
-    );
+  const getColorForType = (type: string) => {
+    switch (type?.toLowerCase()) {
+      case "financial": return "emerald";
+      case "security": return "blue";
+      case "management": return "orange";
+      case "system": return "slate";
+      default: return "primary";
+    }
   };
 
-  const clearAll = () => {
-    setNotifications([]);
+  const markAsRead = async (id: string) => {
+    // Optimistic UI update
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, status: "read" } : n)));
+    setUnreadCount((prev) => Math.max(0, prev - 1));
+    try {
+      await markReadMut(id).unwrap();
+    } catch (e) {
+      // Revert if error
+      refetch();
+    }
   };
 
-  const deleteNotification = (id: string) => {
+  const markAllAsRead = async () => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, status: "read" })));
+    setUnreadCount(0);
+    try {
+      await markAllReadMut({}).unwrap();
+    } catch (e) {
+      refetch();
+    }
+  };
+
+  const deleteNotification = async (id: string) => {
     setNotifications((prev) => prev.filter((n) => n.id !== id));
+    try {
+      await deleteMut(id).unwrap();
+    } catch (e) {
+      refetch();
+    }
+  };
+
+  const clearAll = async () => {
+    setNotifications([]);
+    setUnreadCount(0);
+    try {
+      await clearAllMut({}).unwrap();
+      toast.success("All notifications cleared");
+    } catch (e) {
+      refetch();
+    }
   };
 
   return (
     <NotificationContext.Provider
       value={{
-        notifications: filteredNotifications,
+        notifications,
         unreadCount,
         markAsRead,
         markAllAsRead,
         clearAll,
         deleteNotification,
+        isLoading
       }}
     >
       {children}

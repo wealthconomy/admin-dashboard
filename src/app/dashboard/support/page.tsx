@@ -21,185 +21,92 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  useGetSupportChatsQuery,
+  useGetSupportChatQuery,
+  useReplySupportChatMutation,
+  useClaimSupportChatMutation,
+  useResolveSupportChatMutation,
+  useReopenSupportChatMutation,
+} from "@/lib/redux/features/supportApi";
 
-const INITIAL_USERS = [
-  {
-    id: 101,
-    name: "Alice Thompson",
-    lastMessage: "Thanks for your help",
-    time: "2:00pm",
-    status: "online",
-    image: "https://i.pravatar.cc/150?u=s1",
-    unreadCount: 2,
-    stage: "queue", // queue, active, resolved
-  },
-  {
-    id: 102,
-    name: "Bob Richards",
-    lastMessage: "I have a question",
-    time: "1:50pm",
-    status: "online",
-    image: "https://i.pravatar.cc/150?u=s2",
-    unreadCount: 0,
-    stage: "queue",
-  },
-  {
-    id: 103,
-    name: "Charlie Davis",
-    lastMessage: "Problem with deposit",
-    time: "1:45pm",
-    status: "offline",
-    image: "https://i.pravatar.cc/150?u=s3",
-    unreadCount: 1,
-    stage: "queue",
-  },
-  {
-    id: 104,
-    name: "Diana Prince",
-    lastMessage: "App is crashing",
-    time: "1:30pm",
-    status: "online",
-    image: "https://i.pravatar.cc/150?u=s4",
-    unreadCount: 0,
-    stage: "queue",
-  },
-  {
-    id: 105,
-    name: "Ethan Hunt",
-    lastMessage: "Mission accomplished",
-    time: "1:15pm",
-    status: "online",
-    image: "https://i.pravatar.cc/150?u=s5",
-    unreadCount: 5,
-    stage: "queue",
-  },
-  {
-    id: 106,
-    name: "Fiona Gallagher",
-    lastMessage: "Help me please",
-    time: "1:00pm",
-    status: "online",
-    image: "https://i.pravatar.cc/150?u=s6",
-    unreadCount: 0,
-    stage: "queue",
-  },
-  {
-    id: 107,
-    name: "George Miller",
-    lastMessage: "Login issues",
-    time: "12:45pm",
-    status: "online",
-    image: "https://i.pravatar.cc/150?u=s7",
-    unreadCount: 0,
-    stage: "queue",
-  },
-  {
-    id: 108,
-    name: "Hannah Montana",
-    lastMessage: "Best of both worlds",
-    time: "12:30pm",
-    status: "online",
-    image: "https://i.pravatar.cc/150?u=s8",
-    unreadCount: 0,
-    stage: "queue",
-  },
-];
-
-const INITIAL_MESSAGES = [
-  {
-    id: 1,
-    sender: "Alice Thompson",
-    text: "Good morning! I just registered but when I try to make my first deposit, the app crashes. Please help!",
-    time: "2:00pm",
-    isMe: false,
-    senderImage: "https://i.pravatar.cc/150?u=s1",
-  },
-  {
-    id: 2,
-    sender: "Wealthconomy",
-    text: "Good morning, Fatima! Welcome to Wealthconomy! 🚀",
-    time: "2:10pm",
-    isMe: true,
-  },
-  {
-    id: 3,
-    sender: "Wealthconomy",
-    text: "I'm sorry you're experiencing this. Let's fix it together. What step exactly does the crash happen?",
-    time: "2:10pm",
-    isMe: true,
-  },
-  {
-    id: 4,
-    sender: "Alice Thompson",
-    text: "When I click 'Win-Up' then 'Deposit' and choose the amount, it crashes immediately after I enter ₦5,000.",
-    time: "2:00pm",
-    isMe: false,
-    senderImage: "https://i.pravatar.cc/150?u=s1",
-  },
-  {
-    id: 5,
-    sender: "Wealthconomy",
-    text: "Thank you for those details. This helps a lot! Let's try three quick things:\n\n1. Close the app completely (swipe it away)\n2. Clear your app cache (Settings → Apps → Wealthconomy)\n3. Update to the latest version (v1.2.4)",
-    time: "2:10pm",
-    isMe: true,
-  },
-];
 
 export default function SupportCentrePage() {
-  const [users, setUsers] = useState(INITIAL_USERS);
   const [selectedChat, setSelectedChat] = useState<any | null>(null);
-  const [messages, setMessages] = useState(INITIAL_MESSAGES);
   const [inputText, setInputText] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState<"queue" | "active" | "resolved">("queue");
 
+  const { data: usersData, isLoading: isUsersLoading } = useGetSupportChatsQuery({ stage: activeTab, search: searchTerm });
+  
+  // Try to extract .data if the backend wraps the response, otherwise use it directly. Default to empty array.
+  const users = Array.isArray(usersData) ? usersData : (usersData?.data || []);
+
+  const currentChatId = selectedChat?.id || selectedChat?._id;
+  const { data: chatData, isLoading: isChatLoading } = useGetSupportChatQuery(currentChatId, { 
+    skip: !selectedChat,
+    pollingInterval: selectedChat ? 5000 : 0 
+  });
+  const messages = Array.isArray(chatData?.messages) ? chatData.messages : (chatData?.data?.messages || []);
+
+  const [replyChat] = useReplySupportChatMutation();
+  const [claimChat] = useClaimSupportChatMutation();
+  const [resolveChat] = useResolveSupportChatMutation();
+  const [reopenChat] = useReopenSupportChatMutation();
+
   const filteredUsers = users.filter(
-    (user) =>
+    (user: any) =>
       user.stage === activeTab &&
-      (user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        user.id.toString().includes(searchTerm)),
+      (user.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (user.id || user._id)?.toString().includes(searchTerm)),
   );
 
   const toggleChat = (item: any) => {
-    if (selectedChat?.id === item.id) {
+    const currentId = item.id || item._id;
+    const selectedId = selectedChat?.id || selectedChat?._id;
+    if (selectedId === currentId) {
       setSelectedChat(null);
     } else {
       setSelectedChat({ ...item, unreadCount: 0 });
-      setUsers(users.map((u) => (u.id === item.id ? { ...u, unreadCount: 0 } : u)));
     }
   };
 
-  const handleSendMessage = () => {
-    if (!inputText.trim()) return;
-    const newMessage = {
-      id: messages.length + 1,
-      sender: "Wealthconomy",
-      text: inputText,
-      time: new Date()
-        .toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-        .toLowerCase(),
-      isMe: true,
-    };
-    setMessages([...messages, newMessage]);
-    setInputText("");
+  const handleSendMessage = async () => {
+    if (!inputText.trim() || !selectedChat) return;
+    try {
+      const currentChatId = selectedChat.id || selectedChat._id;
+      await replyChat({ id: currentChatId, text: inputText }).unwrap();
+      setInputText("");
+    } catch (err) {
+      console.error("Failed to send message: ", err);
+    }
   };
 
-  const handleClaimChat = (userId: number) => {
-    setUsers(users.map((u) => (u.id === userId ? { ...u, stage: "active" } : u)));
-    setSelectedChat((prev: any) => (prev?.id === userId ? { ...prev, stage: "active" } : prev));
-    setActiveTab("active");
+  const handleClaimChat = async (userId: string | number) => {
+    try {
+      await claimChat(userId.toString()).unwrap();
+      setActiveTab("active");
+    } catch (err) {
+      console.error("Failed to claim chat: ", err);
+    }
   };
 
-  const handleCloseChat = (userId: number) => {
-    setUsers(users.map((u) => (u.id === userId ? { ...u, stage: "resolved" } : u)));
-    setSelectedChat((prev: any) => (prev?.id === userId ? { ...prev, stage: "resolved" } : prev));
-    setActiveTab("resolved");
+  const handleCloseChat = async (userId: string | number) => {
+    try {
+      await resolveChat(userId.toString()).unwrap();
+      setActiveTab("resolved");
+    } catch (err) {
+      console.error("Failed to close chat: ", err);
+    }
   };
 
-  const handleReopenChat = (userId: number) => {
-    setUsers(users.map((u) => (u.id === userId ? { ...u, stage: "active" } : u)));
-    setSelectedChat((prev: any) => (prev?.id === userId ? { ...prev, stage: "active" } : prev));
-    setActiveTab("active");
+  const handleReopenChat = async (userId: string | number) => {
+    try {
+      await reopenChat(userId.toString()).unwrap();
+      setActiveTab("active");
+    } catch (err) {
+      console.error("Failed to reopen chat: ", err);
+    }
   };
 
   return (
@@ -234,7 +141,7 @@ export default function SupportCentrePage() {
                     : "text-slate/60 hover:text-dark"
                 }`}
               >
-                Queue ({users.filter((u) => u.stage === "queue").length})
+                Queue ({users.filter((u: any) => u.stage === "queue").length})
               </button>
               <button
                 onClick={() => setActiveTab("active")}
@@ -244,7 +151,7 @@ export default function SupportCentrePage() {
                     : "text-slate/60 hover:text-dark"
                 }`}
               >
-                Active ({users.filter((u) => u.stage === "active").length})
+                Active ({users.filter((u: any) => u.stage === "active").length})
               </button>
               <button
                 onClick={() => setActiveTab("resolved")}
@@ -254,18 +161,21 @@ export default function SupportCentrePage() {
                     : "text-slate/60 hover:text-dark"
                 }`}
               >
-                Resolved ({users.filter((u) => u.stage === "resolved").length})
+                Resolved ({users.filter((u: any) => u.stage === "resolved").length})
               </button>
             </div>
 
             <div className="space-y-2 overflow-y-auto pr-2 flex-1 custom-scrollbar">
               {filteredUsers.length > 0 ? (
-                filteredUsers.map((user) => (
+                filteredUsers.map((user: any) => {
+                  const currentId = user.id || user._id;
+                  const selectedId = selectedChat?.id || selectedChat?._id;
+                  return (
                   <div
-                    key={user.id}
+                    key={currentId}
                     onClick={() => toggleChat(user)}
                     className={`flex items-center gap-3 p-3.5 rounded-2xl cursor-pointer transition-all group border ${
-                      selectedChat?.id === user.id
+                      selectedId === currentId
                         ? "bg-[#E8F3F3] border-[#155D5F]/10 shadow-sm"
                         : "hover:bg-surface border-transparent"
                     }`}
@@ -283,7 +193,7 @@ export default function SupportCentrePage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p
-                        className={`text-sm font-bold truncate ${selectedChat?.id === user.id ? "text-dark" : "text-dark/80 group-hover:text-dark"}`}
+                        className={`text-sm font-bold truncate ${selectedId === currentId ? "text-dark" : "text-dark/80 group-hover:text-dark"}`}
                       >
                         {user.name}
                       </p>
@@ -297,7 +207,8 @@ export default function SupportCentrePage() {
                       </div>
                     )}
                   </div>
-                ))
+                  );
+                })
               ) : (
                 <div className="flex flex-col items-center justify-center py-10 text-center space-y-2 opacity-40">
                   <Search className="h-8 w-8 text-slate/40" />
@@ -435,7 +346,7 @@ export default function SupportCentrePage() {
 
             {/* Messages Area */}
             <div className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar bg-white">
-              {messages.map((msg, idx) => (
+              {messages.map((msg: any, idx: number) => (
                 <div
                   key={msg.id}
                   className={`flex gap-4 ${msg.isMe ? "flex-row-reverse" : "flex-row"} animate-in slide-in-from-bottom-2 duration-300`}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, use } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
@@ -14,6 +14,7 @@ import {
   X,
   Smartphone,
   Globe,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,6 +26,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
+import { useGetBlogQuery, useUpdateBlogMutation } from "@/lib/redux/features/blogApi";
+import { useUploadFileMutation } from "@/lib/redux/features/adminApi";
 
 const PORTFOLIOS = [
   "General",
@@ -106,21 +109,50 @@ const renderPreviewContent = (text: string) => {
   });
 };
 
-export default function EditBlogPage() {
+export default function EditBlogPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  const resolvedParams = use(params);
+  const resolvedId = resolvedParams.id;
+
+  const { data: blogData, isLoading: isLoadingBlog } = useGetBlogQuery(resolvedId);
+  const [updateBlogMutation, { isLoading: isUpdating }] = useUpdateBlogMutation();
+  const [uploadFileMutation, { isLoading: isUploading }] = useUploadFileMutation();
+
   const [formData, setFormData] = useState({
-    author: "Ayo Ogunseinde",
-    title: "Automation Secrets",
-    content:
-      "# Introduction\nLorem ipsum dolor sit amet, consectetur adipiscing elit. Adipiscing fermentum, ut duis lorem facilisi enim, quis a neque.\n\n## Section 1\nLorem ipsum dolor sit amet, consectetur adipiscing elit. Adipiscing fermentum, ut duis lorem facilisi enim, quis a neque. \n\nThanks for reading!",
-    category: "WealthGoal",
-    date: "2026-04-12",
-    image:
-      "https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=300&auto=format&fit=crop",
+    author: "",
+    title: "",
+    content: "",
+    category: "General",
+    date: "",
+    image: "",
     publishToApp: true,
     publishToWeb: true,
   });
+
+  const [imageFile, setImageFile] = useState<File | null>(null);
+
+  // Get current local time in YYYY-MM-DDThh:mm format for min date
+  const minDateTime = new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+
+  useEffect(() => {
+    if (blogData?.data || blogData) {
+      const b = blogData?.data || blogData;
+      const newFormData = {
+        author: b.author || "",
+        title: b.title || "",
+        content: b.content || "",
+        category: b.category || "General",
+        date: b.scheduledFor ? new Date(b.scheduledFor).toISOString().slice(0, 16) : (b.createdAt ? new Date(b.createdAt).toISOString().slice(0, 16) : ""),
+        image: b.image || "",
+        publishToApp: b.publishToApp ?? true,
+        publishToWeb: b.publishToWeb ?? true,
+      };
+      setFormData(newFormData);
+      setPreviewData(newFormData);
+    }
+  }, [blogData]);
 
   const [previewData, setPreviewData] = useState<typeof formData | null>({
     ...formData,
@@ -130,7 +162,7 @@ export default function EditBlogPage() {
     setPreviewData({ ...formData });
   };
 
-  const handlePost = () => {
+  const handlePost = async () => {
     if (!formData.title.trim()) { toast.error("Title is required."); return; }
     if (!formData.author.trim()) { toast.error("Author is required."); return; }
     if (!formData.content.trim()) { toast.error("Content is required."); return; }
@@ -138,14 +170,44 @@ export default function EditBlogPage() {
       toast.error("Please select at least one publishing target.");
       return;
     }
-    console.log("Updated blog payload:", formData);
-    toast.success("Blog updated successfully!");
-    setTimeout(() => router.push("/dashboard/blog"), 800);
+
+    try {
+      let finalImageUrl = formData.image;
+      
+      // Upload image if a new file was selected
+      if (imageFile) {
+        const uploadData = new FormData();
+        uploadData.append("file", imageFile);
+        const res = await uploadFileMutation(uploadData).unwrap();
+        finalImageUrl = res.data?.url || res.url || finalImageUrl;
+      }
+
+      const payload = {
+        title: formData.title,
+        author: formData.author,
+        authorAvatar: "",
+        content: formData.content,
+        category: formData.category,
+        categoryColor: formData.category,
+        image: finalImageUrl,
+        scheduledFor: formData.date ? new Date(formData.date).toISOString() : undefined,
+        publishToApp: formData.publishToApp,
+        publishToWeb: formData.publishToWeb,
+      };
+
+      await updateBlogMutation({ id: resolvedId, ...payload }).unwrap();
+      
+      toast.success("Blog updated successfully!");
+      setTimeout(() => router.push("/dashboard/blog"), 800);
+    } catch (err: any) {
+      toast.error(err?.data?.message || "Failed to update blog");
+    }
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      setImageFile(file);
       const reader = new FileReader();
       reader.onloadend = () => {
         setFormData({ ...formData, image: reader.result as string });
@@ -156,11 +218,20 @@ export default function EditBlogPage() {
 
   const removeImage = (e: React.MouseEvent) => {
     e.stopPropagation();
+    setImageFile(null);
     setFormData({ ...formData, image: "" });
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
   };
+
+  if (isLoadingBlog) {
+    return (
+      <div className="bg-white rounded-[20px] p-10 border border-border/50 shadow-sm w-full max-w-[1137px] min-h-[500px] mx-auto flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="bg-white rounded-[20px] p-10 border border-border/50 shadow-sm w-full max-w-[1137px] min-h-[1000px] mx-auto space-y-10 animate-in fade-in duration-500">
@@ -191,9 +262,10 @@ export default function EditBlogPage() {
           </span>
           <Button 
             onClick={handlePost}
-            className="bg-[#155D5F] hover:bg-[#155D5F]/90 text-white rounded-xl h-12 px-10 font-bold text-sm shadow-xl shadow-primary/20 transition-all active:scale-95"
+            disabled={isUpdating || isUploading}
+            className="bg-[#155D5F] hover:bg-[#155D5F]/90 text-white rounded-xl h-12 px-10 font-bold text-sm shadow-xl shadow-primary/20 transition-all active:scale-95 disabled:opacity-50"
           >
-            Post
+            {(isUpdating || isUploading) ? <Loader2 className="h-5 w-5 animate-spin" /> : "Post"}
           </Button>
         </div>
       </div>
@@ -265,11 +337,11 @@ export default function EditBlogPage() {
                 {formData.image ? (
                   <div className="flex items-center gap-4">
                     <div className="relative h-16 w-24 rounded-lg overflow-hidden border border-border/20 shadow-sm">
-                      <Image
+                      <img
                         src={formData.image}
                         alt="Cover"
-                        fill
-                        className="object-cover"
+                        className="object-cover w-full h-full"
+                        onError={(e) => { e.currentTarget.src = "https://images.unsplash.com/photo-1554224155-6726b3ff858f?q=80&w=400&h=200&auto=format&fit=crop"; }}
                       />
                     </div>
                     <div className="flex flex-col items-start">
@@ -308,8 +380,9 @@ export default function EditBlogPage() {
                 </Label>
                 <div className="relative">
                   <Input
-                    type="date"
-                    className="h-12 bg-surface/50 border-border/30 rounded-xl px-5 text-sm font-medium focus-visible:ring-primary/20 transition-all border shadow-none pr-12"
+                    type="datetime-local"
+                    min={minDateTime}
+                    className="h-12 bg-surface/50 border-border/30 rounded-xl px-5 text-sm font-medium focus-visible:ring-primary/20 transition-all border shadow-none pr-4"
                     value={formData.date}
                     onChange={(e) =>
                       setFormData({ ...formData, date: e.target.value })
@@ -426,11 +499,10 @@ export default function EditBlogPage() {
               <div className="animate-in fade-in slide-in-from-right-4 duration-500 space-y-6">
                 <div className="relative h-[200px] w-full rounded-[20px] overflow-hidden bg-white border border-border/20 shadow-sm">
                   {previewData.image ? (
-                    <Image
+                    <img
                       src={previewData.image}
                       alt="Preview"
-                      fill
-                      className="object-cover"
+                      className="object-cover w-full h-full"
                     />
                   ) : (
                     <div className="w-full h-full bg-surface flex items-center justify-center">
