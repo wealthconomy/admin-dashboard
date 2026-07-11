@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useSelector } from "react-redux";
+import { useState, useEffect, useRef } from "react";
+import { useSelector, useDispatch } from "react-redux";
 import { useGetMeQuery } from "@/lib/redux/features/authApi";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -33,6 +33,7 @@ import {
   ArrowLeft,
   Send,
   Sliders,
+  Loader2,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -45,6 +46,7 @@ import {
 import { NotificationProvider, useNotifications } from "@/context/NotificationContext";
 import { toast } from "sonner";
 import { AdminChatWidget } from "@/components/AdminChatWidget";
+import { selectIsAccessDenied, setAccessDenied } from "@/lib/redux/features/authSlice";
 
 interface SubItem {
   name: string;
@@ -97,9 +99,11 @@ const sidebarItems: SidebarItem[] = [
 function DashboardHeader({ 
   setIsSidebarOpen, 
   setShowLogoutModal,
+  adminTeamRole,
 }: { 
   setIsSidebarOpen: (val: boolean) => void;
   setShowLogoutModal: (val: boolean) => void;
+  adminTeamRole?: string;
 }) {
   const router = useRouter();
   const { unreadCount, notifications } = useNotifications();
@@ -119,6 +123,20 @@ function DashboardHeader({
   }, [userMe?.firstName]);
 
   const adminAvatar = userMe?.imageUrl || "";
+
+  // Resolve the display name for the role
+  let displayRole = adminTeamRole || "Admin";
+  const customRoleName = userMe?.adminProfile?.customRole?.name || userMe?.customRole?.name;
+  
+  if (customRoleName) {
+    displayRole = customRoleName;
+  } else if (displayRole === "SUPER_ADMIN") {
+    displayRole = "Super Admin";
+  } else if (displayRole === "ADMIN") {
+    displayRole = "Admin";
+  } else if (displayRole === "CUSTOM") {
+    displayRole = "Custom Role";
+  }
 
   return (
     <header className="h-[65px] w-full max-w-[1138.5px] mx-auto bg-white rounded-[20px] py-[10px] px-[15px] sm:px-[29px] flex items-center justify-between shadow-sm border border-border/50">
@@ -140,7 +158,7 @@ function DashboardHeader({
       <div className="flex items-center gap-2 sm:gap-4">
         <div className="flex items-center gap-1.5 h-10 px-2.5 bg-amber-500/10 text-amber-600 border border-amber-500/20 rounded-xl font-bold text-xs shrink-0 cursor-default">
           <ShieldAlert className="h-4 w-4 shrink-0 text-amber-500" />
-          <span className="hidden md:inline">Role: {userMe?.role || "Super Admin"}</span>
+          <span className="hidden md:inline" suppressHydrationWarning>Role: {displayRole}</span>
         </div>
 
         <Popover>
@@ -272,11 +290,82 @@ export default function DashboardLayout({
 
   const handeLogout = () => {
     setShowLogoutModal(false);
-    router.push("/");
+    // Clear all auth and permission caches
+    localStorage.removeItem("token");
+    localStorage.removeItem("adminRole");
+    localStorage.removeItem("adminName");
+    localStorage.removeItem("deniedPaths");
+    // Hard navigate to login to clear all in-memory Redux states
+    window.location.href = "/login";
   };
 
-  // RBAC Dynamic Route Check
-  const isPageAllowed = true;
+  const dispatch = useDispatch();
+  const isAccessDenied = useSelector(selectIsAccessDenied);
+
+  // Automatically reset the access denied state ONLY when the route changes.
+  // We use a ref to track pathname to prevent an infinite loop where 
+  // isAccessDenied changing triggers this effect and resets itself instantly.
+  const prevPathname = useRef(pathname);
+  useEffect(() => {
+    if (prevPathname.current !== pathname) {
+      dispatch(setAccessDenied(false));
+      prevPathname.current = pathname;
+    }
+  }, [pathname, dispatch]);
+
+  // Global transition state to prevent page flicker before API 403 resolves
+  const [isTransitioning, setIsTransitioning] = useState(true);
+  useEffect(() => {
+    setIsTransitioning(true);
+    const timer = setTimeout(() => setIsTransitioning(false), 300);
+    return () => clearTimeout(timer);
+  }, [pathname]);
+
+  // Read instantly cached denied paths to prevent page load flicker
+  const [cachedDenied, setCachedDenied] = useState(false);
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      // Super Admins bypass cache and should wipe any stale denied paths
+      const role = localStorage.getItem("adminRole");
+      if (role === "SUPER_ADMIN") {
+        setCachedDenied(false);
+        localStorage.removeItem("deniedPaths");
+        return;
+      }
+
+      const deniedPaths = JSON.parse(localStorage.getItem('deniedPaths') || '[]');
+      if (deniedPaths.includes(pathname)) {
+        setCachedDenied(true);
+      } else {
+        setCachedDenied(false);
+      }
+    }
+  }, [pathname]);
+
+  // Read the admin role for the header fallback
+  let adminTeamRole = "Admin";
+  if (typeof window !== "undefined") {
+    const storedRole = localStorage.getItem("adminRole");
+    if (storedRole) {
+      adminTeamRole = storedRole;
+    } else {
+      // If not explicitly set, extract it directly from the JWT token payload
+      const token = localStorage.getItem("token");
+      if (token) {
+        try {
+          const payload = JSON.parse(atob(token.split('.')[1]));
+          if (payload.adminRole) {
+            adminTeamRole = payload.adminRole;
+            localStorage.setItem("adminRole", payload.adminRole); // Cache it for next time
+          }
+        } catch (e) {
+          // Token decode failed, fallback to "Admin"
+        }
+      }
+    }
+  }
+
+  const isPageAllowed = !isAccessDenied && !cachedDenied;
 
   return (
     <NotificationProvider>
@@ -488,12 +577,62 @@ export default function DashboardLayout({
             <DashboardHeader 
               setIsSidebarOpen={setIsSidebarOpen} 
               setShowLogoutModal={setShowLogoutModal}
+              adminTeamRole={adminTeamRole}
             />
           </div>
 
           {/* Page Content */}
-          <main className="flex-1 overflow-y-auto pl-4 pr-8 pb-5 lg:pl-6 lg:pr-12 lg:pb-10">
-            {children}
+          <main id="main-scroll-container" className="flex-1 overflow-y-auto pl-4 pr-8 pb-5 lg:pl-6 lg:pr-12 lg:pb-10">
+            {isPageAllowed ? (
+              isTransitioning ? (
+                <div className="flex h-full w-full items-center justify-center min-h-[400px]">
+                  <Loader2 className="w-8 h-8 animate-spin text-[#155D5F]" />
+                </div>
+              ) : children
+            ) : (
+              <div className="w-full h-full min-h-[calc(100vh-130px)] bg-white rounded-[24px] border border-slate-100 flex flex-col md:flex-row shadow-lg relative overflow-hidden animate-in fade-in duration-500">
+                
+                {/* Left Side: Edge-to-Edge Image */}
+                <div className="relative w-full h-[300px] md:h-auto md:flex-1 order-1 md:order-1 bg-slate-50 overflow-hidden">
+                  <div className="absolute inset-0 bg-[#155D5F]/10 mix-blend-multiply z-10" />
+                  <Image 
+                    src="/access-denied-people.png" 
+                    alt="Access Denied" 
+                    fill 
+                    className="object-cover" 
+                    priority
+                  />
+                </div>
+
+                {/* Right Side: Text Content */}
+                <div className="flex-1 flex flex-col items-center justify-center text-center p-8 sm:p-12 lg:p-24 space-y-8 z-10 order-2 md:order-2 relative">
+                  <div className="absolute top-[-20%] right-[-10%] w-[500px] h-[500px] bg-[#155D5F]/[0.02] rounded-full blur-[100px] pointer-events-none" />
+                  
+                  <div className="space-y-5 z-10">
+                    <span className="inline-block bg-red-50 text-red-500 border border-red-100 px-4 py-1.5 text-xs font-extrabold uppercase rounded-full tracking-wider">
+                      Restricted Area
+                    </span>
+                    <h1 className="text-4xl lg:text-5xl font-black font-outfit text-slate-800 tracking-tight leading-tight">
+                      Access Denied
+                    </h1>
+                    <p className="text-slate-500 text-base font-medium leading-relaxed max-w-[500px]">
+                      Your administrator account doesn&apos;t have the permissions needed to view this section. Please contact your Super Admin to update your access rights.
+                    </p>
+                  </div>
+                  
+                  <Button
+                    onClick={() => {
+                      dispatch(setAccessDenied(false));
+                      router.push("/dashboard/settings");
+                    }}
+                    className="h-14 px-8 rounded-2xl bg-[#155D5F] hover:bg-[#0F4A4C] text-white font-bold transition-all active:scale-95 flex items-center gap-2 shadow-lg shadow-[#155D5F]/20 text-sm cursor-pointer z-10"
+                  >
+                    <ArrowLeft className="h-5 w-5" />
+                    Go back to Account Settings
+                  </Button>
+                </div>
+              </div>
+            )}
           </main>
         </div>
 

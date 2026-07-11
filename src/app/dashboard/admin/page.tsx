@@ -73,90 +73,56 @@ const DASHBOARD_PAGES = [
   { path: "/dashboard/settings", label: "Account Settings" },
   { path: "/dashboard/system-config", label: "System Configuration" },
   { path: "/dashboard/support", label: "Support Centre" },
+  { path: "/dashboard/push-notifications", label: "Push Notifications" },
 ];
 
-// Mock Initial Roles
-const INITIAL_ROLES = [
-  {
-    id: "role_1",
-    name: "Super Admin",
-    description: "Full system administration and logs access.",
-    allowedPages: ["/dashboard", "/dashboard/users", "/dashboard/users/activities", "/dashboard/users/transactions", "/dashboard/blog", "/dashboard/library", "/dashboard/reports", "/dashboard/admin", "/dashboard/audit-logs", "/dashboard/referrals", "/dashboard/settings", "/dashboard/support"],
-    isSystem: true,
-  },
-  {
-    id: "role_2",
-    name: "Admin",
-    description: "Standard administration, cannot view system audit logs or manage other admins.",
-    allowedPages: ["/dashboard/settings"],
-    isSystem: true,
-  },
-  {
-    id: "role_3",
-    name: "Content Writer",
-    description: "Uploads blog material and manages the digital asset library.",
-    allowedPages: ["/dashboard/settings"],
-    isSystem: false,
-  },
-  {
-    id: "role_4",
-    name: "Editor",
-    description: "Reviews content uploads, library materials, and handles support operations.",
-    allowedPages: ["/dashboard/settings"],
-    isSystem: true,
-  },
-  {
-    id: "role_5",
-    name: "Viewer",
-    description: "Read-only access to overview charts, users directories, and reports.",
-    allowedPages: ["/dashboard/settings"],
-    isSystem: true,
-  },
-];
+// Maps each UI page path to its backend semantic permission strings
+const PAGE_PERMISSIONS: Record<string, string[]> = {
+  "/dashboard":                      ["dashboard:view"],
+  "/dashboard/users":                ["users:view", "users:edit"],
+  "/dashboard/users/activities":     ["activities:view"],
+  "/dashboard/users/transactions":   ["transactions:view", "transactions:edit"],
+  "/dashboard/blog":                 ["blogs:view", "blogs:edit"],
+  "/dashboard/library":              ["library:view", "library:edit"],
+  "/dashboard/reports":              ["dashboard:view"],
+  "/dashboard/admin":                ["dashboard:view"],
+  "/dashboard/audit-logs":           ["audit:view"],
+  "/dashboard/referrals":            ["users:view"],
+  "/dashboard/settings":             ["settings:view", "settings:edit"],
+  "/dashboard/system-config":        ["settings:view", "settings:edit"],
+  "/dashboard/support":              ["users:view"],
+  "/dashboard/push-notifications":   ["notifications:view", "notifications:edit"],
+};
 
-// Mock Initial Admins with granular allowed pages
-const INITIAL_ADMINS = [
-  {
-    id: "1",
-    name: "Simon Olabiran",
-    email: "simon.olabiran@wealthconomy.com",
-    status: "Online",
-    timestamp: "Currently Active",
-    image: "",
-    role: "Super Admin",
-    allowedPages: ["/dashboard", "/dashboard/users", "/dashboard/users/activities", "/dashboard/users/transactions", "/dashboard/blog", "/dashboard/library", "/dashboard/reports", "/dashboard/admin", "/dashboard/audit-logs", "/dashboard/referrals", "/dashboard/settings", "/dashboard/support"],
-  },
-  {
-    id: "2",
-    name: "Fatima Yusuf",
-    email: "fatima.y@wealthconomy.com",
-    status: "Online",
-    timestamp: "Currently Active",
-    image: "",
-    role: "Admin",
-    allowedPages: ["/dashboard/settings"],
-  },
-  {
-    id: "3",
-    name: "Jessica Smith",
-    email: "j.smith@wealthconomy.com",
-    status: "Online",
-    timestamp: "Currently Active",
-    image: "",
-    role: "Editor",
-    allowedPages: ["/dashboard/settings"],
-  },
-  {
-    id: "6",
-    name: "Adeleye Ayodeji",
-    email: "ayodeji.a@wealthconomy.com",
-    status: "Offline",
-    timestamp: "10 mins ago",
-    image: "",
-    role: "Content Writer",
-    allowedPages: ["/dashboard/settings"],
-  },
-];
+// Derives deduplicated semantic backend permissions from a list of UI page paths
+const deriveSemanticPermissions = (pages: string[]): string[] => {
+  if (pages.includes("*")) return ["*"];
+  return [...new Set(pages.flatMap(p => PAGE_PERMISSIONS[p] ?? []))];
+};
+
+// Reverse: given backend semantic permission strings, return the matching UI page paths.
+// Also handles the case where the backend still returns UI paths (built-in roles).
+const getPagePathsFromPermissions = (permissions: string[]): string[] => {
+  if (!permissions || permissions.length === 0) return [];
+  if (permissions.includes("*")) return ["*"];
+
+  // Detect whether these are semantic strings (contain ":") or already UI paths
+  const hasSemanticStrings = permissions.some(p => p.includes(":"));
+
+  if (!hasSemanticStrings) {
+    // Already UI paths (e.g. built-in ADMIN role returns paths directly)
+    return permissions.filter(p => DASHBOARD_PAGES.some(dp => dp.path === p));
+  }
+
+  // Convert semantic strings → UI paths via reverse lookup
+  return DASHBOARD_PAGES
+    .filter(page =>
+      (PAGE_PERMISSIONS[page.path] ?? []).some(perm => permissions.includes(perm))
+    )
+    .map(page => page.path);
+};
+
+
 
 export default function AdminManagementPage() {
   const [activeTab, setActiveTab] = useState<"admins" | "roles">("admins");
@@ -177,14 +143,21 @@ export default function AdminManagementPage() {
     };
   });
   const roles = [
-    ...getSafeArray(rolesData).map((role: any) => ({
-      ...role,
-      id: role.id || role._id,
-      name: role.name,
-      description: role.description,
-      allowedPages: role.permissions || role.allowedPages || [],
-      isSystem: role.isBuiltIn || role.isSystem || false,
-    }))
+    ...getSafeArray(rolesData).map((role: any) => {
+      const rawPermissions: string[] = role.permissions || role.allowedPages || [];
+      // Normalise to UI page paths for display & checkbox state.
+      // Custom roles store semantic strings; built-in roles may store UI paths.
+      const uiPages = getPagePathsFromPermissions(rawPermissions);
+      return {
+        ...role,
+        id: role.id || role._id,
+        name: role.name,
+        description: role.description,
+        allowedPages: uiPages,          // UI paths — used for display & checkboxes
+        rawPermissions,                 // original semantic strings — used when saving
+        isSystem: role.isBuiltIn || role.isSystem || false,
+      };
+    })
   ];
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -227,18 +200,19 @@ export default function AdminManagementPage() {
 
   // Pre-fill pages checkboxes when selected role changes in admin forms
   useEffect(() => {
-    const selectedRoleObj = getSafeArray(rolesData).find((r: any) => r.name === adminFormData.role);
+    // Use the already-normalised `roles` array (UI paths) instead of raw rolesData
+    const selectedRoleObj = roles.find((r: any) => r.name === adminFormData.role);
     if (selectedRoleObj) {
-      const perms = selectedRoleObj.permissions || selectedRoleObj.allowedPages || [];
-      const expandedPages = perms.includes("*") 
-        ? DASHBOARD_PAGES.map(p => p.path) 
-        : [...perms];
-      
+      const expandedPages = selectedRoleObj.allowedPages.includes("*")
+        ? DASHBOARD_PAGES.map(p => p.path)
+        : [...selectedRoleObj.allowedPages];
+
       setAdminFormData((prev) => ({
         ...prev,
         allowedPages: expandedPages,
       }));
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adminFormData.role, rolesData]);
 
   const handleCreateAdmin = async (e: React.FormEvent) => {
@@ -347,10 +321,13 @@ export default function AdminManagementPage() {
 
     setIsSubmitting(true);
     try {
+      // Derive semantic backend permissions from the selected UI page paths
+      const semanticPermissions = deriveSemanticPermissions(roleFormData.allowedPages);
+
       await createRole({
         name: roleFormData.name,
         description: roleFormData.description,
-        permissions: roleFormData.allowedPages,
+        permissions: semanticPermissions,
       }).unwrap();
 
       toast.success(`Role '${roleFormData.name}' added!`);
@@ -370,11 +347,14 @@ export default function AdminManagementPage() {
 
     setIsSubmitting(true);
     try {
+      // Derive semantic backend permissions from the selected UI page paths
+      const semanticPermissions = deriveSemanticPermissions(editRole.allowedPages);
+
       await updateRole({
         id: editRole.id,
         name: editRole.name,
         description: editRole.description,
-        permissions: editRole.allowedPages,
+        permissions: semanticPermissions,
       }).unwrap();
 
       toast.success("Role permissions updated successfully!");

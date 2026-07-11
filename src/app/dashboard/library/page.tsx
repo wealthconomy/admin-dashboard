@@ -41,133 +41,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import type { LibraryMaterial, ContentType } from "@/types/library";
-import { useGetLibrariesQuery, useDeleteLibraryMutation, useGetLibraryStatsQuery, useRecordLibraryDownloadMutation } from "@/lib/redux/features/libraryApi";
+import { useGetLibrariesQuery, useDeleteLibraryMutation, useGetLibraryStatsQuery, useRecordLibraryDownloadMutation, useGetLibraryEngagementQuery } from "@/lib/redux/features/libraryApi";
 import { Loader2 } from "lucide-react";
-// ─── Seed Data ────────────────────────────────────────────────────────────────
-
-const SEED_MATERIALS: LibraryMaterial[] = [
-  {
-    id: "1",
-    contentType: "document",
-    title: "The Psychology of Money",
-    description: "Timeless lessons on wealth, greed, and happiness.",
-    image:
-      "https://images.unsplash.com/photo-1589829085413-56de8ae18c73?q=80&w=400&h=600&auto=format&fit=crop",
-    timePosted: "2026-05-10T08:00:00Z",
-    readingDuration: "4 hrs read",
-    documentUrl: "#",
-    fileType: "PDF",
-    fileSize: "2.4 MB",
-    isDownloadable: true,
-    likesCount: 124,
-    commentsCount: 18,
-    publishToApp: true,
-    publishToWeb: true,
-  },
-  {
-    id: "2",
-    contentType: "video",
-    title: "Understanding Compound Interest",
-    description:
-      "A quick guide to how compound interest builds wealth over time.",
-    image:
-      "https://images.unsplash.com/photo-1611162617474-5b21e879e113?q=80&w=400&h=300&auto=format&fit=crop",
-    timePosted: "2026-05-12T09:00:00Z",
-    readingDuration: "15 min watch",
-    youtubeUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-    likesCount: 89,
-    commentsCount: 5,
-    publishToApp: true,
-    publishToWeb: false,
-  },
-  {
-    id: "3",
-    contentType: "document",
-    title: "Real Estate Investing 101",
-    description: "The fundamentals of investing in physical properties.",
-    image:
-      "https://images.unsplash.com/photo-1560518883-ce09059eeffa?q=80&w=400&h=600&auto=format&fit=crop",
-    timePosted: "2026-05-15T11:00:00Z",
-    readingDuration: "6 hrs read",
-    documentUrl: "#",
-    fileType: "EPUB",
-    fileSize: "5.1 MB",
-    isDownloadable: false,
-    likesCount: 256,
-    commentsCount: 42,
-    publishToApp: false,
-    publishToWeb: true,
-  },
-  {
-    id: "4",
-    contentType: "video",
-    title: "Stock Market Basics for Beginners",
-    description:
-      "Everything you need to know to start investing in the stock market.",
-    image:
-      "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?q=80&w=400&h=300&auto=format&fit=crop",
-    timePosted: "2026-05-18T14:00:00Z",
-    readingDuration: "22 min watch",
-    youtubeUrl: "https://www.youtube.com/watch?v=example2",
-    likesCount: 312,
-    commentsCount: 67,
-    publishToApp: true,
-    publishToWeb: true,
-  },
-  {
-    id: "5",
-    contentType: "document",
-    title: "Personal Budgeting Essentials",
-    description: "Learn how to budget effectively and track your monthly spending.",
-    image:
-      "https://images.unsplash.com/photo-1544377193-33dcf4d68fb5?q=80&w=400&h=600&auto=format&fit=crop",
-    timePosted: "2026-05-20T10:30:00Z",
-    readingDuration: "2 hrs read",
-    documentUrl: "#",
-    fileType: "PDF",
-    fileSize: "1.8 MB",
-    isDownloadable: true,
-    likesCount: 95,
-    commentsCount: 12,
-    publishToApp: true,
-    publishToWeb: true,
-  },
-  {
-    id: "6",
-    contentType: "video",
-    title: "Cryptocurrency Explained Simply",
-    description: "An easy-to-understand breakdown of blockchain and digital assets.",
-    image:
-      "https://images.unsplash.com/photo-1621761191319-c6fb62004040?q=80&w=400&h=300&auto=format&fit=crop",
-    timePosted: "2026-05-22T15:45:00Z",
-    readingDuration: "12 min watch",
-    youtubeUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-    likesCount: 142,
-    commentsCount: 22,
-    publishToApp: true,
-    publishToWeb: false,
-  },
-  {
-    id: "7",
-    contentType: "document",
-    title: "Retirement Planning Guide",
-    description: "A comprehensive handbook for building your long-term retirement fund.",
-    image:
-      "https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?q=80&w=400&h=600&auto=format&fit=crop",
-    timePosted: "2026-05-25T09:15:00Z",
-    readingDuration: "5 hrs read",
-    documentUrl: "#",
-    fileType: "EPUB",
-    fileSize: "3.2 MB",
-    isDownloadable: false,
-    likesCount: 180,
-    commentsCount: 30,
-    publishToApp: false,
-    publishToWeb: true,
-  },
-];
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// Removed MOCK_ENGAGEMENT_DATA and SEED_MATERIALS
 
 function formatDate(iso: string): string {
   try {
@@ -181,95 +57,6 @@ function formatDate(iso: string): string {
   }
 }
 
-// ─── Delete Confirmation Modal ────────────────────────────────────────────────
-
-// ─── Comments & Reactions Detail Modal ───────────────────────────────────────
-
-interface ReactionComment {
-  id: string;
-  userName: string;
-  userAvatar?: string;
-  userRole: string;
-  content: string;
-  timeAgo: string;
-  likes: number;
-}
-
-const MOCK_ENGAGEMENT_DATA: Record<
-  string,
-  {
-    likes: { user: string; avatar?: string; role: string }[];
-    comments: ReactionComment[];
-  }
-> = {
-  "1": {
-    likes: [
-      { user: "Sarah Jenkins", role: "Investor" },
-      { user: "Michael Chen", role: "Entrepreneur" },
-      { user: "Amara Nwosu", role: "Saver" },
-      { user: "David Beck", role: "Advisor" },
-    ],
-    comments: [
-      {
-        id: "c1",
-        userName: "Sarah Jenkins",
-        userRole: "Investor",
-        content: "This book completely redefined my perspective on wealth building. Highly recommend!",
-        timeAgo: "2 days ago",
-        likes: 5,
-      },
-      {
-        id: "c2",
-        userName: "Michael Chen",
-        userRole: "Entrepreneur",
-        content: "The chapters on compounding are written so elegantly and simply. A must read.",
-        timeAgo: "5 days ago",
-        likes: 3,
-      },
-    ],
-  },
-  "2": {
-    likes: [
-      { user: "John Doe", role: "Starter" },
-      { user: "Jessica Taylor", role: "Investor" },
-    ],
-    comments: [
-      {
-        id: "c3",
-        userName: "Jessica Taylor",
-        userRole: "Investor",
-        content: "Clear and visual presentation. Shared this with my kids to start early!",
-        timeAgo: "1 week ago",
-        likes: 12,
-      },
-    ],
-  },
-  "3": {
-    likes: [
-      { user: "Kunle Ade", role: "Real Estate dev" },
-      { user: "Patricia Miller", role: "Investor" },
-      { user: "Aisha Gidado", role: "Homeowner" },
-    ],
-    comments: [
-      {
-        id: "c4",
-        userName: "Kunle Ade",
-        userRole: "Real Estate dev",
-        content: "Excellent starter pack guidelines. Tells you exactly what to watch out for in your first flip.",
-        timeAgo: "3 days ago",
-        likes: 8,
-      },
-    ],
-  },
-  "4": {
-    likes: [
-      { user: "Ayo Ogunseinde", role: "Blog Author" },
-      { user: "John Doe", role: "Starter" },
-    ],
-    comments: [],
-  },
-};
-
 function CommentsModal({
   material,
   onClose,
@@ -277,7 +64,9 @@ function CommentsModal({
   material: LibraryMaterial;
   onClose: () => void;
 }) {
-  const engagement = MOCK_ENGAGEMENT_DATA[material.id] || {
+  const { data: engagementData, isLoading } = useGetLibraryEngagementQuery(material.id);
+  
+  const engagement = engagementData?.data || {
     likes: [],
     comments: [],
   };
@@ -339,9 +128,9 @@ function CommentsModal({
           {activeTab === "comments" ? (
             engagement.comments.length > 0 ? (
               <div className="space-y-4">
-                {engagement.comments.map((comment) => (
+                {engagement.comments.map((comment: any) => (
                   <div
-                    key={comment.id}
+                    key={comment.id || comment._id || Math.random()}
                     className="p-4 rounded-2xl bg-surface/30 border border-border/10 space-y-2"
                   >
                     <div className="flex items-center justify-between">
@@ -381,7 +170,7 @@ function CommentsModal({
           ) : (
             <div className="space-y-2">
               {engagement.likes.length > 0 ? (
-                engagement.likes.map((like, index) => (
+                engagement.likes.map((like: any, index: number) => (
                   <div
                     key={index}
                     className="flex items-center justify-between p-3 hover:bg-surface/30 rounded-xl transition-all"

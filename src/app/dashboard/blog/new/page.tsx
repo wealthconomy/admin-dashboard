@@ -125,11 +125,14 @@ export default function NewBlogPage() {
     category: "General",
     date: "",
     image: "", // Data URL for preview, URL string for final
+    authorAvatar: "", // Add authorAvatar to formData for preview
     publishToApp: true,
     publishToWeb: true,
   });
 
   const [imageFile, setImageFile] = useState<File | null>(null);
+  const [authorImageFile, setAuthorImageFile] = useState<File | null>(null);
+  const authorAvatarInputRef = useRef<HTMLInputElement>(null);
 
   // Get current local time in YYYY-MM-DDThh:mm format for min date
   const minDateTime = new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
@@ -160,10 +163,23 @@ export default function NewBlogPage() {
         finalImageUrl = res.data?.url || res.url || finalImageUrl; // Adjust based on your API response structure
       }
 
+      let finalAuthorAvatarUrl = formData.authorAvatar;
+      if (authorImageFile) {
+        const uploadAuthorData = new FormData();
+        uploadAuthorData.append("file", authorImageFile);
+        const resAuthor = await uploadFileMutation(uploadAuthorData).unwrap();
+        finalAuthorAvatarUrl = resAuthor.data?.url || resAuthor.url || finalAuthorAvatarUrl;
+      }
+      
+      // Fallback to UI avatar if no author image was uploaded
+      if (!finalAuthorAvatarUrl) {
+        finalAuthorAvatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.author)}&background=155D5F&color=fff`;
+      }
+
       const payload = {
         title: formData.title,
         author: formData.author,
-        authorAvatar: "",
+        authorAvatar: finalAuthorAvatarUrl,
         content: formData.content,
         category: formData.category,
         categoryColor: formData.category, // Simplification
@@ -201,6 +217,27 @@ export default function NewBlogPage() {
     setFormData({ ...formData, image: "" });
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
+    }
+  };
+
+  const handleAuthorImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setAuthorImageFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFormData({ ...formData, authorAvatar: reader.result as string });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const removeAuthorImage = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setAuthorImageFile(null);
+    setFormData({ ...formData, authorAvatar: "" });
+    if (authorAvatarInputRef.current) {
+      authorAvatarInputRef.current.value = "";
     }
   };
 
@@ -242,16 +279,41 @@ export default function NewBlogPage() {
           <div className="space-y-6">
             <div className="space-y-2.5">
               <Label className="text-[13px] font-bold text-slate/70 ml-1">
-                Author Name
+                Author
               </Label>
-              <Input
-                placeholder="Enter author name"
-                className="h-12 bg-surface/50 border-border/30 rounded-xl px-5 text-sm font-medium focus-visible:ring-primary/20 transition-all border shadow-none"
-                value={formData.author}
-                onChange={(e) =>
-                  setFormData({ ...formData, author: e.target.value })
-                }
-              />
+              <div className="flex items-center gap-4">
+                <input
+                  type="file"
+                  ref={authorAvatarInputRef}
+                  className="hidden"
+                  accept="image/*"
+                  onChange={handleAuthorImageUpload}
+                />
+                <div 
+                  onClick={() => authorAvatarInputRef.current?.click()}
+                  className="h-12 w-12 rounded-full border border-dashed border-border/60 bg-surface/50 flex items-center justify-center cursor-pointer hover:bg-surface/80 transition-all shrink-0 overflow-hidden relative group"
+                  title="Upload Author Avatar"
+                >
+                  {formData.authorAvatar ? (
+                    <>
+                      <img src={formData.authorAvatar} alt="Author" className="w-full h-full object-cover" />
+                      <div onClick={removeAuthorImage} className="absolute inset-0 bg-black/40 hidden group-hover:flex items-center justify-center">
+                        <X className="h-4 w-4 text-white" />
+                      </div>
+                    </>
+                  ) : (
+                    <Upload className="h-4 w-4 text-slate/40" />
+                  )}
+                </div>
+                <Input
+                  placeholder="Enter author name"
+                  className="h-12 bg-surface/50 border-border/30 rounded-xl px-5 text-sm font-medium focus-visible:ring-primary/20 transition-all border shadow-none flex-1"
+                  value={formData.author}
+                  onChange={(e) =>
+                    setFormData({ ...formData, author: e.target.value })
+                  }
+                />
+              </div>
             </div>
 
             <div className="space-y-2.5">
@@ -515,9 +577,11 @@ export default function NewBlogPage() {
 
                   <div className="flex items-center gap-3">
                     <div className="h-10 w-10 rounded-full bg-primary/5 border border-primary/10 flex items-center justify-center text-[10px] font-bold text-primary shadow-sm">
-                      {previewData.author
-                        ? previewData.author[0]?.toUpperCase()
-                        : "AO"}
+                      {previewData.authorAvatar ? (
+                        <img src={previewData.authorAvatar} alt="Author" className="w-full h-full object-cover rounded-full" />
+                      ) : (
+                        previewData.author ? previewData.author[0]?.toUpperCase() : "A"
+                      )}
                     </div>
                     <div>
                       <p className="text-xs font-bold text-dark">

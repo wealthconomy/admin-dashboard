@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Search,
   ChevronDown,
@@ -50,11 +50,30 @@ const getSafeArray = (data: any) => {
 
 
 
-const CATEGORIES = ["All Categories", "Authentication", "User Management", "Team Management", "Content Engine", "Support Operations", "Settings Update"];
+const CATEGORIES = ["All Categories", "Authentication", "User Management", "Team Management", "Content Engine", "Support Operations", "Settings Update", "System Activity"];
+
+const mapCategory = (model: string, action: string) => {
+  const modelStr = String(model || "").toLowerCase();
+  const actionStr = String(action || "").toLowerCase();
+
+  if (actionStr.includes("auth") || actionStr.includes("login") || actionStr.includes("password")) return "Authentication";
+  if (modelStr.includes("user")) return "User Management";
+  if (modelStr.includes("admin") || modelStr.includes("role") || modelStr.includes("team")) return "Team Management";
+  if (modelStr.includes("blog") || modelStr.includes("library") || modelStr.includes("broadcast")) return "Content Engine";
+  if (modelStr.includes("ticket") || modelStr.includes("support")) return "Support Operations";
+  if (modelStr.includes("setting") || modelStr.includes("config")) return "Settings Update";
+  
+  return "System Activity";
+};
 
 export default function AuditLogsPage() {
   const router = useRouter();
-  const { data: auditLogsData, isLoading } = useGetAuditLogsQuery(undefined);
+  const [page, setPage] = useState(1);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("All Categories");
+  const [selectedLog, setSelectedLog] = useState<any | null>(null);
+
+  const { data: auditLogsData, isLoading, isFetching } = useGetAuditLogsQuery({ page, limit: 20 });
   const { data: teamData } = useGetTeamQuery(undefined);
   const { data: meData } = useGetMeQuery(undefined);
   const { data: usersData } = useGetUsersQuery({ limit: 100 });
@@ -65,8 +84,12 @@ export default function AuditLogsPage() {
 
   const logs = getSafeArray(auditLogsData).map((log: any) => {
     // Find admin details from team, me, or users
-    const adminId = log.adminId || log.userId;
-    let matchingAdmin = team.find((member: any) => member.id === adminId);
+    const adminId = log.actorId || log.adminId || log.userId;
+    let matchingAdmin = team.find((member: any) => 
+      member.userId === adminId || 
+      member.user?.id === adminId || 
+      member.id === adminId
+    );
     
     // If not found in team, but matches current user
     if (!matchingAdmin && me?.id === adminId) {
@@ -78,10 +101,12 @@ export default function AuditLogsPage() {
       matchingAdmin = usersList.find((u: any) => u.id === adminId);
     }
 
-    const adminName = matchingAdmin ? `${matchingAdmin.firstName || ""} ${matchingAdmin.lastName || ""}`.trim() : (log.admin?.name || log.adminName || log.user?.firstName || log.user?.name || "Unknown Admin");
-    const adminRole = matchingAdmin ? (matchingAdmin.role || "Admin") : (log.adminRole || "Admin");
-    const adminEmail = matchingAdmin ? matchingAdmin.email : (log.admin?.email || log.adminEmail || log.user?.email || "Admin");
-    const adminAvatar = matchingAdmin?.imageUrl || log.admin?.imageUrl || log.adminImageUrl || log.user?.imageUrl || "";
+    const userObj = matchingAdmin?.user || matchingAdmin;
+    const adminName = matchingAdmin ? `${userObj?.firstName || ""} ${userObj?.lastName || ""}`.trim() : (log.admin?.name || log.adminName || log.user?.firstName || log.user?.name || "Unknown Admin");
+    const resolvedRole = matchingAdmin ? (matchingAdmin.role === "CUSTOM" && matchingAdmin.customRole ? matchingAdmin.customRole.name : matchingAdmin.role) : (log.adminRole || "Admin");
+    const adminRole = resolvedRole || "Admin";
+    const adminEmail = matchingAdmin ? userObj?.email : (log.admin?.email || log.adminEmail || log.user?.email || "Admin");
+    const adminAvatar = userObj?.imageUrl || log.admin?.imageUrl || log.adminImageUrl || log.user?.imageUrl || "";
 
     // Resolve Target Name
     let targetName = "";
@@ -105,7 +130,7 @@ export default function AuditLogsPage() {
         email: adminEmail,
         avatarUrl: adminAvatar,
       },
-      category: log.category || log.model || "System Activity",
+      category: mapCategory(log.model, log.action),
       action: log.action || log.description || "Performed an action",
       targetName: targetName,
       reason: log.changes ? JSON.stringify(log.changes) : log.reason || log.details || (log.targetId ? `Target ID: ${log.targetId}` : ""),
@@ -114,9 +139,6 @@ export default function AuditLogsPage() {
       userAgent: log.userAgent || "Unknown",
     };
   });
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("All Categories");
-  const [selectedLog, setSelectedLog] = useState<any | null>(null);
 
   const filteredLogs = logs.filter((log: any) => {
     const matchesSearch =
@@ -131,9 +153,24 @@ export default function AuditLogsPage() {
     return matchesSearch && matchesCategory;
   });
 
-  const totalEvents = logs.length;
-  const flaggedIncidents = logs.filter((l: any) => l.action.toLowerCase().includes("fail") || l.action.toLowerCase().includes("flag") || l.category.toLowerCase().includes("security")).length;
-  const permissionsAltered = logs.filter((l: any) => l.category.toLowerCase().includes("role") || l.action.toLowerCase().includes("role") || l.action.toLowerCase().includes("permission")).length;
+  const paginationData = auditLogsData?.data || {};
+  const totalEvents = paginationData.total || logs.length;
+  const totalPages = paginationData.pages || Math.ceil(totalEvents / 20);
+
+  // Freeze the stats on first load so they don't fluctuate during pagination
+  const [frozenStats, setFrozenStats] = useState<{flagged: number, permissions: number} | null>(null);
+  
+  useEffect(() => {
+    if (logs.length > 0 && frozenStats === null) {
+      setFrozenStats({
+        flagged: logs.filter((l: any) => l.action.toLowerCase().includes("fail") || l.action.toLowerCase().includes("flag") || l.category.toLowerCase().includes("security")).length,
+        permissions: logs.filter((l: any) => l.category.toLowerCase().includes("role") || l.category.toLowerCase().includes("team") || l.action.toLowerCase().includes("role") || l.action.toLowerCase().includes("permission")).length,
+      });
+    }
+  }, [logs, frozenStats]);
+
+  const flaggedIncidents = paginationData.flaggedIncidents ?? frozenStats?.flagged ?? 0;
+  const permissionsAltered = paginationData.permissionsAltered ?? frozenStats?.permissions ?? 0;
 
   const handleDownloadReport = () => {
     toast.info("Preparing security audit report...");
@@ -384,10 +421,73 @@ export default function AuditLogsPage() {
 
       {/* Pagination indicators */}
       <div className="flex justify-between items-center text-xs font-bold text-slate/40 pt-2 px-1">
-        <span>Showing {filteredLogs.length} records</span>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" className="h-8 text-[11px] px-3 font-semibold text-slate/40 border-slate-200 cursor-not-allowed">Previous</Button>
-          <Button variant="outline" size="sm" className="h-8 text-[11px] px-3 font-semibold text-[#155D5F] border-[#155D5F]/20 hover:bg-[#E8F3F3]">Next</Button>
+        <span>Showing {totalEvents === 0 ? 0 : Math.min(page * (paginationData?.limit || 20), totalEvents)} of {totalEvents} records (Page {page} of {totalPages || 1})</span>
+        <div className="flex items-center gap-1.5">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => {
+              setPage(p => Math.max(1, p - 1));
+              setTimeout(() => {
+                const main = document.getElementById('main-scroll-container');
+                if (main) main.scrollTo({ top: 0, behavior: "smooth" });
+              }, 50);
+            }}
+            disabled={page === 1 || isFetching}
+            className={`h-8 px-2 text-[11px] font-semibold ${page === 1 ? 'text-slate/40 border-slate-200 cursor-not-allowed' : 'text-black border-slate-200 hover:bg-[#E8F3F3] hover:text-[#155D5F]'}`}
+          >
+            Prev
+          </Button>
+
+          {Array.from({ length: totalPages || 1 }).map((_, idx) => {
+            const p = idx + 1;
+            // Show first page, last page, current page, and +/- 1 from current
+            if (p === 1 || p === totalPages || (p >= page - 1 && p <= page + 1)) {
+              return (
+                <Button
+                  key={p}
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setPage(p);
+                    setTimeout(() => {
+                      const main = document.getElementById('main-scroll-container');
+                      if (main) main.scrollTo({ top: 0, behavior: "smooth" });
+                    }, 50);
+                  }}
+                  disabled={isFetching}
+                  className={`h-8 min-w-[32px] px-2 text-[11px] font-semibold ${
+                    page === p
+                      ? 'bg-[#155D5F]/10 text-[#155D5F] border-[#155D5F] hover:bg-[#155D5F]/20'
+                      : 'text-black border-slate-200 hover:bg-[#E8F3F3] hover:text-[#155D5F]'
+                  }`}
+                >
+                  {p}
+                </Button>
+              );
+            }
+            // Add ellipsis for skipped pages
+            if (p === page - 2 || p === page + 2) {
+              return <span key={p} className="px-1 text-slate/40 font-bold text-xs tracking-widest">...</span>;
+            }
+            return null;
+          })}
+
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => {
+              setPage(p => p + 1);
+              setTimeout(() => {
+                const main = document.getElementById('main-scroll-container');
+                if (main) main.scrollTo({ top: 0, behavior: "smooth" });
+              }, 50);
+            }}
+            disabled={page >= totalPages || isFetching}
+            className={`h-8 px-2 text-[11px] font-semibold ${page >= totalPages ? 'text-slate/40 border-slate-200 cursor-not-allowed' : 'text-black border-slate-200 hover:bg-[#E8F3F3] hover:text-[#155D5F]'}`}
+          >
+            Next
+          </Button>
         </div>
       </div>
 

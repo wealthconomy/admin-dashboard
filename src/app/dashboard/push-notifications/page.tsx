@@ -18,6 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 
 export default function PushNotificationsPage() {
   const [title, setTitle] = useState("");
@@ -58,7 +59,7 @@ export default function PushNotificationsPage() {
   const actualHistory = Array.isArray(historyData?.data) ? historyData.data 
     : (Array.isArray(historyData?.data?.items) ? historyData.data.items : []);
 
-  const MOCK_PLANS = [
+  const SYSTEM_PLANS = [
     { id: "wealthflex", name: "WealthFlex Users" },
     { id: "wealthfix", name: "WealthFix Users" },
     { id: "wealthgoal", name: "WealthGoal Users" },
@@ -333,21 +334,21 @@ export default function PushNotificationsPage() {
                 {targetIds.length > 0 && (
                   <div className="flex flex-wrap gap-2">
                     {targetIds.map(id => {
-                      const plan = MOCK_PLANS.find(p => p.id === id);
-                      return (
-                        <div key={id} className="flex items-center gap-2 bg-[#155D5F]/10 text-[#155D5F] border border-[#155D5F]/20 px-3 py-1.5 rounded-full text-xs font-bold">
-                          {plan?.name || id}
-                          <button type="button" onClick={() => toggleTarget(id)} className="hover:text-red-500 transition-colors">
-                            <X className="w-3.5 h-3.5" />
+                      const plan = SYSTEM_PLANS.find(p => p.id === id);
+                      return plan ? (
+                        <Badge key={id} className="bg-primary/10 text-primary border-none">
+                          {plan.name}
+                          <button type="button" onClick={() => toggleTarget(id)} className="ml-2 hover:text-red-500 transition-colors">
+                            <X className="w-3 h-3" />
                           </button>
-                        </div>
-                      );
+                        </Badge>
+                      ) : null;
                     })}
                   </div>
                 )}
 
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-4 bg-surface/50 border border-border rounded-xl">
-                  {MOCK_PLANS.map(plan => (
+                  {SYSTEM_PLANS.map(plan => (
                     <label key={plan.id} className="flex items-center gap-3 p-3 bg-white border border-border/60 hover:border-primary/30 rounded-lg cursor-pointer transition-all">
                       <input 
                         type="checkbox" 
@@ -496,7 +497,7 @@ export default function PushNotificationsPage() {
                       </div>
                     </TableCell>
                     <TableCell className="py-4 text-right whitespace-nowrap">
-                      <span className="text-[12px] font-bold text-dark">{log.senderName || log.admin || 'System'}</span>
+                      <span className="text-[12px] font-bold text-dark">{log.sentBy || log.senderName || log.admin || 'System'}</span>
                     </TableCell>
                   </TableRow>
                 ))}

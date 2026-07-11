@@ -6,8 +6,13 @@ export const adminApi = apiSlice.injectEndpoints({
     // Audit Logs
     // --------------------------------------------------------
     getAuditLogs: builder.query({
-      query: () => "/admin/audit-logs",
-      providesTags: ["Activities"], // Mapping audit-logs to Activities tag, or can add 'AuditLogs'
+      query: (params?: { page?: number; limit?: number }) => {
+        let qs = "";
+        if (params?.page) qs += `page=${params.page}&`;
+        if (params?.limit) qs += `limit=${params.limit}&`;
+        return `/admin/audit-logs${qs ? `?${qs.slice(0, -1)}` : ""}`;
+      },
+      providesTags: ["Activities"],
     }),
 
     // --------------------------------------------------------

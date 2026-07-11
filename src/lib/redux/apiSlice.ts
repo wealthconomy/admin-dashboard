@@ -1,4 +1,4 @@
-import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
+import { createApi, fetchBaseQuery, BaseQueryFn, FetchArgs, FetchBaseQueryError } from '@reduxjs/toolkit/query/react';
 
 /**
  * ─── Central API Configuration ────────────────────────────────────────────────
@@ -9,9 +9,7 @@ import { createApi, fetchBaseQuery } from '@reduxjs/toolkit/query/react';
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '';
 const API_VERSION  = '/api/v1';
 
-export const apiSlice = createApi({
-  reducerPath: 'api',
-  baseQuery: fetchBaseQuery({
+const baseQuery = fetchBaseQuery({
     baseUrl: `${API_BASE_URL}${API_VERSION}`,
     prepareHeaders: (headers) => {
       // Access localStorage only on the client side
@@ -23,7 +21,43 @@ export const apiSlice = createApi({
       }
       return headers;
     },
-  }),
+  });
+
+const baseQueryWithReauth: BaseQueryFn<
+  string | FetchArgs,
+  unknown,
+  FetchBaseQueryError
+> = async (args, api, extraOptions) => {
+  const result = await baseQuery(args, api, extraOptions);
+
+  if (result.error && result.error.status === 403) {
+    const errorData = result.error.data as any;
+    const errorString = String(errorData?.message || errorData?.error || '').toLowerCase();
+    
+    // Check if the backend explicitly indicates insufficient permissions
+    if (
+      errorString.includes('permission') || 
+      errorString.includes('unauthorized') || 
+      errorString.includes('access denied') ||
+      errorString.includes('insufficient') ||
+      errorString.includes('forbidden')
+    ) {
+      if (typeof window !== 'undefined') {
+        const deniedPaths = JSON.parse(localStorage.getItem('deniedPaths') || '[]');
+        if (!deniedPaths.includes(window.location.pathname)) {
+          deniedPaths.push(window.location.pathname);
+          localStorage.setItem('deniedPaths', JSON.stringify(deniedPaths));
+        }
+      }
+      api.dispatch({ type: 'auth/setAccessDenied', payload: true });
+    }
+  }
+  return result;
+};
+
+export const apiSlice = createApi({
+  reducerPath: 'api',
+  baseQuery: baseQueryWithReauth,
   // Define caching tags for different entities to enable automatic refetching
   tagTypes: [
     'Auth',

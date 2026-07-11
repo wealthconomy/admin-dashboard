@@ -1,97 +1,102 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { MessageSquare, X, Send, ChevronRight, CheckCheck, Minimize2 } from "lucide-react";
 import Image from "next/image";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { useSelector } from "react-redux";
+import { useGetMeQuery } from "@/lib/redux/features/authApi";
 import { 
   useGetInternalTeamQuery, 
   useGetInternalMessagesQuery, 
   useSendInternalMessageMutation 
 } from "@/lib/redux/features/chatApi";
-
-const ADMINS = [
-  {
-    id: 1,
-    name: "Simon",
-    lastMessage: "Quick update on the... ",
-    time: "10:00am",
-    status: "online",
-    image: "",
-    isAdmin: true,
-    role: "Super Admin",
-  },
-  {
-    id: 2,
-    name: "Fatima",
-    lastMessage: "Ready when you are",
-    time: "11:30am",
-    status: "online",
-    image: "",
-    isAdmin: true,
-    role: "Admin",
-  },
-  {
-    id: 3,
-    name: "Jessica",
-    lastMessage: "Let's review the... ",
-    time: "9:45am",
-    status: "online",
-    image: "",
-    isAdmin: true,
-    role: "Support Lead",
-  },
-  {
-    id: 4,
-    name: "John",
-    lastMessage: "I'll handle the... ",
-    time: "12:00pm",
-    status: "offline",
-    image: "",
-    isAdmin: true,
-    role: "SysAdmin",
-  },
-  {
-    id: 5,
-    name: "Ali",
-    lastMessage: "Meeting in 5",
-    time: "2:00pm",
-    status: "online",
-    image: "",
-    isAdmin: true,
-    role: "Content Writer",
-  },
-];
-
-const MOCK_MESSAGES: Record<number, any[]> = {
-  1: [
-    { id: 1, sender: "Simon", text: "Hey! Did you check the new analytics?", time: "9:55am", isMe: false, senderImage: "" },
-    { id: 2, sender: "Me", text: "Yes, looks great. Quick update on the new feature release?", time: "10:00am", isMe: true }
-  ],
-  2: [
-    { id: 1, sender: "Fatima", text: "I've reviewed the customer disputes.", time: "11:25am", isMe: false, senderImage: "" },
-    { id: 2, sender: "Me", text: "Awesome. Ready when you are to hop on a call.", time: "11:30am", isMe: true }
-  ]
-};
+import { Loader2 } from "lucide-react";
 
 export function AdminChatWidget() {
   const { data: teamData, isLoading: isTeamLoading } = useGetInternalTeamQuery();
   const team = Array.isArray(teamData) ? teamData : (teamData?.data || []);
 
+  const { data: meData } = useGetMeQuery(undefined);
+  const loggedInUser = useSelector((state: any) => state.auth.user);
+  const userMe = meData?.data || loggedInUser || {};
+  const currentUserId = userMe.id || userMe._id || loggedInUser?.id || loggedInUser?._id || "default";
+
   const [isOpen, setIsOpen] = useState(false);
   const [selectedAdmin, setSelectedAdmin] = useState<any | null>(null);
   const [inputText, setInputText] = useState("");
 
-  const currentAdminId = selectedAdmin?.id || selectedAdmin?._id;
-  const { data: messagesData } = useGetInternalMessagesQuery(currentAdminId, {
+  const currentAdminId = selectedAdmin?.userId || selectedAdmin?.id || selectedAdmin?._id;
+  const { data: messagesData, isFetching } = useGetInternalMessagesQuery(currentAdminId, {
     skip: !selectedAdmin,
     pollingInterval: isOpen && selectedAdmin ? 5000 : 0,
   });
 
   const [sendMessage] = useSendInternalMessageMutation();
+
+  const [lastMessagesMap, setLastMessagesMap] = useState<Record<string, { text: string; time: string }>>({});
+
+  // Load cache when currentUserId is resolved
+  useEffect(() => {
+    if (typeof window !== "undefined" && currentUserId !== "default") {
+      try {
+        const saved = localStorage.getItem(`admin_chat_last_messages_${currentUserId}`);
+        if (saved) {
+          setLastMessagesMap(JSON.parse(saved));
+        } else {
+          setLastMessagesMap({});
+        }
+      } catch {
+        setLastMessagesMap({});
+      }
+    }
+  }, [currentUserId]);
+
+  // Save cache when lastMessagesMap or currentUserId changes
+  useEffect(() => {
+    if (typeof window !== "undefined" && currentUserId !== "default") {
+      localStorage.setItem(`admin_chat_last_messages_${currentUserId}`, JSON.stringify(lastMessagesMap));
+    }
+  }, [lastMessagesMap, currentUserId]);
+
+  const rawMessages = Array.isArray(messagesData) ? messagesData : (messagesData?.data || []);
+  const activeMessages = useMemo(() => {
+    return rawMessages.map((msg: any) => {
+      const isMe = msg.senderId === currentUserId;
+      const time = msg.createdAt 
+        ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        : "";
+      return {
+        ...msg,
+        isMe,
+        time
+      };
+    });
+  }, [rawMessages, currentUserId]);
+
+  useEffect(() => {
+    if (currentAdminId && activeMessages.length > 0 && !isFetching) {
+      const lastMsg = activeMessages[activeMessages.length - 1];
+      const timeStr = lastMsg.time || "";
+      
+      setLastMessagesMap(prev => {
+        const existing = prev[currentAdminId];
+        if (existing && existing.text === lastMsg.text && existing.time === timeStr) {
+          return prev;
+        }
+        return {
+          ...prev,
+          [currentAdminId]: {
+            text: lastMsg.text,
+            time: timeStr
+          }
+        };
+      });
+    }
+  }, [activeMessages, currentAdminId, isFetching]);
 
   const toggleOpen = () => setIsOpen(!isOpen);
 
@@ -99,15 +104,24 @@ export function AdminChatWidget() {
     if (!inputText.trim() || !selectedAdmin) return;
     
     try {
-      const currentAdminId = selectedAdmin.id || selectedAdmin._id;
-      await sendMessage({ receiverId: currentAdminId, text: inputText }).unwrap();
+      const recipientId = selectedAdmin.userId || selectedAdmin.id || selectedAdmin._id;
+      await sendMessage({ receiverId: recipientId, text: inputText }).unwrap();
+      
+      // Instantly update the last message map for better responsiveness
+      const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      setLastMessagesMap(prev => ({
+        ...prev,
+        [recipientId]: {
+          text: inputText,
+          time: timeStr
+        }
+      }));
+      
       setInputText("");
     } catch (err) {
       console.error("Failed to send message: ", err);
     }
   };
-
-  const activeMessages = Array.isArray(messagesData) ? messagesData : (messagesData?.data || []);
 
   return (
     <>
@@ -150,16 +164,26 @@ export function AdminChatWidget() {
               </div>
               {team.map((admin: any) => {
                 const adminId = admin.id || admin._id;
+                const userObj = admin.user || admin;
+                const displayName = `${userObj.firstName || ""} ${userObj.lastName || ""}`.trim() || userObj.name || userObj.email || "Admin";
+                const displayImage = userObj.imageUrl || admin.imageUrl || admin.avatarUrl || admin.image || "";
+                const displayRole = admin.role === "CUSTOM" && admin.customRole ? admin.customRole.name : admin.role || "Admin";
+                
+                const recipientKey = userObj.userId || admin.userId || adminId;
+                const lastMsgData = lastMessagesMap[recipientKey];
+                const displayLastMsg = lastMsgData ? lastMsgData.text : "Click to view chat";
+                const displayTime = lastMsgData ? lastMsgData.time : "";
+
                 return (
                 <div 
                   key={adminId} 
-                  onClick={() => setSelectedAdmin(admin)}
+                  onClick={() => setSelectedAdmin({ ...admin, displayName, displayImage, displayRole })}
                   className="flex items-center gap-3 p-3 rounded-xl hover:bg-surface/60 cursor-pointer transition-colors group"
                 >
-                  <div className="relative">
+                  <div className="relative shrink-0 flex items-center justify-center">
                     <Avatar className="h-10 w-10 ring-2 ring-transparent group-hover:ring-primary/20 transition-all">
-                      <AvatarImage src={admin.image} />
-                      <AvatarFallback className="bg-primary/5 font-bold text-primary">{admin.name[0]}</AvatarFallback>
+                      <AvatarImage src={displayImage} className="object-cover" />
+                      <AvatarFallback className="bg-primary/10 font-bold text-primary flex items-center justify-center">{displayName.charAt(0).toUpperCase()}</AvatarFallback>
                     </Avatar>
                     {admin.status === "online" && (
                       <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-emerald-500 border-2 border-white" />
@@ -167,13 +191,13 @@ export function AdminChatWidget() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-center">
-                      <span className="font-bold text-sm text-dark truncate">{admin.name}</span>
-                      <span className="text-[9px] text-slate/40 font-bold">{admin.time}</span>
+                      <span className="font-bold text-sm text-dark truncate leading-none">{displayName}</span>
+                      <span className="text-[9px] text-slate/40 font-bold">{displayTime}</span>
                     </div>
-                    <div className="flex justify-between items-center mt-0.5">
-                      <span className="text-[11px] text-slate/50 truncate max-w-[150px]">{admin.lastMessage}</span>
-                      <Badge className="bg-slate-50 text-slate-400 border-none text-[8px] font-bold px-1.5 py-0">
-                        {admin.role}
+                    <div className="flex justify-between items-center mt-1.5">
+                      <span className="text-[11px] text-slate/50 truncate max-w-[140px] leading-none">{displayLastMsg}</span>
+                      <Badge className="bg-slate-50 text-slate-400 border-none text-[8px] font-bold px-1.5 py-0 leading-none">
+                        {displayRole}
                       </Badge>
                     </div>
                   </div>
@@ -190,12 +214,12 @@ export function AdminChatWidget() {
                 <button onClick={() => setSelectedAdmin(null)} className="h-8 w-8 rounded-full hover:bg-surface flex items-center justify-center">
                   <ChevronRight className="h-4.5 w-4.5 rotate-180 text-slate/60" />
                 </button>
-                <Avatar className="h-9 w-9">
-                  <AvatarImage src={selectedAdmin.image} />
-                  <AvatarFallback className="bg-primary/5 text-primary text-xs font-bold">{selectedAdmin.name[0]}</AvatarFallback>
+                <Avatar className="h-9 w-9 shrink-0">
+                  <AvatarImage src={selectedAdmin.displayImage} className="object-cover" />
+                  <AvatarFallback className="bg-primary/10 text-primary text-xs font-bold flex items-center justify-center">{selectedAdmin.displayName?.charAt(0).toUpperCase()}</AvatarFallback>
                 </Avatar>
-                <div>
-                  <h4 className="text-[13px] font-bold text-dark leading-tight">{selectedAdmin.name}</h4>
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-[13px] font-bold text-dark leading-tight truncate">{selectedAdmin.displayName}</h4>
                   <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
                     Online
@@ -205,14 +229,19 @@ export function AdminChatWidget() {
 
               {/* Chat Thread */}
               <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar flex flex-col">
-                {activeMessages.length === 0 ? (
+                {isFetching && activeMessages.length === 0 ? (
+                  <div className="m-auto text-center space-y-2">
+                    <Loader2 className="h-6 w-6 animate-spin mx-auto text-[#155D5F]" />
+                    <p className="text-xs text-slate/40 font-semibold">Loading messages...</p>
+                  </div>
+                ) : activeMessages.length === 0 ? (
                   <div className="m-auto text-center space-y-2 opacity-50">
                     <MessageSquare className="h-8 w-8 mx-auto text-slate/40" />
-                    <p className="text-xs font-medium text-slate">Start conversation with {selectedAdmin.name}</p>
+                    <p className="text-xs font-medium text-slate">Start conversation with {selectedAdmin.displayName}</p>
                   </div>
                 ) : (
                   activeMessages.map((msg: any) => (
-                    <div key={msg.id} className={`flex flex-col max-w-[85%] ${msg.isMe ? "self-end items-end" : "self-start items-start"}`}>
+                    <div key={msg.id || msg._id || Math.random()} className={`flex flex-col max-w-[85%] ${msg.isMe ? "self-end items-end" : "self-start items-start"}`}>
                       <div className={`p-3 rounded-2xl text-[12px] font-medium leading-relaxed shadow-sm ${msg.isMe ? "bg-[#155D5F] text-white rounded-tr-sm" : "bg-white border border-border/30 text-dark rounded-tl-sm"}`}>
                         <p className="whitespace-pre-wrap">{msg.text}</p>
                       </div>
