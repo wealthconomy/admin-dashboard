@@ -179,7 +179,7 @@ export default function BlogOverviewPage() {
   });
 
   const { data: rawArticlesData, isLoading: isLoadingArticles } = useGetBlogsQuery({ q: searchQuery, limit: 100 });
-  const { data: statsData } = useGetBlogStatsQuery(undefined);
+  const { data: statsData, isLoading: isLoadingStats } = useGetBlogStatsQuery(undefined);
   
   const [updateBlogMutation] = useUpdateBlogMutation();
   const [deleteBlogMutation] = useDeleteBlogMutation();
@@ -192,18 +192,63 @@ export default function BlogOverviewPage() {
         ? rawArticlesData.data.items
         : [];
   
-  // Format articles to match UI expectations
+  // Helper parsers to guarantee primitive strings for React rendering
+  const parseAuthorName = (item: any): string => {
+    if (!item) return "Unknown";
+    const author = item.author ?? item.authorName ?? item.user;
+    if (!author) return "Unknown";
+    if (typeof author === "string") return author;
+    if (typeof author === "object") {
+      return author.name 
+        || `${author.firstName || ""} ${author.lastName || ""}`.trim() 
+        || author.username 
+        || author.email 
+        || "Unknown";
+    }
+    return String(author);
+  };
+
+  const parseAuthorAvatar = (item: any): string => {
+    if (typeof item.authorAvatar === "string" && item.authorAvatar) return item.authorAvatar;
+    const authorObj = typeof item.author === "object" ? item.author : null;
+    if (authorObj) {
+      return authorObj.image || authorObj.imageUrl || authorObj.avatar || authorObj.avatarUrl || "";
+    }
+    return "";
+  };
+
+  const parseCategory = (item: any): string => {
+    const cat = item.category;
+    if (!cat) return "Uncategorized";
+    if (typeof cat === "string") return cat;
+    if (typeof cat === "object") return cat.name || cat.title || cat.label || "Uncategorized";
+    return String(cat);
+  };
+
+  const parseImage = (item: any): string => {
+    const img = item.image || item.coverImage || item.imageUrl || item.bannerUrl;
+    let url = "";
+    if (typeof img === "string") url = img;
+    else if (typeof img === "object" && img?.url) url = img.url;
+
+    if (url) {
+      return url.replace(/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/, process.env.NEXT_PUBLIC_API_URL || "");
+    }
+    return "https://images.unsplash.com/photo-1554224155-6726b3ff858f?q=80&w=400&h=200&auto=format&fit=crop";
+  };
+
+  // Format articles to match UI expectations safely
   const articles: Article[] = rawArticles.map((a: any) => ({
     id: a.id || a._id,
-    title: a.title || "Untitled",
-    author: a.author || "Unknown",
-    authorAvatar: a.authorAvatar || "",
+    title: typeof a.title === "string" ? a.title : (a.title?.name || "Untitled"),
+    author: parseAuthorName(a),
+    authorAvatar: parseAuthorAvatar(a),
     timeAgo: a.createdAt ? new Date(a.createdAt).toLocaleDateString() : "Just now",
-    bookmarks: a.bookmarks || 0,
-    views: a.views || 0,
-    category: a.category || "Uncategorized",
-    categoryColor: a.categoryColor || "WealthFlex",
-    image: a.image?.replace(/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/, process.env.NEXT_PUBLIC_API_URL || "") || "https://images.unsplash.com/photo-1554224155-6726b3ff858f?q=80&w=400&h=200&auto=format&fit=crop",
+    bookmarks: typeof a.bookmarks === "number" ? a.bookmarks : 0,
+    views: typeof a.views === "number" ? a.views : 0,
+    category: parseCategory(a),
+    categoryColor: typeof a.categoryColor === "string" ? a.categoryColor : "WealthFlex",
+    image: parseImage(a),
     status: (a.status || "draft") as any,
     scheduledFor: a.scheduledFor ? new Date(a.scheduledFor).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : undefined,
     publishToApp: a.publishToApp,
@@ -218,6 +263,11 @@ export default function BlogOverviewPage() {
     article.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
     article.category.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const isStatsLoading = isLoadingArticles || isLoadingStats;
+  const totalPublishedCount = statsData?.data?.totalPublished ?? statsData?.data?.publishedCount ?? published.length;
+  const totalViewsCount = statsData?.data?.totalViews ?? published.reduce((acc, a) => acc + (Number(a.views) || 0), 0);
+  const totalBookmarksCount = statsData?.data?.totalBookmarks ?? statsData?.data?.totalLikes ?? published.reduce((acc, a) => acc + (Number(a.bookmarks) || 0), 0);
 
   const handlePublish = async (id: number) => {
     try {
@@ -292,13 +342,19 @@ export default function BlogOverviewPage() {
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         {[
-          { label: "Published Articles", value: statsData?.data?.publishedCount || published.length.toString(), icon: <Layout className="h-5 w-5 text-white" /> },
-          { label: "Views",              value: statsData?.data?.totalViews || "0",                        icon: <Eye className="h-5 w-5 text-white" /> },
-          { label: "Bookmarked",         value: statsData?.data?.totalBookmarks || "0",                         icon: <Bookmark className="h-5 w-5 text-white" /> },
+          { label: "Published Articles", value: totalPublishedCount, icon: <Layout className="h-5 w-5 text-white" /> },
+          { label: "Views",              value: totalViewsCount,     icon: <Eye className="h-5 w-5 text-white" /> },
+          { label: "Bookmarked",         value: totalBookmarksCount, icon: <Bookmark className="h-5 w-5 text-white" /> },
         ].map((s, i) => (
           <div key={i} className="h-[130px] bg-[#F2FFFF] border border-[#155D5F4D] rounded-[20px] flex items-center justify-between px-7 hover:bg-[#E8FAFA] transition-colors">
             <div>
-              <p className="text-4xl font-bold font-outfit text-primary leading-none">{s.value}</p>
+              {isStatsLoading ? (
+                <div className="h-9 flex items-center">
+                  <Loader2 className="h-6 w-6 text-primary animate-spin" />
+                </div>
+              ) : (
+                <p className="text-4xl font-bold font-outfit text-primary leading-none">{s.value}</p>
+              )}
               <p className="text-sm font-semibold text-primary/80 mt-2">{s.label}</p>
             </div>
             <div className="h-11 w-11 rounded-full bg-[#155D5F] flex items-center justify-center shrink-0">

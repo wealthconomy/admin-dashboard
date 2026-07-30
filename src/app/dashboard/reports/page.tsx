@@ -28,22 +28,31 @@ export default function ReportsPage() {
   const { data: retentionData, isLoading: retentionLoading } = useGetRetentionReportQuery();
 
   // Helper to map generic `{ label, value, secondValue }` to chart-ready format
-  const formatData = (apiResponse: any, valKey: string, lineKey?: string) => {
+  // Financial metrics sent in kobo are divided by 100 to convert to Naira
+  const formatData = (apiResponse: any, valKey: string, lineKey?: string, isCurrency = true) => {
     const dataArray = Array.isArray(apiResponse) ? apiResponse : Array.isArray(apiResponse?.data) ? apiResponse.data : [];
     if (!dataArray || dataArray.length === 0) return [];
     
-    return dataArray.map((item: any) => ({
-      name: item.label,
-      [valKey]: Number(item.value?.value || item.value || 0),
-      ...(lineKey && { [lineKey]: Number(item.secondValue?.value || item.secondValue || 0) })
-    }));
+    return dataArray.map((item: any) => {
+      const rawVal = Number(item.value?.value || item.value || 0);
+      const val = isCurrency && rawVal >= 100 ? rawVal / 100 : rawVal;
+
+      const rawLine = Number(item.secondValue?.value || item.secondValue || 0);
+      const lineVal = isCurrency && rawLine >= 100 ? rawLine / 100 : rawLine;
+
+      return {
+        name: item.label,
+        [valKey]: val,
+        ...(lineKey && { [lineKey]: lineVal })
+      };
+    });
   };
 
   const formattedSavings = formatData(savingsData || [], "value");
   const formattedTransactions = formatData(transactionData || [], "value");
   const formattedInterest = formatData(interestData || [], "value");
   const formattedRevenue = formatData(revenueData || [], "value", "line");
-  const formattedRetention = formatData(retentionData || [], "value");
+  const formattedRetention = formatData(retentionData || [], "value", undefined, false);
 
   const getPeriodLabel = () => {
     const f = activeFilter.toLowerCase();

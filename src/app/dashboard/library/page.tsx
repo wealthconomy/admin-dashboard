@@ -445,9 +445,15 @@ export default function LibraryPage() {
             <div className="h-[135px] bg-[#F2FFFF] border border-[#155D5F4D] rounded-[20px] p-5 flex flex-col justify-between hover:bg-[#E8FAFA] hover:shadow-md hover:scale-[1.01] transition-all duration-300">
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-2xl font-bold font-outfit text-primary leading-none">
-                    {totalMaterials.toLocaleString()}
-                  </p>
+                  {isLoadingStats || isLoading ? (
+                    <div className="h-7 flex items-center">
+                      <Loader2 className="h-5 w-5 text-primary animate-spin" />
+                    </div>
+                  ) : (
+                    <p className="text-2xl font-bold font-outfit text-primary leading-none">
+                      {totalMaterials.toLocaleString()}
+                    </p>
+                  )}
                   <p className="text-[11px] font-semibold text-primary/80 mt-2">
                     Total Materials
                   </p>
@@ -466,9 +472,15 @@ export default function LibraryPage() {
             <div className="h-[135px] bg-[#F2FFFF] border border-[#155D5F4D] rounded-[20px] p-5 flex flex-col justify-between hover:bg-[#E8FAFA] hover:shadow-md hover:scale-[1.01] transition-all duration-300">
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-2xl font-bold font-outfit text-primary leading-none">
-                    {totalDocs.toLocaleString()}
-                  </p>
+                  {isLoadingStats || isLoading ? (
+                    <div className="h-7 flex items-center">
+                      <Loader2 className="h-5 w-5 text-primary animate-spin" />
+                    </div>
+                  ) : (
+                    <p className="text-2xl font-bold font-outfit text-primary leading-none">
+                      {totalDocs.toLocaleString()}
+                    </p>
+                  )}
                   <p className="text-[11px] font-semibold text-primary/80 mt-2">
                     Documents
                   </p>
@@ -486,9 +498,15 @@ export default function LibraryPage() {
             <div className="h-[135px] bg-[#F2FFFF] border border-[#155D5F4D] rounded-[20px] p-5 flex flex-col justify-between hover:bg-[#E8FAFA] hover:shadow-md hover:scale-[1.01] transition-all duration-300">
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-2xl font-bold font-outfit text-primary leading-none">
-                    {totalVideos.toLocaleString()}
-                  </p>
+                  {isLoadingStats || isLoading ? (
+                    <div className="h-7 flex items-center">
+                      <Loader2 className="h-5 w-5 text-primary animate-spin" />
+                    </div>
+                  ) : (
+                    <p className="text-2xl font-bold font-outfit text-primary leading-none">
+                      {totalVideos.toLocaleString()}
+                    </p>
+                  )}
                   <p className="text-[11px] font-semibold text-primary/80 mt-2">
                     Videos
                   </p>
@@ -509,9 +527,15 @@ export default function LibraryPage() {
                 <div className="h-[135px] bg-[#F2FFFF] border border-[#155D5F4D] rounded-[20px] p-5 flex flex-col justify-between hover:bg-[#E8FAFA] hover:shadow-md hover:scale-[1.01] transition-all duration-300 animate-in fade-in slide-in-from-top-2 duration-300">
                   <div className="flex items-start justify-between">
                     <div>
-                      <p className="text-2xl font-bold font-outfit text-primary leading-none">
-                        {totalDownloadable.toLocaleString()}
-                      </p>
+                      {isLoadingStats || isLoading ? (
+                        <div className="h-7 flex items-center">
+                          <Loader2 className="h-5 w-5 text-primary animate-spin" />
+                        </div>
+                      ) : (
+                        <p className="text-2xl font-bold font-outfit text-primary leading-none">
+                          {totalDownloadable.toLocaleString()}
+                        </p>
+                      )}
                       <p className="text-[11px] font-semibold text-primary/80 mt-2">
                         Total Downloads                      </p>
                     </div>
@@ -528,9 +552,15 @@ export default function LibraryPage() {
                 <div className="h-[135px] bg-[#F2FFFF] border border-[#155D5F4D] rounded-[20px] p-5 flex flex-col justify-between hover:bg-[#E8FAFA] hover:shadow-md hover:scale-[1.01] transition-all duration-300 animate-in fade-in slide-in-from-top-2 duration-300">
                   <div className="flex items-start justify-between">
                     <div>
-                      <p className="text-2xl font-bold font-outfit text-primary leading-none">
-                        {newUsers.toLocaleString()}
-                      </p>
+                      {isLoadingStats || isLoading ? (
+                        <div className="h-7 flex items-center">
+                          <Loader2 className="h-5 w-5 text-primary animate-spin" />
+                        </div>
+                      ) : (
+                        <p className="text-2xl font-bold font-outfit text-primary leading-none">
+                          {newUsers.toLocaleString()}
+                        </p>
+                      )}
                       <p className="text-[11px] font-semibold text-primary/80 mt-2">
                         New Users
                       </p>
@@ -549,9 +579,15 @@ export default function LibraryPage() {
                 <div className="h-[135px] bg-[#F2FFFF] border border-[#155D5F4D] rounded-[20px] p-5 flex flex-col justify-between hover:bg-[#E8FAFA] hover:shadow-md hover:scale-[1.01] transition-all duration-300 animate-in fade-in slide-in-from-top-2 duration-300">
                   <div className="flex items-start justify-between">
                     <div>
-                      <p className="text-2xl font-bold font-outfit text-primary leading-none">
-                        {returningUsers.toLocaleString()}
-                      </p>
+                      {isLoadingStats || isLoading ? (
+                        <div className="h-7 flex items-center">
+                          <Loader2 className="h-5 w-5 text-primary animate-spin" />
+                        </div>
+                      ) : (
+                        <p className="text-2xl font-bold font-outfit text-primary leading-none">
+                          {returningUsers.toLocaleString()}
+                        </p>
+                      )}
                       <p className="text-[11px] font-semibold text-primary/80 mt-2">
                         Returning Users
                       </p>

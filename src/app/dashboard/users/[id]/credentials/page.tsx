@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, use } from "react";
+import { useState, useEffect, use } from "react";
 import { useRouter } from "next/navigation";
 import {
   ChevronLeft,
@@ -51,11 +51,35 @@ export default function CredentialsVerificationPage({ params }: { params: Promis
   const [rejectKycDoc] = useRejectKycDocMutation();
   const [resetKycDoc] = useResetKycDocMutation();
 
-  // Document states
+  // Document states — seeded from API data on load
   const [ninStatus, setNinStatus] = useState<"Pending" | "Approved" | "Rejected">("Pending");
   const [ninReason, setNinReason] = useState<string>("");
   const [utilityStatus, setUtilityStatus] = useState<"Pending" | "Approved" | "Rejected">("Pending");
   const [utilityReason, setUtilityReason] = useState<string>("");
+
+  // Sync status from kycProfile once user data loads
+  // This ensures page refreshes show the real persisted state from the backend
+  useEffect(() => {
+    const kycProfile = user?.kycProfile;
+    if (!kycProfile) return;
+
+    const toStatus = (s: string | null | undefined): "Pending" | "Approved" | "Rejected" => {
+      if (s === "Approved") return "Approved";
+      if (s === "Rejected") return "Rejected";
+      return "Pending";
+    };
+
+    setNinStatus(toStatus(kycProfile.ninStatus));
+    setUtilityStatus(toStatus(kycProfile.utilityStatus));
+
+    // Seed rejection reasons (only if actually rejected, ignore "Document verified successfully")
+    if (kycProfile.ninStatus === "Rejected" && kycProfile.ninRejectionReason) {
+      setNinReason(kycProfile.ninRejectionReason);
+    }
+    if (kycProfile.utilityStatus === "Rejected" && kycProfile.utilityRejectionReason) {
+      setUtilityReason(kycProfile.utilityRejectionReason);
+    }
+  }, [user?.kycProfile]);
 
   // Modal controls
   const [activeLightbox, setActiveLightbox] = useState<"nin" | "utility" | null>(null);

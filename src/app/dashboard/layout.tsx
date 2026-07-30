@@ -65,11 +65,16 @@ interface SidebarItem {
 const sidebarItems: SidebarItem[] = [
   { name: "Overview", icon: LayoutDashboard, href: "/dashboard" },
   {
-    name: "Users Management",
+    name: "User Operations",
     icon: Users,
-    href: "/dashboard/users",
+    href: "#",
     hasDropdown: true,
     subItems: [
+      {
+        name: "User Management",
+        href: "/dashboard/users",
+        icon: Users,
+      },
       {
         name: "Activities Management",
         href: "/dashboard/users/activities",
@@ -400,6 +405,7 @@ export default function DashboardLayout({
                     href={item.href}
                     onClick={(e) => {
                       if (item.hasDropdown) {
+                        e.preventDefault();
                         toggleExpand(item.name);
                       }
                     }}
@@ -504,6 +510,7 @@ export default function DashboardLayout({
                     href={item.href}
                     onClick={(e) => {
                       if (item.hasDropdown) {
+                        e.preventDefault();
                         toggleExpand(item.name);
                       } else {
                         setIsSidebarOpen(false);

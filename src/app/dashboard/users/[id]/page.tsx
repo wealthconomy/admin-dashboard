@@ -251,21 +251,40 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <Badge className="bg-[#E7F0FF] text-blue-500 hover:bg-[#E7F0FF] border-none px-4 py-4 rounded-xl gap-2 font-bold text-[10px] uppercase tracking-wider shadow-sm">
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 20 20"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-              >
-                <path
-                  d="M19.1663 10L17.133 7.675L17.4163 4.6L14.408 3.91667L12.833 1.25L9.99968 2.46667L7.16634 1.25L5.59134 3.90833L2.58301 4.58333L2.86634 7.66667L0.833008 10L2.86634 12.325L2.58301 15.4083L5.59134 16.0917L7.16634 18.75L9.99968 17.525L12.833 18.7417L14.408 16.0833L17.4163 15.4L17.133 12.325L19.1663 10ZM8.40801 13.9333L5.24134 10.7583L6.47468 9.525L8.40801 11.4667L13.283 6.575L14.5163 7.80833L8.40801 13.9333Z"
-                  fill="#1D84D9"
-                />
-              </svg>
-              {user?.isVerified ? "Verified" : "Unverified"}
-            </Badge>
+            {(() => {
+              // isVerified only reflects email verification.
+              // Use kycStatus / kycVerified for actual document/KYC verification.
+              // NOTE: kycLevel is NOT used here — it defaults to 1 for all users
+              // and would cause false positives. Only trust explicit status flags.
+              const isKycVerified =
+                user?.kycStatus === "VERIFIED" ||
+                user?.kycStatus === "verified" ||
+                user?.kycVerified === true;
+
+              return (
+                <Badge
+                  className={`border-none px-4 py-4 rounded-xl gap-2 font-bold text-[10px] uppercase tracking-wider shadow-sm ${
+                    isKycVerified
+                      ? "bg-[#E7F0FF] text-blue-500 hover:bg-[#E7F0FF]"
+                      : "bg-amber-50 text-amber-500 hover:bg-amber-50"
+                  }`}
+                >
+                  <svg
+                    width="16"
+                    height="16"
+                    viewBox="0 0 20 20"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                  >
+                    <path
+                      d="M19.1663 10L17.133 7.675L17.4163 4.6L14.408 3.91667L12.833 1.25L9.99968 2.46667L7.16634 1.25L5.59134 3.90833L2.58301 4.58333L2.86634 7.66667L0.833008 10L2.86634 12.325L2.58301 15.4083L5.59134 16.0917L7.16634 18.75L9.99968 17.525L12.833 18.7417L14.408 16.0833L17.4163 15.4L17.133 12.325L19.1663 10ZM8.40801 13.9333L5.24134 10.7583L6.47468 9.525L8.40801 11.4667L13.283 6.575L14.5163 7.80833L8.40801 13.9333Z"
+                      fill={isKycVerified ? "#1D84D9" : "#F59E0B"}
+                    />
+                  </svg>
+                  {isKycVerified ? "KYC Verified" : "Unverified"}
+                </Badge>
+              );
+            })()}
             <button 
               onClick={() => router.push(`/dashboard/users/${resolvedId}/credentials`)}
               className="p-2.5 hover:bg-white rounded-xl transition-all border border-[#C5C5C5] shadow-sm bg-white/50 active:scale-95"
@@ -434,9 +453,10 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
               Transaction
             </h3>
             <div className="space-y-6">
-              <InfoItem label="Wallet Balance" value={`₦${Number(user?.walletBalance || 0).toLocaleString()}`} />
-              <InfoItem label="Total Savings" value={`₦${Number(user?.totalSavings || 0).toLocaleString()}`} />
-              <InfoItem label="Total Interest" value={`₦${Number(user?.totalInterest || 0).toLocaleString()}`} />
+              {/* Monetary values from the API are in kobo — divide by 100 to get naira */}
+              <InfoItem label="Wallet Balance" value={`₦${(Number(user?.walletBalance || 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}`} />
+              <InfoItem label="Total Savings" value={`₦${(Number(user?.totalSavings || 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}`} />
+              <InfoItem label="Total Interest" value={`₦${(Number(user?.totalInterest || 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}`} />
               <InfoItem label="Pending Transactions" value={`${user?.pendingTransactionsCount || 0} Transactions`} />
               <InfoItem label="Failed Transactions" value={`${user?.failedTransactionsCount || 0} Transaction`} />
             </div>

@@ -16,6 +16,8 @@ import {
   useDeleteAdminNotificationMutation,
   useClearAllAdminNotificationsMutation
 } from "@/lib/redux/features/adminApi";
+import { useGetUsersQuery } from "@/lib/redux/features/usersApi";
+import { useGetBlogsQuery } from "@/lib/redux/features/blogApi";
 import { toast } from "sonner";
 
 export type NotificationType =
@@ -61,6 +63,18 @@ export function NotificationProvider({
     { pollingInterval: 60000 }
   );
 
+  // Fetch users to map user IDs to names in notifications
+  const { data: usersData } = useGetUsersQuery(
+    { limit: 100 },
+    { pollingInterval: 120000 }
+  );
+
+  // Fetch blogs to map post IDs to titles in notifications
+  const { data: blogsData } = useGetBlogsQuery(
+    { limit: 100 },
+    { pollingInterval: 120000 }
+  );
+
   const [markReadMut] = useMarkNotificationReadMutation();
   const [markAllReadMut] = useMarkAllNotificationsReadMutation();
   const [deleteMut] = useDeleteAdminNotificationMutation();
@@ -72,7 +86,12 @@ export function NotificationProvider({
   // Map API response to our UI Notification interface safely
   useEffect(() => {
     try {
-      const rawData = apiData?.data || apiData;
+      let rawData = apiData?.data || apiData;
+      
+      // If the response is paginated, extract the items array
+      if (rawData && typeof rawData === "object" && !Array.isArray(rawData) && Array.isArray((rawData as any).items)) {
+        rawData = (rawData as any).items;
+      }
       
       // Fallback robust check while backend API is not fully deployed/integrated
       if (!rawData || !Array.isArray(rawData)) {
@@ -81,17 +100,68 @@ export function NotificationProvider({
         return;
       }
 
-      const mapped: Notification[] = rawData.map((n: any) => ({
-        id: n.id || n._id || Math.random().toString(),
-        title: n.title || "Notification",
-        description: n.description || n.message || "You have a new notification",
-        time: n.createdAt ? new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Just now",
-        date: n.createdAt ? new Date(n.createdAt).toLocaleDateString() : new Date().toLocaleDateString(),
-        type: (n.type || "system") as NotificationType,
-        status: (n.isRead || n.status === "read" ? "read" : "unread") as "read" | "unread",
-        icon: getIconForType(n.type),
-        color: getColorForType(n.type),
-      }));
+      // Build user map from usersData
+      const userMap = new Map<string, string>();
+      const usersList = usersData?.data?.items || usersData?.data || usersData;
+      if (usersList && Array.isArray(usersList)) {
+        usersList.forEach((u: any) => {
+          const name = `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.name || u.email;
+          if (u.id && name) {
+            userMap.set(u.id, name);
+          }
+        });
+      }
+
+      // Build blog post ID → title map
+      const blogMap = new Map<string, string>();
+      const blogsList = (blogsData as any)?.data?.items || (blogsData as any)?.data || blogsData;
+      if (blogsList && Array.isArray(blogsList)) {
+        blogsList.forEach((b: any) => {
+          if (b.id && b.title) {
+            blogMap.set(b.id, b.title);
+          }
+        });
+      }
+
+      const mapped: Notification[] = rawData.map((n: any) => {
+        let description = n.description || n.message || "You have a new notification";
+
+        // Step 1: Replace "User [cuid]" pattern with just the resolved name (drops "User " prefix)
+        const userCuidRegex = /\bUser\s+(c[a-z0-9]{24})\b/gi;
+        description = description.replace(userCuidRegex, (_match: string, cuid: string) => {
+          return userMap.get(cuid) || _match;
+        });
+
+        // Step 2: Strip leading "User " prefix before a name that was already resolved
+        // e.g. "User Favour Efemiaya" → "Favour Efemiaya"
+        description = description.replace(/\bUser\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*)/g, '$1');
+
+        // Step 3: Replace blog post CUIDs with their titles
+        // e.g. "blog post cmr6nbfkh0002h23tdbd8yrt0" → "blog post titled My Post Title"
+        const blogCuidRegex = /\bblog post\s+(c[a-z0-9]{20,})\b\.?/gi;
+        description = description.replace(blogCuidRegex, (_match: string, cuid: string) => {
+          const title = blogMap.get(cuid);
+          return title ? `blog post titled "${title}"` : `blog post titled "${cuid}"`;
+        });
+
+        // Step 4: Fallback — replace any remaining bare CUIDs (user IDs not yet resolved)
+        const cuidRegex = /\bc[a-z0-9]{24}\b/g;
+        description = description.replace(cuidRegex, (match: string) => {
+          return userMap.get(match) || match;
+        });
+
+        return {
+          id: n.id || n._id || Math.random().toString(),
+          title: n.title || "Notification",
+          description,
+          time: n.createdAt ? new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Just now",
+          date: n.createdAt ? new Date(n.createdAt).toLocaleDateString() : new Date().toLocaleDateString(),
+          type: (n.type || "system") as NotificationType,
+          status: (n.isRead || n.status === "read" ? "read" : "unread") as "read" | "unread",
+          icon: getIconForType(n.type),
+          color: getColorForType(n.type),
+        };
+      });
 
       setNotifications(mapped);
       
@@ -107,7 +177,7 @@ export function NotificationProvider({
       setNotifications([]);
       setUnreadCount(0);
     }
-  }, [apiData]);
+  }, [apiData, usersData, blogsData]);
 
   // Helper functions for UI mapping
   const getIconForType = (type: string) => {

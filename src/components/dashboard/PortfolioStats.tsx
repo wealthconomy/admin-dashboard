@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useGetPortfolioStatsQuery } from "@/lib/redux/features/dashboardApi";
-import { Wallet, Target, Crosshair, Users, Activity, Briefcase } from "lucide-react";
+import { Wallet, Target, Crosshair, Users, Activity, Briefcase, Loader2 } from "lucide-react";
 
 interface PortfolioStatsProps {
   timeFilter: string;
@@ -30,9 +30,12 @@ export function PortfolioStats({ timeFilter }: PortfolioStatsProps) {
         (d: any) => normalize(d.category || "") === normalize(card.name)
       );
 
+      const rawAmt = Number(apiData?.amount || 0);
+      const amtInNaira = rawAmt >= 100 ? rawAmt / 100 : rawAmt;
+
       return {
         ...card,
-        value: isLoading ? "—" : apiData?.amount ? `₦${Number(apiData.amount).toLocaleString(undefined, { minimumFractionDigits: 0 })}` : "₦0",
+        value: isLoading ? "—" : apiData?.amount ? `₦${amtInNaira.toLocaleString(undefined, { minimumFractionDigits: 0 })}` : "₦0",
         active: isLoading ? "—" : (apiData?.active ?? 0).toLocaleString(),
         completed: isLoading ? "—" : (apiData?.completed ?? 0).toLocaleString(),
       };
@@ -58,7 +61,9 @@ export function PortfolioStats({ timeFilter }: PortfolioStatsProps) {
             </div>
             <div className="space-y-0.5">
               <h3 className="text-[13px] font-bold text-dark group-hover:text-primary transition-colors">{portfolio.name}</h3>
-              <div className="text-[14px] font-bold text-dark">{portfolio.value}</div>
+              <div className="text-[14px] font-bold text-dark">
+                {isLoading ? <Loader2 className="h-4 w-4 text-primary animate-spin" /> : portfolio.value}
+              </div>
               <div className="text-[10px] flex items-center gap-1.5 whitespace-nowrap">
                 <span className="text-slate">Active: <span className="text-slate">{portfolio.active}</span></span>
                 <span className="text-[#65D36A]">↑</span>

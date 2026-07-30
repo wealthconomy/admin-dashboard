@@ -268,7 +268,7 @@ export default function UsersPage() {
       {/* Header */}
       <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6 mb-8">
         <h1 className="text-2xl font-bold font-outfit text-dark tracking-tight shrink-0">
-          Users Management
+          User Management
         </h1>
 
         <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto">
@@ -380,9 +380,15 @@ export default function UsersPage() {
           <div className="h-[135px] bg-[#F2FFFF] border border-[#155D5F4D] rounded-[20px] p-5 flex flex-col justify-between hover:bg-[#E8FAFA] hover:shadow-md hover:scale-[1.01] transition-all duration-300">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-2xl font-bold font-outfit text-primary leading-none">
-                  {userList.length}
-                </p>
+                {isLoading || isFetching ? (
+                  <div className="h-7 flex items-center">
+                    <Loader2 className="h-5 w-5 text-primary animate-spin" />
+                  </div>
+                ) : (
+                  <p className="text-2xl font-bold font-outfit text-primary leading-none">
+                    {userList.length}
+                  </p>
+                )}
                 <p className="text-[11px] font-semibold text-primary/80 mt-2">
                   Total Users
                 </p>
@@ -401,9 +407,15 @@ export default function UsersPage() {
           <div className="h-[135px] bg-[#F2FFFF] border border-[#155D5F4D] rounded-[20px] p-5 flex flex-col justify-between hover:bg-[#E8FAFA] hover:shadow-md hover:scale-[1.01] transition-all duration-300">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-2xl font-bold font-outfit text-primary leading-none">
-                  {userList.filter((u: any) => u.status === "Active").length}
-                </p>
+                {isLoading || isFetching ? (
+                  <div className="h-7 flex items-center">
+                    <Loader2 className="h-5 w-5 text-primary animate-spin" />
+                  </div>
+                ) : (
+                  <p className="text-2xl font-bold font-outfit text-primary leading-none">
+                    {userList.filter((u: any) => u.status === "Active").length}
+                  </p>
+                )}
                 <p className="text-[11px] font-semibold text-primary/80 mt-2">
                   Active
                 </p>
@@ -422,9 +434,15 @@ export default function UsersPage() {
           <div className="h-[135px] bg-[#F2FFFF] border border-[#155D5F4D] rounded-[20px] p-5 flex flex-col justify-between hover:bg-[#E8FAFA] hover:shadow-md hover:scale-[1.01] transition-all duration-300">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-2xl font-bold font-outfit text-primary leading-none">
-                  {userList.filter((u: any) => u.status !== "Active").length}
-                </p>
+                {isLoading || isFetching ? (
+                  <div className="h-7 flex items-center">
+                    <Loader2 className="h-5 w-5 text-primary animate-spin" />
+                  </div>
+                ) : (
+                  <p className="text-2xl font-bold font-outfit text-primary leading-none">
+                    {userList.filter((u: any) => u.status !== "Active").length}
+                  </p>
+                )}
                 <p className="text-[11px] font-semibold text-primary/80 mt-2">
                   Suspended
                 </p>
@@ -446,9 +464,15 @@ export default function UsersPage() {
               <div className="h-[135px] bg-[#F2FFFF] border border-[#155D5F4D] rounded-[20px] p-5 flex flex-col justify-between hover:bg-[#E8FAFA] hover:shadow-md hover:scale-[1.01] transition-all duration-300 animate-in fade-in slide-in-from-top-2 duration-300">
                 <div className="flex items-start justify-between">
                   <div>
-                    <p className="text-2xl font-bold font-outfit text-primary leading-none">
-                      {userList.filter((u: any) => u.transactionType === "Interest").length}
-                    </p>
+                    {isLoading || isFetching ? (
+                      <div className="h-7 flex items-center">
+                        <Loader2 className="h-5 w-5 text-primary animate-spin" />
+                      </div>
+                    ) : (
+                      <p className="text-2xl font-bold font-outfit text-primary leading-none">
+                        {userList.filter((u: any) => u.transactionType === "Interest").length}
+                      </p>
+                    )}
                     <p className="text-[11px] font-semibold text-primary/80 mt-2">
                       Interest Type
                     </p>
@@ -467,12 +491,18 @@ export default function UsersPage() {
               <div className="h-[135px] bg-[#F2FFFF] border border-[#155D5F4D] rounded-[20px] p-5 flex flex-col justify-between hover:bg-[#E8FAFA] hover:shadow-md hover:scale-[1.01] transition-all duration-300 animate-in fade-in slide-in-from-top-2 duration-300">
                 <div className="flex items-start justify-between">
                   <div>
-                    <p className="text-2xl font-bold font-outfit text-primary leading-none">
-                      {
-                        userList.filter((u: any) => u.transactionType === "Impact Wealth")
-                          .length
-                      }
-                    </p>
+                    {isLoading || isFetching ? (
+                      <div className="h-7 flex items-center">
+                        <Loader2 className="h-5 w-5 text-primary animate-spin" />
+                      </div>
+                    ) : (
+                      <p className="text-2xl font-bold font-outfit text-primary leading-none">
+                        {
+                          userList.filter((u: any) => u.transactionType === "Impact Wealth")
+                            .length
+                        }
+                      </p>
+                    )}
                     <p className="text-[11px] font-semibold text-primary/80 mt-2">
                       Impact Wealth
                     </p>
@@ -491,9 +521,15 @@ export default function UsersPage() {
               <div className="h-[135px] bg-[#F2FFFF] border border-[#155D5F4D] rounded-[20px] p-5 flex flex-col justify-between hover:bg-[#E8FAFA] hover:shadow-md hover:scale-[1.01] transition-all duration-300 animate-in fade-in slide-in-from-top-2 duration-300">
                 <div className="flex items-start justify-between">
                   <div>
-                    <p className="text-2xl font-bold font-outfit text-primary leading-none">
-                      {userList.filter((u: any) => u.transactionType === "Mixed").length}
-                    </p>
+                    {isLoading || isFetching ? (
+                      <div className="h-7 flex items-center">
+                        <Loader2 className="h-5 w-5 text-primary animate-spin" />
+                      </div>
+                    ) : (
+                      <p className="text-2xl font-bold font-outfit text-primary leading-none">
+                        {userList.filter((u: any) => u.transactionType === "Mixed").length}
+                      </p>
+                    )}
                     <p className="text-[11px] font-semibold text-primary/80 mt-2">
                       Mixed Plan
                     </p>
@@ -585,10 +621,10 @@ export default function UsersPage() {
                      </span>
                   </TableCell>
                   <TableCell className="py-3 px-3 text-center whitespace-nowrap">
-                     <span className="text-[11px] font-bold text-dark px-2 py-1 bg-surface/50 rounded-lg">₦{Number(user.totalSavings || 0).toLocaleString()}</span>
+                     <span className="text-[11px] font-bold text-dark px-2 py-1 bg-surface/50 rounded-lg">₦{(Number(user.totalSavings || 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                   </TableCell>
                   <TableCell className="py-3 px-3 text-center whitespace-nowrap">
-                     <span className="text-[11px] font-bold text-emerald-600 px-2 py-1 bg-emerald-50 border border-emerald-100 rounded-lg">+₦{Number(user.totalInterest || 0).toLocaleString()}</span>
+                     <span className="text-[11px] font-bold text-emerald-600 px-2 py-1 bg-emerald-50 border border-emerald-100 rounded-lg">+₦{(Number(user.totalInterest || 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                   </TableCell>
                   <TableCell className="py-3 px-3 text-right whitespace-nowrap">
                     <DropdownMenu>

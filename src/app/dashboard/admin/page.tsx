@@ -61,7 +61,7 @@ const getSafeArray = (data: any) => {
 // Standard Dashboard Pages List for Permissions Mapping
 const DASHBOARD_PAGES = [
   { path: "/dashboard", label: "Overview" },
-  { path: "/dashboard/users", label: "Users Management" },
+  { path: "/dashboard/users", label: "User Management" },
   { path: "/dashboard/users/activities", label: "Activities Management" },
   { path: "/dashboard/users/transactions", label: "Transaction Management" },
   { path: "/dashboard/blog", label: "Blog Management" },

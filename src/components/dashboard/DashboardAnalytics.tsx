@@ -58,10 +58,24 @@ export function DashboardAnalytics() {
     users: userGrowthData?.data?.datasets?.[0]?.data?.[i] ?? 0,
   })) ?? [];
 
-  const wealthChartData = wealthGrowthData?.data?.labels?.map((label: string, i: number) => ({
-    name: label,
-    wealth: wealthGrowthData?.data?.datasets?.[0]?.data?.[i] ?? 0,
-  })) ?? [];
+  const wealthChartData = wealthGrowthData?.data?.labels?.map((label: string, i: number) => {
+    const rawVal = Number(wealthGrowthData?.data?.datasets?.[0]?.data?.[i] ?? 0);
+    const datasetLabel = wealthGrowthData?.data?.datasets?.[0]?.label ?? "";
+    const isMillions = datasetLabel.toLowerCase().includes("millions");
+
+    // Convert Millions NGN to Naira (e.g. 0.0005 Million NGN = 500 NGN) or kobo to Naira
+    let nairaVal = rawVal;
+    if (isMillions) {
+      nairaVal = rawVal * 1_000_000;
+    } else if (rawVal >= 100) {
+      nairaVal = rawVal / 100;
+    }
+
+    return {
+      name: label,
+      wealth: nairaVal,
+    };
+  }) ?? [];
 
   const getPeriodLabel = (filter: string) => {
     const f = filter.toLowerCase();
@@ -101,9 +115,9 @@ export function DashboardAnalytics() {
                 </span>
               </div>
             </div>
-            <div className="flex-1 w-full relative pl-8 pb-4">
+            <div className="flex-1 w-full relative pl-6 pb-4">
               <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-                <AreaChart data={userChartData} margin={{ top: 10, right: 0, left: -25, bottom: 0 }}>
+                <AreaChart data={userChartData} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
                   <defs>
                     <linearGradient id="colorUsers" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#86D7DA69" stopOpacity={1} />
@@ -118,7 +132,7 @@ export function DashboardAnalytics() {
                 </AreaChart>
               </ResponsiveContainer>
               <div className="absolute left-0 bottom-[-10px] w-full text-center text-[10px] font-medium text-slate">{getPeriodLabel(userFilter)}</div>
-              <div className="absolute left-[-20px] top-1/2 -translate-y-1/2 -rotate-90 text-[10px] font-medium text-slate whitespace-nowrap">Users</div>
+              <div className="absolute left-[-12px] top-1/2 -translate-y-1/2 -rotate-90 text-[10px] font-medium text-slate whitespace-nowrap">Users</div>
             </div>
           </div>
 
@@ -129,17 +143,25 @@ export function DashboardAnalytics() {
               <div className="flex justify-between items-center text-xs font-bold text-dark mb-4">
                 <span>{wealthLoading ? "Loading..." : `${wealthChartData.length} ${getPeriodLabel(wealthFilter)}`}</span>
                 <span className="flex items-center gap-1">
-                  Dataset: {wealthGrowthData?.data?.datasets?.[0]?.label ?? "Wealth"} <span className="text-[#65D36A]">↑</span>
+                  Dataset: Total AUM (NGN) <span className="text-[#65D36A]">↑</span>
                 </span>
               </div>
             </div>
-            <div className="flex-1 w-full relative pl-8 pb-4">
+            <div className="flex-1 w-full relative pl-12 pb-4">
               <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
-                <BarChart data={wealthChartData} margin={{ top: 10, right: 0, left: -25, bottom: 0 }}>
+                <BarChart data={wealthChartData} margin={{ top: 10, right: 10, left: -5, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748B' }} dy={10} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748B' }} />
-                  <Tooltip cursor={{ fill: 'rgba(0,0,0,0.05)' }} />
+                  <YAxis 
+                    axisLine={false} 
+                    tickLine={false} 
+                    tick={{ fontSize: 10, fill: '#64748B' }} 
+                    tickFormatter={(v) => v >= 1000000 ? `₦${(v/1000000).toFixed(1)}M` : v >= 1000 ? `₦${(v/1000).toFixed(0)}k` : `₦${v}`}
+                  />
+                  <Tooltip 
+                    formatter={(value: any) => [`₦${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, "AUM (Naira)"]}
+                    cursor={{ fill: 'rgba(0,0,0,0.05)' }} 
+                  />
                   <Bar dataKey="wealth" radius={[4, 4, 0, 0]} barSize={20}>
                     {wealthChartData.map((_: any, index: number) => (
                       <Cell key={`cell-${index}`} fill={index % 2 === 0 ? "#73D1D4" : "#A5EDB4"} />
@@ -147,23 +169,23 @@ export function DashboardAnalytics() {
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
-              <div className="absolute left-[-25px] top-1/2 -translate-y-1/2 -rotate-90 text-[10px] font-medium text-slate whitespace-nowrap">Total Wealth Growth</div>
+              <div className="absolute left-[-22px] top-1/2 -translate-y-1/2 -rotate-90 text-[10px] font-medium text-slate whitespace-nowrap">Total Wealth Growth (NGN)</div>
             </div>
           </div>
         </div>
 
         {/* Right Column - Donut Chart */}
-        <div className="w-full lg:w-[570px] h-[688px] rounded-[14px] bg-white border border-[#CCCCCC8A] pt-[16px] pb-[38px] pl-[30px] pr-[30px] lg:pl-[51px] lg:pr-[51px] flex flex-col gap-[41px]">
+        <div className="w-full lg:w-[570px] min-h-[688px] rounded-[14px] bg-white border border-[#CCCCCC8A] pt-[20px] pb-[32px] px-[24px] lg:px-[36px] flex flex-col justify-between gap-[24px]">
           <ChartHeader title="Transactions" filter={transactionFilter} setFilter={setTransactionFilter} />
 
-          <div className="flex-1 flex flex-col items-center justify-start">
-            <div className="h-[300px] w-full relative">
+          <div className="flex-1 flex flex-col items-center justify-between">
+            <div className="h-[250px] w-full relative">
               {donutLoading ? (
                 <div className="flex items-center justify-center h-full text-slate text-sm">Loading...</div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                   <PieChart>
-                    <Pie data={pieData} cx="50%" cy="50%" innerRadius={90} outerRadius={140} dataKey="value" stroke="none">
+                    <Pie data={pieData} cx="50%" cy="50%" innerRadius={75} outerRadius={115} dataKey="value" stroke="none">
                       {pieData.map((entry: any, index: number) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
@@ -173,21 +195,21 @@ export function DashboardAnalytics() {
                 </ResponsiveContainer>
               )}
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <span className="text-[34px] font-bold text-[#155D5F]">{pieTotal.toLocaleString()}</span>
+                <span className="text-[32px] font-bold text-[#155D5F]">{pieTotal.toLocaleString()}</span>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-x-8 gap-y-10 w-full mt-10">
+            <div className="grid grid-cols-2 gap-x-6 gap-y-5 w-full mt-4 pb-2">
               {legends.map((legend, i) => (
-                <div key={i} className="flex items-start gap-4">
-                  <div className={`p-2.5 rounded-full ${legend.color} shrink-0`}>
-                    <legend.icon className="w-5 h-5" />
+                <div key={i} className="flex items-start gap-3">
+                  <div className={`p-2 rounded-full ${legend.color} shrink-0`}>
+                    <legend.icon className="w-4 h-4" />
                   </div>
                   <div className="space-y-0.5">
-                    <div className="font-bold text-dark text-[18px] leading-none">
+                    <div className="font-bold text-dark text-[16px] leading-none">
                       {typeof legend.value === "number" ? legend.value.toLocaleString() : legend.value}
                     </div>
-                    <div className="text-[12px] text-dark/70 font-medium leading-tight max-w-[120px]">
+                    <div className="text-[11px] text-dark/70 font-medium leading-tight max-w-[140px]">
                       {legend.label}
                     </div>
                   </div>

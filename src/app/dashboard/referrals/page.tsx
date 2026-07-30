@@ -35,6 +35,7 @@ const TIME_FILTERS = ["All time", "Today", "Yesterday", "Last month", "6 months"
 type ActiveTab = "referrals" | "payouts";
 
 function getSafeArray(data: any): any[] {
+  if (!data) return [];
   if (Array.isArray(data)) return data;
   if (data?.data && Array.isArray(data.data)) return data.data;
   if (data?.items && Array.isArray(data.items)) return data.items;
@@ -57,8 +58,10 @@ function isWithinDateRange(dateStr: string, filter: string) {
 }
 
 function formatCurrency(val: any) {
-  if (val === null || val === undefined) return null;
-  return `₦${Number(val).toLocaleString("en-NG", { minimumFractionDigits: 2 })}`;
+  if (val === null || val === undefined) return "₦0.00";
+  const num = Number(val);
+  if (isNaN(num)) return "₦0.00";
+  return `₦${num.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function formatDate(dateStr: any) {
@@ -67,16 +70,17 @@ function formatDate(dateStr: any) {
 }
 
 function getName(item: any) {
-  return `${item?.firstName || ""} ${item?.lastName || ""}`.trim()
-    || item?.name
-    || item?.username
-    || item?.email
+  if (!item) return "Unknown";
+  return `${item.firstName || ""} ${item.lastName || ""}`.trim()
+    || item.name
+    || item.username
+    || item.email
     || "Unknown";
 }
 
 // Renders a KPI stat card — only if `value` is not null/undefined
-function StatCard({ icon: Icon, label, value, color, bgColor }: {
-  icon: any; label: string; value: string | number; color: string; bgColor: string;
+function StatCard({ icon: Icon, label, value, color, bgColor, isLoading }: {
+  icon: any; label: string; value: string | number; color: string; bgColor: string; isLoading?: boolean;
 }) {
   return (
     <div className="bg-white border border-border/50 rounded-2xl p-6 flex items-start gap-4 shadow-sm">
@@ -85,7 +89,13 @@ function StatCard({ icon: Icon, label, value, color, bgColor }: {
       </div>
       <div>
         <p className="text-[11px] font-bold text-slate/40 uppercase tracking-wider">{label}</p>
-        <p className="text-2xl font-extrabold text-dark mt-1 font-outfit">{value}</p>
+        {isLoading ? (
+          <div className="h-8 flex items-center mt-1">
+            <Loader2 className="h-5 w-5 text-primary animate-spin" />
+          </div>
+        ) : (
+          <p className="text-2xl font-extrabold text-dark mt-1 font-outfit">{value}</p>
+        )}
       </div>
     </div>
   );
@@ -96,7 +106,7 @@ export default function ReferralsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [timeFilter, setTimeFilter] = useState("All time");
 
-  const { data: statsData } = useGetReferralStatsQuery(undefined);
+  const { data: statsData, isLoading: statsLoading } = useGetReferralStatsQuery(undefined);
   const { data: referralsData, isLoading: referralsLoading } = useGetReferralsListQuery(undefined);
   const { data: payoutsData, isLoading: payoutsLoading } = useGetReferralPayoutsQuery(undefined);
   const [approvePayout, { isLoading: isApproving }] = useApproveReferralPayoutMutation();
@@ -114,60 +124,106 @@ export default function ReferralsPage() {
     }
   };
 
-  // Flatten stats — only render cards for fields that actually have a value
+  // Extract stats
   const stats = statsData?.data || statsData || {};
+  const totalReferralsVal = stats.totalReferrals ?? stats.total ?? stats.totalCount;
+  const payoutVolVal = stats.payoutVolumeKobo !== undefined
+    ? Number(stats.payoutVolumeKobo) / 100
+    : (stats.totalEarnings !== undefined
+      ? (Number(stats.totalEarnings) >= 100 ? Number(stats.totalEarnings) / 100 : Number(stats.totalEarnings))
+      : (stats.totalPaid !== undefined ? (Number(stats.totalPaid) >= 100 ? Number(stats.totalPaid) / 100 : Number(stats.totalPaid)) : null));
+  const pendingVal = stats.pendingPayouts ?? stats.pendingCount ?? stats.pending;
+  const conversionRateVal = stats.conversionRate ?? stats.rate;
 
-  // Build stat cards dynamically from what the backend sends
   const statCards = [
-    stats.totalReferrals !== undefined && {
-      icon: Users, label: "Total Referrals", value: stats.totalReferrals,
+    totalReferralsVal !== undefined && {
+      icon: Users, label: "Total Referrals", value: totalReferralsVal,
       color: "text-primary", bgColor: "bg-primary/5",
     },
-    stats.totalEarnings !== undefined && {
-      icon: Wallet, label: "Total Earnings Paid", value: formatCurrency(stats.totalEarnings),
+    payoutVolVal !== null && payoutVolVal !== undefined && {
+      icon: Wallet, label: "Total Payout Volume", value: formatCurrency(payoutVolVal),
       color: "text-emerald-600", bgColor: "bg-emerald-50",
     },
-    stats.totalPaid !== undefined && {
-      icon: Wallet, label: "Total Paid Out", value: formatCurrency(stats.totalPaid),
-      color: "text-emerald-600", bgColor: "bg-emerald-50",
-    },
-    stats.pendingPayouts !== undefined && {
-      icon: Gift, label: "Pending Payouts", value: stats.pendingPayouts,
+    pendingVal !== undefined && {
+      icon: Gift, label: "Pending Payouts", value: pendingVal,
       color: "text-amber-500", bgColor: "bg-amber-50",
     },
-    stats.conversionRate !== undefined && {
-      icon: TrendingUp, label: "Conversion Rate", value: `${stats.conversionRate}%`,
+    conversionRateVal !== undefined && {
+      icon: TrendingUp, label: "Conversion Rate", value: `${conversionRateVal}%`,
       color: "text-blue-500", bgColor: "bg-blue-50",
-    },
-    stats.pendingCount !== undefined && {
-      icon: Gift, label: "Pending Payouts", value: stats.pendingCount,
-      color: "text-amber-500", bgColor: "bg-amber-50",
-    },
-    stats.rate !== undefined && {
-      icon: TrendingUp, label: "Conversion Rate", value: `${stats.rate}%`,
-      color: "text-blue-500", bgColor: "bg-blue-50",
-    },
-    stats.total !== undefined && stats.totalReferrals === undefined && {
-      icon: Users, label: "Total Referrals", value: stats.total,
-      color: "text-primary", bgColor: "bg-primary/5",
     },
   ].filter(Boolean) as any[];
 
-  const referralList = getSafeArray(referralsData);
-  const payoutList = getSafeArray(payoutsData);
+  const rawReferralList = getSafeArray(referralsData);
 
-  const filteredReferrals = referralList.filter((ref: any) => {
-    const name = getName(ref).toLowerCase();
-    const email = (ref.email || "").toLowerCase();
+  // Group referral events by Referrer for Tab 1 ("Referrals")
+  const groupedReferrers = (() => {
+    const map = new Map<string, any>();
+
+    rawReferralList.forEach((item: any) => {
+      const refUser = item.referrer || (item.firstName || item.email ? item : null);
+      const key = item.referrerId || refUser?.id || item.id || item.email || "unknown";
+
+      const amt = item.amountKobo !== undefined
+        ? Number(item.amountKobo) / 100
+        : (item.amount !== undefined ? (Number(item.amount) >= 100 ? Number(item.amount) / 100 : Number(item.amount)) : 0);
+
+      if (!map.has(key)) {
+        map.set(key, {
+          id: key,
+          name: getName(refUser || item),
+          email: refUser?.email || item.email || "—",
+          imageUrl: refUser?.imageUrl || item.imageUrl || "",
+          totalEarnings: 0,
+          referralCount: 0,
+          joinedDate: refUser?.createdAt || item.joinedDate || item.createdAt,
+        });
+      }
+
+      const existing = map.get(key);
+      existing.totalEarnings += amt;
+      existing.referralCount += 1;
+    });
+
+    return Array.from(map.values());
+  })();
+
+  const filteredReferrals = groupedReferrers.filter((ref: any) => {
+    const name = ref.name.toLowerCase();
+    const email = ref.email.toLowerCase();
     const matchesSearch = name.includes(searchQuery.toLowerCase()) || email.includes(searchQuery.toLowerCase());
-    const matchesDate = isWithinDateRange(ref.joinedDate ?? ref.createdAt, timeFilter);
+    const matchesDate = isWithinDateRange(ref.joinedDate, timeFilter);
     return matchesSearch && matchesDate;
   });
 
-  const filteredPayouts = payoutList.filter((p: any) => {
-    const name = getName(p.referrer ?? p).toLowerCase();
-    const email = (p.referrer?.email || p.email || "").toLowerCase();
-    return name.includes(searchQuery.toLowerCase()) || email.includes(searchQuery.toLowerCase());
+  // Combine payouts for Tab 2 ("Payout History")
+  const combinedPayouts = (() => {
+    const payoutsFromData = getSafeArray(payoutsData);
+    const map = new Map<string, any>();
+
+    payoutsFromData.forEach((p: any) => {
+      if (p.id) map.set(p.id, p);
+    });
+
+    rawReferralList.forEach((r: any) => {
+      if (r.id && !map.has(r.id)) {
+        map.set(r.id, r);
+      }
+    });
+
+    return Array.from(map.values());
+  })();
+
+  const filteredPayouts = combinedPayouts.filter((p: any) => {
+    const referrerObj = p.referrer || (p.firstName ? p : null);
+    const refereeObj = p.referee || p.referredUser;
+
+    const rName = getName(referrerObj || p).toLowerCase();
+    const rEmail = (referrerObj?.email || p.email || "").toLowerCase();
+    const refName = getName(refereeObj || {}).toLowerCase();
+    const query = searchQuery.toLowerCase();
+
+    return rName.includes(query) || rEmail.includes(query) || refName.includes(query);
   });
 
   return (
@@ -183,7 +239,7 @@ export default function ReferralsPage() {
       {statCards.length > 0 && (
         <div className={`grid gap-4 ${statCards.length === 1 ? "grid-cols-1 max-w-xs" : statCards.length === 2 ? "grid-cols-2" : statCards.length === 3 ? "grid-cols-3" : "grid-cols-4"}`}>
           {statCards.map((card: any, i: number) => (
-            <StatCard key={i} {...card} />
+            <StatCard key={i} {...card} isLoading={statsLoading || referralsLoading} />
           ))}
         </div>
       )}
@@ -201,9 +257,9 @@ export default function ReferralsPage() {
           className={`px-5 py-2 rounded-lg text-[13px] font-bold transition-all flex items-center gap-2 ${activeTab === "payouts" ? "bg-white text-dark shadow-sm border border-border/30" : "text-slate/60 hover:text-dark"}`}
         >
           Payout History
-          {payoutList.length > 0 && (
+          {combinedPayouts.length > 0 && (
             <span className="bg-primary text-white text-[9px] font-black rounded-full px-1.5 py-0.5 min-w-[18px] text-center">
-              {payoutList.length}
+              {combinedPayouts.length}
             </span>
           )}
         </button>
@@ -271,10 +327,10 @@ export default function ReferralsPage() {
                         <Avatar className="h-10 w-10 border border-primary/5">
                           <AvatarImage src={ref.imageUrl || ""} />
                           <AvatarFallback className="bg-primary/5 text-primary text-xs">
-                            {getName(ref).charAt(0).toUpperCase()}
+                            {ref.name.charAt(0).toUpperCase()}
                           </AvatarFallback>
                         </Avatar>
-                        <span className="font-semibold text-dark text-[13px]">{getName(ref)}</span>
+                        <span className="font-semibold text-dark text-[13px]">{ref.name}</span>
                       </div>
                     </TableCell>
                     <TableCell className="py-6 whitespace-nowrap">
@@ -283,13 +339,13 @@ export default function ReferralsPage() {
                       </Link>
                     </TableCell>
                     <TableCell className="py-6 text-[12px] text-dark font-medium">
-                      {formatCurrency(ref.totalEarnings ?? ref.earnings) ?? "₦0.00"}
+                      {formatCurrency(ref.totalEarnings)}
                     </TableCell>
                     <TableCell className="py-6 text-[12px] text-dark font-medium">
-                      {ref.referralCount ?? ref.totalInvites ?? ref.count ?? 0}
+                      {ref.referralCount}
                     </TableCell>
                     <TableCell className="py-6 text-[12px] text-dark font-medium">
-                      {formatDate(ref.joinedDate ?? ref.createdAt)}
+                      {formatDate(ref.joinedDate)}
                     </TableCell>
                   </TableRow>
                 ))
@@ -310,11 +366,10 @@ export default function ReferralsPage() {
                 <TableHead className="text-slate/40 font-medium text-xs pb-6">Reward Amount</TableHead>
                 <TableHead className="text-slate/40 font-medium text-xs pb-6">Status</TableHead>
                 <TableHead className="text-slate/40 font-medium text-xs pb-6">Date</TableHead>
-                <TableHead className="text-slate/40 font-medium text-xs pb-6">Action</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {payoutsLoading ? (
+              {payoutsLoading && referralsLoading ? (
                 <TableRow className="border-none hover:bg-transparent">
                   <TableCell colSpan={5} className="py-24 text-center">
                     <Loader2 className="h-8 w-8 animate-spin text-primary/40 mx-auto" />
@@ -322,66 +377,63 @@ export default function ReferralsPage() {
                 </TableRow>
               ) : filteredPayouts.length === 0 ? (
                 <TableRow className="border-none hover:bg-transparent">
-                  <TableCell colSpan={6} className="py-24 text-center">
+                  <TableCell colSpan={5} className="py-24 text-center">
                     <p className="text-dark font-bold text-base">No payout records</p>
                     <p className="text-slate/50 text-sm mt-1">No referral rewards have been recorded yet.</p>
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredPayouts.map((payout: any, i: number) => (
-                  <TableRow key={payout.id || i} className="border-border/50 hover:bg-surface/30 transition-all font-outfit">
-                    <TableCell className="py-6 whitespace-nowrap">
-                      <div className="flex items-center gap-3">
-                        <Avatar className="h-10 w-10 border border-primary/5">
-                          <AvatarImage src={payout.referrer?.imageUrl || ""} />
-                          <AvatarFallback className="bg-primary/5 text-primary text-xs">
-                            {getName(payout.referrer ?? payout).charAt(0).toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <p className="font-semibold text-dark text-[13px]">{getName(payout.referrer ?? payout)}</p>
-                          <Link href={`mailto:${payout.referrer?.email || payout.email}`} className="text-primary hover:underline text-[11px]">
-                            {payout.referrer?.email || payout.email || "—"}
-                          </Link>
+                filteredPayouts.map((payout: any, i: number) => {
+                  const referrerObj = payout.referrer || (payout.firstName ? payout : null);
+                  const refereeObj = payout.referee || payout.referredUser;
+
+                  const rawAmt = payout.amountKobo !== undefined
+                    ? Number(payout.amountKobo) / 100
+                    : (payout.rewardAmount !== undefined
+                      ? (Number(payout.rewardAmount) >= 100 ? Number(payout.rewardAmount) / 100 : Number(payout.rewardAmount))
+                      : (payout.amount !== undefined ? (Number(payout.amount) >= 100 ? Number(payout.amount) / 100 : Number(payout.amount)) : 0));
+
+                  const statusStr = (payout.status || "PENDING").toUpperCase();
+
+                  return (
+                    <TableRow key={payout.id || i} className="border-border/50 hover:bg-surface/30 transition-all font-outfit">
+                      <TableCell className="py-6 whitespace-nowrap">
+                        <div className="flex items-center gap-3">
+                          <Avatar className="h-10 w-10 border border-primary/5">
+                            <AvatarImage src={referrerObj?.imageUrl || ""} />
+                            <AvatarFallback className="bg-primary/5 text-primary text-xs">
+                              {getName(referrerObj || payout).charAt(0).toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <p className="font-semibold text-dark text-[13px]">{getName(referrerObj || payout)}</p>
+                            <Link href={`mailto:${referrerObj?.email || payout.email}`} className="text-primary hover:underline text-[11px]">
+                              {referrerObj?.email || payout.email || "—"}
+                            </Link>
+                          </div>
                         </div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="py-6 text-[12px] text-dark font-medium">
-                      {getName(payout.referee ?? payout.referredUser ?? {})}
-                    </TableCell>
-                    <TableCell className="py-6 text-[12px] font-bold text-emerald-600">
-                      {formatCurrency(payout.rewardAmount ?? payout.amount) ?? "—"}
-                    </TableCell>
-                    <TableCell className="py-6">
-                      <Badge className={`shadow-none text-[10px] font-bold px-2.5 py-1 rounded-lg border ${
-                        (payout.status || "").toUpperCase() === "PAID" || (payout.status || "").toUpperCase() === "COMPLETED"
-                          ? "bg-emerald-50 text-emerald-600 border-emerald-100"
-                          : "bg-amber-50 text-amber-600 border-amber-100"
-                      }`}>
-                        {payout.status || "PENDING"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="py-6 text-[12px] text-dark font-medium">
-                      {formatDate(payout.createdAt ?? payout.date)}
-                    </TableCell>
-                    <TableCell className="py-6">
-                      {(payout.status || "").toUpperCase() === "PENDING" && (
-                        <button
-                          onClick={() => handleApprove(payout.id)}
-                          disabled={isApproving && approvingId === payout.id}
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 text-primary hover:bg-primary/20 transition-all rounded-lg text-[11px] font-bold disabled:opacity-50"
-                        >
-                          {isApproving && approvingId === payout.id ? (
-                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          ) : (
-                            <CheckCircle className="w-3.5 h-3.5" />
-                          )}
-                          Approve
-                        </button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))
+                      </TableCell>
+                      <TableCell className="py-6 text-[12px] text-dark font-medium">
+                        {refereeObj ? getName(refereeObj) : (payout.referredUserName || "—")}
+                      </TableCell>
+                      <TableCell className="py-6 text-[12px] font-bold text-emerald-600">
+                        {formatCurrency(rawAmt)}
+                      </TableCell>
+                      <TableCell className="py-6">
+                        <Badge className={`shadow-none text-[10px] font-bold px-2.5 py-1 rounded-lg border ${
+                          statusStr === "PAID" || statusStr === "COMPLETED" || statusStr === "SUCCESSFUL"
+                            ? "bg-emerald-50 text-emerald-600 border-emerald-100"
+                            : "bg-amber-50 text-amber-600 border-amber-100"
+                        }`}>
+                          {statusStr}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="py-6 text-[12px] text-dark font-medium">
+                        {formatDate(payout.paidAt ?? payout.createdAt ?? payout.date)}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
               )}
             </TableBody>
           </Table>

@@ -13,6 +13,7 @@ import {
   UserCheck,
   Globe,
   Monitor,
+  Loader2,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -269,7 +270,13 @@ export default function AuditLogsPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-[#F2FFFF] border border-[#155D5F4D] rounded-[20px] p-5 flex items-start justify-between shadow-[0px_4px_10px_0px_rgba(0,0,0,0.02)]">
           <div className="space-y-1">
-            <p className="text-[26px] font-extrabold text-[#155D5F] leading-none">{totalEvents}</p>
+            {isLoading || isFetching ? (
+              <div className="h-7 flex items-center">
+                <Loader2 className="h-5 w-5 text-[#155D5F] animate-spin" />
+              </div>
+            ) : (
+              <p className="text-[26px] font-extrabold text-[#155D5F] leading-none">{totalEvents}</p>
+            )}
             <p className="text-[11px] font-bold text-[#155D5F] pt-1">Total Audit Events Traced</p>
           </div>
           <div className="h-9 w-9 bg-[#155D5F] text-white rounded-full flex items-center justify-center shrink-0">
@@ -279,7 +286,13 @@ export default function AuditLogsPage() {
 
         <div className="bg-[#F2FFFF] border border-[#155D5F4D] rounded-[20px] p-5 flex items-start justify-between shadow-[0px_4px_10px_0px_rgba(0,0,0,0.02)]">
           <div className="space-y-1">
-            <p className="text-[26px] font-extrabold text-[#155D5F] leading-none">{flaggedIncidents}</p>
+            {isLoading || isFetching ? (
+              <div className="h-7 flex items-center">
+                <Loader2 className="h-5 w-5 text-[#155D5F] animate-spin" />
+              </div>
+            ) : (
+              <p className="text-[26px] font-extrabold text-[#155D5F] leading-none">{flaggedIncidents}</p>
+            )}
             <p className="text-[11px] font-bold text-[#155D5F] pt-1">Flagged Access Incidents</p>
           </div>
           <div className="h-9 w-9 bg-red-500 text-white rounded-full flex items-center justify-center shrink-0 shadow-sm shadow-red-500/10">
@@ -289,7 +302,13 @@ export default function AuditLogsPage() {
 
         <div className="bg-[#F2FFFF] border border-[#155D5F4D] rounded-[20px] p-5 flex items-start justify-between shadow-[0px_4px_10px_0px_rgba(0,0,0,0.02)]">
           <div className="space-y-1">
-            <p className="text-[26px] font-extrabold text-[#155D5F] leading-none">{permissionsAltered}</p>
+            {isLoading || isFetching ? (
+              <div className="h-7 flex items-center">
+                <Loader2 className="h-5 w-5 text-[#155D5F] animate-spin" />
+              </div>
+            ) : (
+              <p className="text-[26px] font-extrabold text-[#155D5F] leading-none">{permissionsAltered}</p>
+            )}
             <p className="text-[11px] font-bold text-[#155D5F] pt-1">Team Permissions Altered</p>
           </div>
           <div className="h-9 w-9 bg-amber-500 text-white rounded-full flex items-center justify-center shrink-0 shadow-sm">

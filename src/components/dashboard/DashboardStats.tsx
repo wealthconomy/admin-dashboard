@@ -8,7 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ChevronDown, ChevronUp, ClipboardList, Users, UserPlus, Briefcase, CreditCard, Wallet } from "lucide-react";
+import { ChevronDown, ChevronUp, ClipboardList, Users, UserPlus, Briefcase, CreditCard, Wallet, Loader2 } from "lucide-react";
 
 interface DashboardStatsProps {
   timeFilter: string;
@@ -39,14 +39,18 @@ export function DashboardStats({ timeFilter, setTimeFilter }: DashboardStatsProp
     if (isLoading) return "—";
     if (isError) return "Error";
     if (!apiField) return fallback;
-    const val = apiField.value?.value || apiField.value || 0;
+    const raw = apiField.value?.value || apiField.value || 0;
     
     // Convert NGN to ₦, or use ₦ if forceCurrency is true
     const currencyStr = apiField.currency === "NGN" ? "₦" : (apiField.currency || (forceCurrency ? "₦" : ""));
     
+    // Monetary values from the API are returned in kobo (smallest NGN unit).
+    // Divide by 100 to convert to naira before displaying.
+    const val = currencyStr ? Number(raw) / 100 : Number(raw);
+    
     return currencyStr 
-      ? `${currencyStr}${Number(val).toLocaleString(undefined, { minimumFractionDigits: 0 })}`
-      : Number(val).toLocaleString(undefined, { maximumFractionDigits: 0 });
+      ? `${currencyStr}${val.toLocaleString(undefined, { minimumFractionDigits: 0 })}`
+      : val.toLocaleString(undefined, { maximumFractionDigits: 0 });
   };
 
   const formatSubtext = (apiField: any, fallback: string) => {
@@ -152,7 +156,13 @@ export function DashboardStats({ timeFilter, setTimeFilter }: DashboardStatsProp
               <div className="flex items-start justify-between">
                 <div>
                   <div className="text-[28px] font-semibold text-[#155D5F] leading-none mb-1">
-                    {stat.value}
+                    {isLoading ? (
+                      <div className="h-7 flex items-center">
+                        <Loader2 className="h-6 w-6 text-[#155D5F] animate-spin" />
+                      </div>
+                    ) : (
+                      stat.value
+                    )}
                   </div>
                   <div className="text-[13px] font-semibold text-[#155D5F]">
                     {stat.title}

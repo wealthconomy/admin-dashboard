@@ -39,17 +39,61 @@ function BlogViewAllContent() {
         ? blogsResponse.data.items
         : [];
   
+  const parseAuthorName = (item: any): string => {
+    if (!item) return "Unknown";
+    const author = item.author ?? item.authorName ?? item.user;
+    if (!author) return "Unknown";
+    if (typeof author === "string") return author;
+    if (typeof author === "object") {
+      return author.name 
+        || `${author.firstName || ""} ${author.lastName || ""}`.trim() 
+        || author.username 
+        || author.email 
+        || "Unknown";
+    }
+    return String(author);
+  };
+
+  const parseAuthorAvatar = (item: any): string => {
+    if (typeof item.authorAvatar === "string" && item.authorAvatar) return item.authorAvatar;
+    const authorObj = typeof item.author === "object" ? item.author : null;
+    if (authorObj) {
+      return authorObj.image || authorObj.imageUrl || authorObj.avatar || authorObj.avatarUrl || "";
+    }
+    return "";
+  };
+
+  const parseCategory = (item: any): string => {
+    const cat = item.category;
+    if (!cat) return "Uncategorized";
+    if (typeof cat === "string") return cat;
+    if (typeof cat === "object") return cat.name || cat.title || cat.label || "Uncategorized";
+    return String(cat);
+  };
+
+  const parseImage = (item: any): string => {
+    const img = item.image || item.coverImage || item.imageUrl || item.bannerUrl;
+    let url = "";
+    if (typeof img === "string") url = img;
+    else if (typeof img === "object" && img?.url) url = img.url;
+
+    if (url) {
+      return url.replace(/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/, process.env.NEXT_PUBLIC_API_URL || "");
+    }
+    return "https://images.unsplash.com/photo-1554224155-6726b3ff858f?q=80&w=400&h=200&auto=format&fit=crop";
+  };
+  
   const articles: Article[] = rawArticles.map((a: any) => ({
     id: a.id || a._id,
-    title: a.title || "Untitled",
-    author: a.author || "Unknown",
-    authorAvatar: a.authorAvatar || "",
+    title: typeof a.title === "string" ? a.title : (a.title?.name || "Untitled"),
+    author: parseAuthorName(a),
+    authorAvatar: parseAuthorAvatar(a),
     timeAgo: a.createdAt ? new Date(a.createdAt).toLocaleDateString() : "Just now",
-    bookmarks: a.bookmarks || 0,
-    views: a.views || 0,
-    category: a.category || "General",
-    categoryColor: a.categoryColor || "General",
-    image: a.image?.replace(/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/, process.env.NEXT_PUBLIC_API_URL || "") || "https://images.unsplash.com/photo-1554224155-6726b3ff858f?q=80&w=400&h=200&auto=format&fit=crop",
+    bookmarks: typeof a.bookmarks === "number" ? a.bookmarks : 0,
+    views: typeof a.views === "number" ? a.views : 0,
+    category: parseCategory(a),
+    categoryColor: typeof a.categoryColor === "string" ? a.categoryColor : "General",
+    image: parseImage(a),
     status: (a.status || "draft") as ArticleStatus,
     scheduledFor: a.scheduledFor ? new Date(a.scheduledFor).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : undefined,
   }));

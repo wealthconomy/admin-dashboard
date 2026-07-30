@@ -18,17 +18,36 @@ import {
   DropdownMenu, DropdownMenuContent,
   DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useGetTransactionsQuery } from "@/lib/redux/features/usersApi";
+import { useGetTransactionsQuery, useGetUsersQuery } from "@/lib/redux/features/usersApi";
+import { toast } from "sonner";
 import { format } from "date-fns";
 
 const getSafeArray = (data: any) => {
   if (!data) return [];
   if (Array.isArray(data)) return data;
+  // Handle: { data: { items: [...] } }  ← actual API shape
+  if (data.data && !Array.isArray(data.data)) {
+    const inner = data.data;
+    if (inner.items && Array.isArray(inner.items)) return inner.items;
+    if (Array.isArray(inner)) return inner;
+  }
+  // Handle: { data: [...] }
   if (data.data && Array.isArray(data.data)) return data.data;
+  // Handle: { items: [...] }
   if (data.items && Array.isArray(data.items)) return data.items;
   return [];
 };
 
+// Descriptions from the backend embed raw kobo amounts as integers (e.g. "Referral reward: 50000").
+// This helper finds standalone integers ≥ 100 in the text and converts them to ₦ naira.
+const formatDescription = (desc: string | null | undefined): string => {
+  if (!desc) return "-";
+  return desc.replace(/\b(\d{3,})\b/g, (match) => {
+    const n = Number(match);
+    // Only treat as kobo if it's a round number that makes sense as a monetary value
+    return `₦${(n / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+  });
+};
 
 
 const STATUSES = ["Successful", "Pending", "Failed"];
@@ -49,6 +68,27 @@ export default function TransactionsPage() {
     limit: 50
   });
   const transactionList = getSafeArray(transactionsData);
+
+  // Fetch users to build an email → userId map.
+  // The transaction API returns email but NOT userId, so we need this lookup.
+  const { data: usersData } = useGetUsersQuery({ limit: 200 });
+  const emailToUserId = (() => {
+    const map = new Map<string, string>();
+    const list = usersData?.data?.items || usersData?.data || [];
+    if (Array.isArray(list)) {
+      list.forEach((u: any) => { if (u.email && u.id) map.set(u.email, u.id); });
+    }
+    return map;
+  })();
+
+  const navigateToUser = (tx: any) => {
+    const userId = tx.userId || emailToUserId.get(tx.email);
+    if (userId) {
+      router.push(`/dashboard/users/${userId}`);
+    } else {
+      toast.error("Could not find user profile — no user ID linked to this transaction.");
+    }
+  };
 
   const filtered = transactionList.filter((tx: any) => {
     const matchStatus = statusFilter === "All Status" || tx.status === statusFilter;
@@ -129,7 +169,7 @@ export default function TransactionsPage() {
           <Table className="min-w-full">
             <TableHeader className="bg-surface/50">
               <TableRow className="border-border/50 hover:bg-transparent">
-                {["Timestamp", "User", "Amount", "Tx ID", "Action", "Status", "Portfolio", ""].map((h, i) => (
+                {["Timestamp", "User", "Amount", "Tx ID", "Action", "Status", ""].map((h, i) => (
                   <TableHead key={i} className="py-4 px-4 text-slate/50 font-bold text-[11px] uppercase tracking-widest">{h}</TableHead>
                 ))}
               </TableRow>
@@ -137,7 +177,7 @@ export default function TransactionsPage() {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="py-20 text-center">
+                  <TableCell colSpan={7} className="py-20 text-center">
                     <div className="flex flex-col items-center gap-2">
                       <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
                       <p className="text-sm font-medium text-slate/40">Loading transactions...</p>
@@ -159,21 +199,14 @@ export default function TransactionsPage() {
                     <span className="text-[10px] text-slate/40 font-bold uppercase">{tx.id || "-"}</span>
                   </TableCell>
                   <TableCell className="py-5 px-4">
-                    <div className="flex items-center gap-2.5">
-                      <Avatar className="h-7 w-7 border border-primary/5 shadow-sm shrink-0">
-                        <AvatarImage src={tx.user?.imageUrl || tx.imageUrl || ""} />
-                        <AvatarFallback className="bg-primary/5 text-primary text-[10px] font-bold">{(tx.userName || tx.email || "U").charAt(0)}</AvatarFallback>
-                      </Avatar>
-                      <span className="font-semibold text-[12px] text-dark truncate max-w-[130px]">{tx.userName || tx.email || "-"}</span>
-                    </div>
+                    <span className="font-semibold text-[12px] text-dark">{tx.userName || tx.email || "-"}</span>
                   </TableCell>
-                  <TableCell className="py-5 px-4 text-[13px] font-bold text-dark">{tx.amount || "0"}</TableCell>
+                  <TableCell className="py-5 px-4 text-[13px] font-bold text-dark">
+                    ₦{(Number(tx.amount || 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </TableCell>
                   <TableCell className="py-5 px-4 text-[11px] font-bold text-slate/60">#{tx.reference || tx.id || "-"}</TableCell>
                   <TableCell className="py-5 px-4 text-[12px] font-medium text-dark/70">{tx.actionType || tx.type || "-"}</TableCell>
                   <TableCell className="py-5 px-4">{statusBadge(tx.status || "Pending")}</TableCell>
-                  <TableCell className="py-5 px-4">
-                    <span className="text-[11px] font-bold text-slate/70 px-3 py-1.5 bg-surface rounded-lg border border-border/20">{tx.description || tx.type || "-"}</span>
-                  </TableCell>
                   <TableCell className="py-5 px-4 text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -182,7 +215,7 @@ export default function TransactionsPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-44 rounded-[14px] border-border/50 shadow-xl p-1 bg-white">
-                        <DropdownMenuItem onClick={() => router.push(`/dashboard/users/${tx.id}`)} className="py-2.5 px-4 text-xs font-bold focus:bg-surface text-dark cursor-pointer rounded-xl gap-2">
+                        <DropdownMenuItem onClick={() => navigateToUser(tx)} className="py-2.5 px-4 text-xs font-bold focus:bg-surface text-dark cursor-pointer rounded-xl gap-2">
                           <User className="h-3.5 w-3.5 text-primary" /> View Profile
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => setLogModal(tx)} className="py-2.5 px-4 text-xs font-bold focus:bg-surface text-dark cursor-pointer rounded-xl gap-2">
@@ -197,7 +230,7 @@ export default function TransactionsPage() {
                 </TableRow>
               );}) : (
                 <TableRow>
-                  <TableCell colSpan={8} className="py-20 text-center">
+                  <TableCell colSpan={7} className="py-20 text-center">
                     <div className="flex flex-col items-center gap-2">
                       <ArrowRightLeft className="h-8 w-8 text-slate/20" />
                       <p className="text-sm font-medium text-slate/40">No transactions match your search.</p>
@@ -228,7 +261,7 @@ export default function TransactionsPage() {
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-44 rounded-[14px] border-border/50 shadow-xl p-1 bg-white">
-                  <DropdownMenuItem onClick={() => { setLogModal(null); router.push(`/dashboard/users/${logModal.id}`); }} className="py-2.5 px-4 text-sm font-medium focus:bg-surface text-dark cursor-pointer rounded-xl gap-2">
+                  <DropdownMenuItem onClick={() => { setLogModal(null); navigateToUser(logModal); }} className="py-2.5 px-4 text-sm font-medium focus:bg-surface text-dark cursor-pointer rounded-xl gap-2">
                     <User className="h-4 w-4 text-slate/50" /> View Account
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => { setReceiptModal(logModal); setLogModal(null); }} className="py-2.5 px-4 text-sm font-medium focus:bg-surface text-dark cursor-pointer rounded-xl gap-2">
@@ -239,7 +272,7 @@ export default function TransactionsPage() {
             </div>
 
             <div className="flex-1 overflow-y-auto p-7 pb-2">
-              <p className="text-[13px] text-slate/40 font-medium mb-1">{logModal.description || "Transaction Detail"}</p>
+              <p className="text-[13px] text-slate/40 font-medium mb-1">{formatDescription(logModal.description) || "Transaction Detail"}</p>
               <h2 className="text-[24px] font-bold text-dark font-outfit mb-5">{logModal.type || logModal.actionType}</h2>
 
               <div className="grid grid-cols-2 gap-x-10">
@@ -250,7 +283,7 @@ export default function TransactionsPage() {
                     <div><p className="text-[12px] font-bold text-dark">User&apos;s Name</p><p className="text-[13px] text-slate/60 mt-0.5">{logModal.userName || logModal.email || "-"}</p></div>
                     <div>
                       <p className="text-[12px] font-bold text-dark">User&apos;s ID</p>
-                      <p className="text-[13px] text-[#1D84D9] font-semibold mt-0.5 cursor-pointer hover:underline" onClick={() => { setLogModal(null); router.push(`/dashboard/users/${logModal.id}`); }}>{logModal.id}</p>
+                       <p className="text-[13px] text-[#1D84D9] font-semibold mt-0.5 cursor-pointer hover:underline" onClick={() => { setLogModal(null); navigateToUser(logModal); }}>{logModal.id}</p>
                     </div>
                     <div><p className="text-[12px] font-bold text-dark">Email</p><a href={`mailto:${logModal.email}`} className="text-[13px] text-[#1D84D9] font-semibold mt-0.5 hover:underline block">{logModal.email || "-"}</a></div>
                     <div><p className="text-[12px] font-bold text-dark">Action</p><p className="text-[13px] text-slate/60 mt-0.5">{logModal.actionType || "-"}</p></div>
@@ -274,10 +307,10 @@ export default function TransactionsPage() {
                   <div className="space-y-4">
                     <div>
                       <p className="text-[12px] font-bold text-dark">Description</p>
-                      <div className="mt-1 flex gap-4"><span className="text-[12px] text-slate/70 font-medium">{logModal.description || "-"}</span></div>
+                      <div className="mt-1 flex gap-4"><span className="text-[12px] text-slate/70 font-medium">{formatDescription(logModal.description)}</span></div>
                     </div>
                     <div><p className="text-[12px] font-bold text-dark">Transaction Ref</p><p className="text-[13px] text-slate/60 mt-0.5">{logModal.reference || logModal.id || "-"}</p></div>
-                    <div><p className="text-[12px] font-bold text-dark">Transaction Amount</p><p className="text-[13px] text-slate/60 mt-0.5">{logModal.amount || "0"}</p></div>
+                    <div><p className="text-[12px] font-bold text-dark">Transaction Amount</p><p className="text-[13px] text-slate/60 mt-0.5">₦{(Number(logModal.amount || 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
                   </div>
 
                   <h3 className="text-[15px] font-bold text-dark mt-6 mb-4">System Logs</h3>
@@ -310,7 +343,7 @@ export default function TransactionsPage() {
               <div className="flex items-start justify-between mb-1">
                 <div>
                   <p className="text-[11px] text-emerald-600 font-bold">{receiptModal.type || receiptModal.actionType || "Transaction"}</p>
-                  <p className="text-[22px] font-black text-dark leading-tight">{receiptModal.amount || "0"}</p>
+                  <p className="text-[22px] font-black text-dark leading-tight">₦{(Number(receiptModal.amount || 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
                   <p className="text-[11px] text-slate/50 font-medium mt-1">{receiptModal.timestamp ? format(new Date(receiptModal.timestamp), "HH:mm, MMM dd, yyyy") : "-"}</p>
                 </div>
                 <div className="flex items-center gap-1 bg-white border border-border/50 rounded-lg px-3 py-1.5 shadow-sm mt-1">
@@ -331,7 +364,7 @@ export default function TransactionsPage() {
                   ["Sender", receiptModal.userName || receiptModal.email || "-"],
                   ["Transaction type", receiptModal.actionType || receiptModal.type || "-"],
                   ["SessionID", receiptModal.id],
-                  ["Narrative", receiptModal.description || "-"],
+                  ["Narrative", formatDescription(receiptModal.description)],
                 ].map(([label, value], idx) => (
                   <div key={idx} className="flex justify-between items-start gap-2">
                     <span className="text-[11px] text-slate/40 font-medium shrink-0">{label as string}</span>
