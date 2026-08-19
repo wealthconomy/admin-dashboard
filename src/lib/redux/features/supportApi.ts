@@ -2,13 +2,17 @@ import { apiSlice } from "../apiSlice";
 
 export const supportApi = apiSlice.injectEndpoints({
   endpoints: (builder) => ({
-    getSupportChats: builder.query<any, { stage: string; search: string }>({
-      query: ({ stage, search }) => {
-        let url = `/admin/support/chats?stage=${stage}`;
-        if (search) {
-          url += `&search=${encodeURIComponent(search)}`;
+    getSupportChats: builder.query<any, { stage?: string; search?: string; q?: string }>({
+      query: ({ stage, search, q }) => {
+        const params = new URLSearchParams();
+        if (stage) params.append("stage", stage);
+        const queryTerm = search || q;
+        if (queryTerm) {
+          params.append("q", queryTerm);
+          params.append("search", queryTerm);
         }
-        return url;
+        const qs = params.toString();
+        return `/admin/support/chats${qs ? `?${qs}` : ""}`;
       },
       providesTags: ["Support"],
     }),
@@ -49,6 +53,20 @@ export const supportApi = apiSlice.injectEndpoints({
       query: () => "/admin/support/admins",
       providesTags: ["Support"],
     }),
+    markSupportChatRead: builder.mutation<any, string>({
+      query: (id) => ({
+        url: `/admin/support/chats/${id}/read`,
+        method: "POST",
+      }),
+      invalidatesTags: (result, error, id) => [{ type: "Support", id }, "Support"],
+    }),
+    markClientRead: builder.mutation<any, string>({
+      query: (id) => ({
+        url: `/admin/support/chats/${id}/client-read`,
+        method: "POST",
+      }),
+      invalidatesTags: (result, error, id) => [{ type: "Support", id }, "Support"],
+    }),
   }),
 });
 
@@ -60,4 +78,6 @@ export const {
   useResolveSupportChatMutation,
   useReopenSupportChatMutation,
   useGetSupportAdminsQuery,
+  useMarkSupportChatReadMutation,
+  useMarkClientReadMutation,
 } = supportApi;

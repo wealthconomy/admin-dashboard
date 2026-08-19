@@ -18,6 +18,20 @@ export const chatApi = apiSlice.injectEndpoints({
       }),
       invalidatesTags: (result, error, { receiverId }) => [{ type: "InternalChat", id: receiverId }],
     }),
+    getUnreadSummary: builder.query<any, void>({
+      query: () => "/admin/chat/unread-summary",
+      providesTags: ["InternalChat", "Support"],
+    }),
+    markInternalAsRead: builder.mutation<any, string>({
+      query: (targetUserId) => ({
+        url: `/internal-chat/messages/${targetUserId}/read`,
+        method: "POST",
+      }),
+      invalidatesTags: (result, error, targetUserId) => [
+        { type: "InternalChat", id: targetUserId },
+        "InternalChat",
+      ],
+    }),
   }),
 });
 
@@ -25,4 +39,7 @@ export const {
   useGetInternalTeamQuery,
   useGetInternalMessagesQuery,
   useSendInternalMessageMutation,
+  useGetUnreadSummaryQuery,
+  useLazyGetUnreadSummaryQuery,
+  useMarkInternalAsReadMutation,
 } = chatApi;

@@ -64,75 +64,6 @@ const getSafeArray = (data: any) => {
   return [];
 };
 
-const INITIAL_USERS = [
-  {
-    id: "ID5372527",
-    name: "Simon Smith",
-    email: "simon.smith@wealthconomy.com",
-    phone: "+234567889274",
-    status: "Active",
-    totalSavings: 450000,
-    totalInterest: 45000,
-    transactionType: "Mixed",
-    lastLogin: "Apr 12, 2023",
-  },
-  {
-    id: "ID5372528",
-    name: "Adewale Johnson",
-    email: "adewale.j@gmail.com",
-    phone: "+2348012345678",
-    status: "Active",
-    totalSavings: 120500,
-    totalInterest: 12050,
-    transactionType: "Impact Wealth",
-    lastLogin: "Apr 13, 2023",
-  },
-  {
-    id: "ID5372529",
-    name: "Chinelo Okoro",
-    email: "c.okoro@outlook.com",
-    phone: "+2347098765432",
-    status: "Active",
-    totalSavings: 890000,
-    totalInterest: 89000,
-    transactionType: "Interest",
-    lastLogin: "Apr 14, 2023",
-  },
-  {
-    id: "ID5372530",
-    name: "Babatunde Lawal",
-    email: "blawal@wealthconomy.com",
-    phone: "+234567889274",
-    status: "Active",
-    totalSavings: 50000,
-    totalInterest: 5000,
-    transactionType: "Impact Wealth",
-    lastLogin: "Apr 15, 2023",
-  },
-  {
-    id: "ID5372531",
-    name: "Fatima Yusuf",
-    email: "fatima.y@live.com",
-    phone: "+2348123456789",
-    status: "Suspended",
-    totalSavings: 300000,
-    totalInterest: 30000,
-    transactionType: "Interest",
-    lastLogin: "Apr 16, 2023",
-  },
-  {
-    id: "ID5372532",
-    name: "Emeka Obi",
-    email: "emeka.obi@gmail.com",
-    phone: "+2349012345678",
-    status: "Active",
-    totalSavings: 1500000,
-    totalInterest: 150000,
-    transactionType: "Impact Wealth",
-    lastLogin: "Apr 17, 2023",
-  },
-];
-
 const WEALTH_PLANS = ["WealthFix", "WealthFlex", "WealthFlow", "WealthFam", "WealthGoal", "Mixed Wealth"];
 
 export default function UsersPage() {
@@ -179,10 +110,18 @@ export default function UsersPage() {
       if (u.blockedAt || u.disciplineStatus === "BLOCKED") status = "Blocked";
       else if (u.suspendedUntil || u.disciplineStatus === "SUSPENDED") status = "Suspended";
 
-      // Determine transaction type visually
-      let tType = u.transactionType || "Mixed";
-      if (u.wealthPreference === "IMPACT_WEALTH") tType = "Impact Wealth";
-      else if (u.wealthPreference === "INTEREST") tType = "Interest";
+      // Determine transaction type visually from wealthPreference or transactionType
+      let tType = "Mixed";
+      const pref = String(u.wealthPreference || u.transactionType || "").toUpperCase();
+      if (pref.includes("IMPACT")) {
+        tType = "Impact Wealth";
+      } else if (pref.includes("INTEREST")) {
+        tType = "Interest";
+      } else if (pref.includes("MIXED")) {
+        tType = "Mixed";
+      } else if (u.transactionType) {
+        tType = u.transactionType;
+      }
 
       return {
         ...u,
@@ -192,7 +131,11 @@ export default function UsersPage() {
       };
     });
 
-  const processedUsers = userList;
+  const processedUsers = userList.filter((u: any) => {
+    if (selectedStatus !== "All Status" && u.status !== selectedStatus) return false;
+    if (selectedTransactionType !== "All Types" && u.transactionType !== selectedTransactionType) return false;
+    return true;
+  });
 
   const handleSuspendToggle = async () => {
     if (!suspendUser) return;
@@ -262,6 +205,13 @@ export default function UsersPage() {
       toast.error("Failed to download report");
     }
   };
+
+  const totalUserCount = userList.length;
+  const activeUserCount = userList.filter((u: any) => u.status === "Active").length;
+  const suspendedUserCount = userList.filter((u: any) => u.status !== "Active").length;
+  const interestUserCount = userList.filter((u: any) => u.transactionType === "Interest").length;
+  const impactUserCount = userList.filter((u: any) => u.transactionType === "Impact Wealth").length;
+  const mixedUserCount = userList.filter((u: any) => u.transactionType === "Mixed").length;
 
   return (
     <div className="bg-white rounded-[20px] p-6 lg:p-10 border border-border/50 shadow-sm w-full max-w-[1140px] min-h-[1000px] mx-auto flex flex-col animate-in fade-in duration-500">
@@ -386,7 +336,7 @@ export default function UsersPage() {
                   </div>
                 ) : (
                   <p className="text-2xl font-bold font-outfit text-primary leading-none">
-                    {userList.length}
+                    {totalUserCount}
                   </p>
                 )}
                 <p className="text-[11px] font-semibold text-primary/80 mt-2">
@@ -398,8 +348,8 @@ export default function UsersPage() {
               </div>
             </div>
             <div className="pt-2 border-t border-[#155D5F1A] flex items-center gap-1.5 text-[10px] text-slate/50 font-bold">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              {userList.length} accounts total
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              {totalUserCount} registered accounts
             </div>
           </div>
 
@@ -413,7 +363,7 @@ export default function UsersPage() {
                   </div>
                 ) : (
                   <p className="text-2xl font-bold font-outfit text-primary leading-none">
-                    {userList.filter((u: any) => u.status === "Active").length}
+                    {activeUserCount}
                   </p>
                 )}
                 <p className="text-[11px] font-semibold text-primary/80 mt-2">
@@ -426,7 +376,7 @@ export default function UsersPage() {
             </div>
             <div className="pt-2 border-t border-[#155D5F1A] flex items-center gap-1.5 text-[10px] text-emerald-600 font-bold">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              94.6% of users active online
+              {totalUserCount > 0 ? ((activeUserCount / totalUserCount) * 100).toFixed(0) : 0}% of total registered
             </div>
           </div>
 
@@ -440,11 +390,11 @@ export default function UsersPage() {
                   </div>
                 ) : (
                   <p className="text-2xl font-bold font-outfit text-primary leading-none">
-                    {userList.filter((u: any) => u.status !== "Active").length}
+                    {suspendedUserCount}
                   </p>
                 )}
                 <p className="text-[11px] font-semibold text-primary/80 mt-2">
-                  Suspended
+                  Suspended / Blocked
                 </p>
               </div>
               <div className="h-9 w-9 rounded-full bg-[#155D5F] flex items-center justify-center shrink-0 shadow-sm">
@@ -453,7 +403,7 @@ export default function UsersPage() {
             </div>
             <div className="pt-2 border-t border-[#155D5F1A] flex items-center gap-1.5 text-[10px] text-red-500 font-bold">
               <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
-              Requires administrative review
+              {suspendedUserCount} accounts restricted
             </div>
           </div>
 
@@ -470,7 +420,7 @@ export default function UsersPage() {
                       </div>
                     ) : (
                       <p className="text-2xl font-bold font-outfit text-primary leading-none">
-                        {userList.filter((u: any) => u.transactionType === "Interest").length}
+                        {interestUserCount}
                       </p>
                     )}
                     <p className="text-[11px] font-semibold text-primary/80 mt-2">
@@ -482,8 +432,8 @@ export default function UsersPage() {
                   </div>
                 </div>
                 <div className="pt-2 border-t border-[#155D5F1A] flex items-center gap-1.5 text-[10px] text-slate/50 font-bold">
-                  <span className="h-1.5 w-1.5 rounded-full bg-primary/40" />
-                  ₦{ (89000).toLocaleString() } average interest yield
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#0284C7]" />
+                  {totalUserCount > 0 ? ((interestUserCount / totalUserCount) * 100).toFixed(0) : 0}% of platform savers
                 </div>
               </div>
 
@@ -497,10 +447,7 @@ export default function UsersPage() {
                       </div>
                     ) : (
                       <p className="text-2xl font-bold font-outfit text-primary leading-none">
-                        {
-                          userList.filter((u: any) => u.transactionType === "Impact Wealth")
-                            .length
-                        }
+                        {impactUserCount}
                       </p>
                     )}
                     <p className="text-[11px] font-semibold text-primary/80 mt-2">
@@ -512,8 +459,8 @@ export default function UsersPage() {
                   </div>
                 </div>
                 <div className="pt-2 border-t border-[#155D5F1A] flex items-center gap-1.5 text-[10px] text-slate/50 font-bold">
-                  <span className="h-1.5 w-1.5 rounded-full bg-primary/40" />
-                  Trending: 12.4% rise in sign-ups
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#16A34A]" />
+                  {totalUserCount > 0 ? ((impactUserCount / totalUserCount) * 100).toFixed(0) : 0}% of platform savers
                 </div>
               </div>
 
@@ -527,7 +474,7 @@ export default function UsersPage() {
                       </div>
                     ) : (
                       <p className="text-2xl font-bold font-outfit text-primary leading-none">
-                        {userList.filter((u: any) => u.transactionType === "Mixed").length}
+                        {mixedUserCount}
                       </p>
                     )}
                     <p className="text-[11px] font-semibold text-primary/80 mt-2">
@@ -539,8 +486,8 @@ export default function UsersPage() {
                   </div>
                 </div>
                 <div className="pt-2 border-t border-[#155D5F1A] flex items-center gap-1.5 text-[10px] text-slate/50 font-bold">
-                  <span className="h-1.5 w-1.5 rounded-full bg-primary/40" />
-                  Diversified portfolio builders
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#9333EA]" />
+                  {totalUserCount > 0 ? ((mixedUserCount / totalUserCount) * 100).toFixed(0) : 0}% of platform savers
                 </div>
               </div>
             </>
@@ -616,8 +563,14 @@ export default function UsersPage() {
                     </div>
                   </TableCell>
                   <TableCell className="py-3 px-3 text-center whitespace-nowrap">
-                     <span className={`text-[10px] font-bold px-2 py-1 rounded-lg ${user.transactionType === 'Interest' ? 'bg-[#86D7DA69] text-[#155D5F]' : user.transactionType === 'Mixed' ? 'bg-purple-100 text-purple-700' : 'bg-surface/50 text-slate/70'}`}>
-                        {user.transactionType || "N/A"}
+                     <span className={`text-[10px] font-bold px-2.5 py-1 rounded-lg border ${
+                       user.transactionType === 'Interest' 
+                         ? 'bg-[#E0F2FE] text-[#0369A1] border-[#BAE6FD]' 
+                         : user.transactionType === 'Impact Wealth' 
+                         ? 'bg-[#DCFCE7] text-[#15803D] border-[#BBF7D0]' 
+                         : 'bg-[#F3E8FF] text-[#7E22CE] border-[#E9D5FF]'
+                     }`}>
+                        {user.transactionType || "Mixed"}
                      </span>
                   </TableCell>
                   <TableCell className="py-3 px-3 text-center whitespace-nowrap">

@@ -74,7 +74,7 @@ export function BlogCommentsModal({
             {article.title}
           </h3>
           <p className="text-xs text-slate/50 mt-1">
-            Author: <span className="font-bold text-dark">{article.author}</span> · Views: <span className="font-bold text-dark">{article.views}</span>
+            Author: <span className="font-bold text-dark">{typeof article.author === "string" ? article.author : ((article.author as any)?.name || "Unknown")}</span> · Views: <span className="font-bold text-dark">{article.views}</span>
           </p>
         </div>
 
@@ -112,38 +112,43 @@ export function BlogCommentsModal({
           ) : activeTab === "comments" ? (
             engagement.comments.length > 0 ? (
               <div className="space-y-4">
-                {engagement.comments.map((comment) => (
-                  <div
-                    key={comment.id}
-                    className="p-4 rounded-2xl bg-surface/30 border border-border/10 space-y-2"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs">
-                          {comment.userName.charAt(0)}
+                {engagement.comments.map((comment: any, idx: number) => {
+                  const userName = typeof comment.userName === "string" ? comment.userName : (typeof comment.user === "object" ? (comment.user?.name || comment.user?.username || "Unknown") : (comment.user || "Unknown"));
+                  const userRole = typeof comment.userRole === "string" ? comment.userRole : (typeof comment.role === "string" ? comment.role : (typeof comment.user === "object" ? (comment.user?.role || "User") : "User"));
+                  const likesCount = typeof comment.likes === "number" ? comment.likes : (Array.isArray(comment.likes) ? comment.likes.length : 0);
+                  return (
+                    <div
+                      key={comment.id || idx}
+                      className="p-4 rounded-2xl bg-surface/30 border border-border/10 space-y-2"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xs">
+                            {String(userName).charAt(0).toUpperCase()}
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-dark">
+                              {userName}
+                            </p>
+                            <p className="text-[10px] text-slate/40">
+                              {userRole}
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-xs font-bold text-dark">
-                            {comment.userName}
-                          </p>
-                          <p className="text-[10px] text-slate/40">
-                            {comment.userRole}
-                          </p>
-                        </div>
+                        <span className="text-[10px] text-slate/40 font-medium">
+                          {comment.timeAgo || (comment.createdAt ? new Date(comment.createdAt).toLocaleDateString() : "")}
+                        </span>
                       </div>
-                      <span className="text-[10px] text-slate/40 font-medium">
-                        {comment.timeAgo}
-                      </span>
+                      <p className="text-xs text-dark font-medium leading-relaxed">
+                        {typeof comment.content === "string" ? comment.content : String(comment.content || "")}
+                      </p>
+                      <div className="flex items-center gap-1 text-[10px] text-slate/40 font-bold pt-1">
+                        <Heart className="h-3 w-3 text-red-500 fill-red-500" />
+                        <span>{likesCount} likes</span>
+                      </div>
                     </div>
-                    <p className="text-xs text-dark font-medium leading-relaxed">
-                      {comment.content}
-                    </p>
-                    <div className="flex items-center gap-1 text-[10px] text-slate/40 font-bold pt-1">
-                      <Heart className="h-3 w-3 text-red-500 fill-red-500" />
-                      <span>{comment.likes} likes</span>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div className="h-full flex flex-col items-center justify-center text-slate/40">
@@ -154,27 +159,31 @@ export function BlogCommentsModal({
           ) : (
             <div className="space-y-2">
               {engagement.likes.length > 0 ? (
-                engagement.likes.map((like, index) => (
-                  <div
-                    key={index}
-                    className="flex items-center justify-between p-3 hover:bg-surface/30 rounded-xl transition-all"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="h-7 w-7 rounded-full bg-primary/5 text-primary flex items-center justify-center font-bold text-[11px]">
-                        {like.user.charAt(0)}
+                engagement.likes.map((like: any, index: number) => {
+                  const userName = typeof like === "string" ? like : (typeof like.user === "string" ? like.user : (typeof like.user === "object" ? (like.user?.name || like.user?.username || "User") : (like.name || "User")));
+                  const userRole = typeof like.role === "string" ? like.role : (typeof like.user === "object" ? (like.user?.role || "User") : "User");
+                  return (
+                    <div
+                      key={index}
+                      className="flex items-center justify-between p-3 hover:bg-surface/30 rounded-xl transition-all"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="h-7 w-7 rounded-full bg-primary/5 text-primary flex items-center justify-center font-bold text-[11px]">
+                          {String(userName).charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-dark">
+                            {userName}
+                          </p>
+                          <p className="text-[9px] text-slate/40">{userRole}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-xs font-bold text-dark">
-                          {like.user}
-                        </p>
-                        <p className="text-[9px] text-slate/40">{like.role}</p>
+                      <div className="h-6 w-6 rounded-full bg-red-50 flex items-center justify-center">
+                        <Heart className="h-3 w-3 text-red-500 fill-red-500" />
                       </div>
                     </div>
-                    <div className="h-6 w-6 rounded-full bg-red-50 flex items-center justify-center">
-                      <Heart className="h-3 w-3 text-red-500 fill-red-500" />
-                    </div>
-                  </div>
-                ))
+                  );
+                })
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-slate/40">
                   <ThumbsUp className="h-10 w-10 opacity-20 mb-2" />

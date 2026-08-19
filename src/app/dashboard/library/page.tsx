@@ -297,7 +297,54 @@ export default function LibraryPage() {
     } catch {
       // Non-blocking — don't prevent the download if tracking fails
     }
-    window.open(material.documentUrl, "_blank", "noopener,noreferrer");
+
+    // Generate clean filename with extension
+    let extension = material.fileType?.toLowerCase() || "pdf";
+    if (extension.includes("pdf")) extension = "pdf";
+    else if (extension.includes("doc")) extension = "docx";
+    else if (extension.includes("epub")) extension = "epub";
+
+    const sanitizedTitle = (material.title || "wealthconomy_material")
+      .replace(/[^\w\s-]/g, "")
+      .trim()
+      .replace(/\s+/g, "_");
+
+    const filename = `${sanitizedTitle}.${extension}`;
+
+    try {
+      // 1. Attempt client blob download with proper filename
+      const response = await fetch(material.documentUrl);
+      if (response.ok) {
+        const blob = await response.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.style.display = "none";
+        a.href = blobUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(blobUrl);
+        document.body.removeChild(a);
+        return;
+      }
+    } catch (err) {
+      console.warn("Direct blob download restricted (CORS), applying Cloudinary attachment URL fallback:", err);
+    }
+
+    // 2. Cloudinary attachment transformation fallback
+    let finalUrl = material.documentUrl;
+    if (finalUrl.includes("cloudinary.com") && finalUrl.includes("/upload/")) {
+      finalUrl = finalUrl.replace("/upload/", `/upload/fl_attachment:${encodeURIComponent(sanitizedTitle)}/`);
+    }
+
+    const a = document.createElement("a");
+    a.href = finalUrl;
+    a.download = filename;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<ContentType | "all">("all");

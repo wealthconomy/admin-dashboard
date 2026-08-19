@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import {
   Search,
   MoreVertical,
@@ -29,36 +29,139 @@ import {
   useResolveSupportChatMutation,
   useReopenSupportChatMutation,
 } from "@/lib/redux/features/supportApi";
-
+import { useSocket } from "@/context/SocketContext";
+import { useUnreadCounts } from "@/context/UnreadCountContext";
 
 export default function SupportCentrePage() {
+  const { socket, isConnected } = useSocket();
+  const { markSupportRead } = useUnreadCounts();
+
   const [selectedChat, setSelectedChat] = useState<any | null>(null);
   const [inputText, setInputText] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState<"queue" | "active" | "resolved">("queue");
+  const [liveMessages, setLiveMessages] = useState<any[]>([]);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
-  const { data: usersData, isLoading: isUsersLoading } = useGetSupportChatsQuery({ stage: activeTab, search: searchTerm });
+  // Map activeTab to stage query parameter (queue -> UNASSIGNED / queue, active -> ACTIVE / active, resolved -> RESOLVED / resolved)
+  const stageParam = activeTab === "queue" ? "queue" : activeTab === "active" ? "active" : "resolved";
+  const { data: usersData, isLoading: isUsersLoading, refetch: refetchUsers } = useGetSupportChatsQuery({ 
+    stage: stageParam, 
+    search: searchTerm 
+  });
   
-  // Try to extract .data if the backend wraps the response, otherwise use it directly. Default to empty array.
   const users = Array.isArray(usersData) ? usersData : (usersData?.data || []);
 
   const currentChatId = selectedChat?.id || selectedChat?._id;
-  const { data: chatData, isLoading: isChatLoading } = useGetSupportChatQuery(currentChatId, { 
+  const { data: chatData, isLoading: isChatLoading, refetch: refetchChat } = useGetSupportChatQuery(currentChatId, { 
     skip: !selectedChat,
-    pollingInterval: selectedChat ? 5000 : 0 
   });
-  const messages = Array.isArray(chatData?.messages) ? chatData.messages : (chatData?.data?.messages || []);
 
   const [replyChat] = useReplySupportChatMutation();
   const [claimChat] = useClaimSupportChatMutation();
   const [resolveChat] = useResolveSupportChatMutation();
   const [reopenChat] = useReopenSupportChatMutation();
 
+  // Sync REST messages when switching chats or fetching
+  useEffect(() => {
+    const raw = Array.isArray(chatData?.messages) ? chatData.messages : (chatData?.data?.messages || []);
+    setLiveMessages(raw);
+  }, [chatData, currentChatId]);
+
+  // When selecting a chat, mark it as read
+  useEffect(() => {
+    if (selectedChat && currentChatId) {
+      markSupportRead(currentChatId);
+    }
+  }, [selectedChat, currentChatId, markSupportRead]);
+
+  // Real-time support chat messages via WebSocket
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleSupportNewMessage = (data: {
+      message: {
+        id: string;
+        chatId: string;
+        sender: "client" | "admin";
+        senderId: string;
+        text: string;
+        createdAt?: string;
+      };
+      chatId: string;
+    }) => {
+      console.log("[WebSocket] support:new_message received:", data);
+
+      const msg = data.message || data;
+      const targetChatId = data.chatId || msg.chatId;
+
+      // If active ticket is open, append message immediately
+      if (currentChatId && targetChatId === currentChatId) {
+        setLiveMessages((prev) => {
+          if (prev.some((m) => m.id === msg.id)) return prev;
+          return [
+            ...prev,
+            {
+              ...msg,
+              isMe: msg.sender === "admin",
+              time: new Date(msg.createdAt || Date.now()).toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              }),
+            },
+          ];
+        });
+        markSupportRead(currentChatId);
+      } else {
+        // Refresh ticket list to update badge and preview
+        refetchUsers();
+      }
+    };
+
+    socket.on("support:new_message", handleSupportNewMessage);
+
+    return () => {
+      socket.off("support:new_message", handleSupportNewMessage);
+    };
+  }, [socket, currentChatId, markSupportRead, refetchUsers]);
+
+  // Format messages for rendering
+  const formattedMessages = useMemo(() => {
+    return liveMessages.map((msg: any) => {
+      const isMe = msg.isMe !== undefined ? msg.isMe : (msg.sender === "admin" || msg.senderRole === "ADMIN");
+      const time = msg.time || (msg.createdAt 
+        ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        : "");
+      return {
+        ...msg,
+        isMe,
+        time,
+        sender: msg.sender || (isMe ? "Admin" : (selectedChat?.name || "Client")),
+      };
+    });
+  }, [liveMessages, selectedChat]);
+
+  // Auto scroll to bottom when messages update
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [formattedMessages]);
+
   const filteredUsers = users.filter(
-    (user: any) =>
-      user.stage === activeTab &&
-      (user.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (user.id || user._id)?.toString().includes(searchTerm)),
+    (user: any) => {
+      const userStage = (user.stage || "").toLowerCase();
+      const tabMatch = activeTab === "queue" 
+        ? (userStage === "queue" || userStage === "unassigned")
+        : userStage === activeTab;
+      
+      const searchMatch = !searchTerm || (
+        (user.name?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
+        (user.id || user._id)?.toString().includes(searchTerm)
+      );
+
+      return tabMatch && searchMatch;
+    }
   );
 
   const toggleChat = (item: any) => {
@@ -68,17 +171,44 @@ export default function SupportCentrePage() {
       setSelectedChat(null);
     } else {
       setSelectedChat({ ...item, unreadCount: 0 });
+      markSupportRead(currentId);
     }
   };
 
   const handleSendMessage = async () => {
     if (!inputText.trim() || !selectedChat) return;
+    
+    const textToSend = inputText.trim();
+    const activeId = selectedChat.id || selectedChat._id;
+    setInputText("");
+
+    // Optimistic local message
+    const tempId = `temp_${Date.now()}`;
+    const optimisticMsg = {
+      id: tempId,
+      chatId: activeId,
+      sender: "admin",
+      senderId: "me",
+      text: textToSend,
+      isMe: true,
+      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      createdAt: new Date().toISOString(),
+    };
+    setLiveMessages((prev) => [...prev, optimisticMsg]);
+
+    // 1. Emit real-time WebSocket event
+    if (socket && isConnected) {
+      socket.emit("support:send_message", {
+        chatId: activeId,
+        text: textToSend,
+      });
+    }
+
+    // 2. Execute REST mutation for persistence & tag invalidation
     try {
-      const currentChatId = selectedChat.id || selectedChat._id;
-      await replyChat({ id: currentChatId, text: inputText }).unwrap();
-      setInputText("");
+      await replyChat({ id: activeId, text: textToSend }).unwrap();
     } catch (err) {
-      console.error("Failed to send message: ", err);
+      console.warn("REST replySupportChat fallback handled:", err);
     }
   };
 
@@ -116,8 +246,14 @@ export default function SupportCentrePage() {
         <div className="p-6 space-y-6 flex flex-col h-full min-h-0">
           <div className="flex items-center justify-between">
             <h1 className="text-2xl font-bold font-outfit text-dark tracking-tight">
-              Chats
+              Support Chats
             </h1>
+            {isConnected && (
+              <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Live
+              </span>
+            )}
           </div>
 
           <div className="relative">
@@ -135,33 +271,36 @@ export default function SupportCentrePage() {
             <div className="flex bg-surface/80 p-1 rounded-xl gap-1 shrink-0">
               <button
                 onClick={() => setActiveTab("queue")}
-                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
+                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   activeTab === "queue"
                     ? "bg-white text-[#155D5F] shadow-sm"
                     : "text-slate/60 hover:text-dark"
                 }`}
               >
-                Queue ({users.filter((u: any) => u.stage === "queue").length})
+                Queue ({users.filter((u: any) => {
+                  const st = (u.stage || "").toLowerCase();
+                  return st === "queue" || st === "unassigned";
+                }).length})
               </button>
               <button
                 onClick={() => setActiveTab("active")}
-                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
+                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   activeTab === "active"
                     ? "bg-white text-[#155D5F] shadow-sm"
                     : "text-slate/60 hover:text-dark"
                 }`}
               >
-                Active ({users.filter((u: any) => u.stage === "active").length})
+                Active ({users.filter((u: any) => (u.stage || "").toLowerCase() === "active").length})
               </button>
               <button
                 onClick={() => setActiveTab("resolved")}
-                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all ${
+                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   activeTab === "resolved"
                     ? "bg-white text-[#155D5F] shadow-sm"
                     : "text-slate/60 hover:text-dark"
                 }`}
               >
-                Resolved ({users.filter((u: any) => u.stage === "resolved").length})
+                Resolved ({users.filter((u: any) => (u.stage || "").toLowerCase() === "resolved").length})
               </button>
             </div>
 
@@ -170,6 +309,8 @@ export default function SupportCentrePage() {
                 filteredUsers.map((user: any) => {
                   const currentId = user.id || user._id;
                   const selectedId = selectedChat?.id || selectedChat?._id;
+                  const unread = user.unreadCount ?? 0;
+
                   return (
                   <div
                     key={currentId}
@@ -182,9 +323,9 @@ export default function SupportCentrePage() {
                   >
                     <div className="relative">
                       <Avatar className="h-11 w-11 mt-1 shrink-0 ring-1 ring-border/10">
-                        <AvatarImage src={user.image} />
+                        <AvatarImage src={user.image || user.avatarUrl} />
                         <AvatarFallback className="bg-primary/5 font-bold text-primary">
-                          {user.name[0]}
+                          {(user.name || "U")[0]}
                         </AvatarFallback>
                       </Avatar>
                       {user.status === "online" && (
@@ -195,15 +336,15 @@ export default function SupportCentrePage() {
                       <p
                         className={`text-sm font-bold truncate ${selectedId === currentId ? "text-dark" : "text-dark/80 group-hover:text-dark"}`}
                       >
-                        {user.name}
+                        {user.name || `User ${currentId.slice(0, 6)}`}
                       </p>
                       <p className="text-[11px] font-medium text-slate/50 truncate">
-                        {user.lastMessage}
+                        {user.lastMessage || "No messages yet"}
                       </p>
                     </div>
-                    {(user.unreadCount ?? 0) > 0 && (
-                      <div className="h-5 w-5 rounded-full bg-[#155D5F] flex items-center justify-center text-[10px] font-bold text-white shadow-sm shrink-0">
-                        {user.unreadCount}
+                    {unread > 0 && (
+                      <div className="h-5 min-w-5 px-1.5 rounded-full bg-[#155D5F] flex items-center justify-center text-[10px] font-extrabold text-white shadow-sm shrink-0 animate-in zoom-in-75">
+                        {unread}
                       </div>
                     )}
                   </div>
@@ -239,11 +380,10 @@ export default function SupportCentrePage() {
             </div>
             <div className="space-y-3">
               <h2 className="text-2xl font-bold font-outfit text-dark/90 tracking-tight">
-                No chat selected
+                No support chat selected
               </h2>
               <p className="text-sm font-medium text-slate/40 max-w-[320px] leading-relaxed">
-                Click on a user or admin from the list on the left to start a
-                conversation and manage support requests.
+                Click on a customer ticket from the list on the left to start a real-time conversation.
               </p>
             </div>
           </div>
@@ -254,9 +394,9 @@ export default function SupportCentrePage() {
               <div className="flex items-center gap-4">
                 <div className="relative">
                   <Avatar className="h-12 w-12 ring-2 ring-primary/5 transition-transform duration-300 hover:scale-105">
-                    <AvatarImage src={selectedChat.image} />
+                    <AvatarImage src={selectedChat.image || selectedChat.avatarUrl} />
                     <AvatarFallback className="bg-primary/5 font-bold text-primary">
-                      {selectedChat.name[0]}
+                      {(selectedChat.name || "U")[0]}
                     </AvatarFallback>
                   </Avatar>
                   {selectedChat.status === "online" && (
@@ -265,7 +405,7 @@ export default function SupportCentrePage() {
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-dark flex items-center gap-2">
-                    {selectedChat.name}
+                    {selectedChat.name || `User ${selectedChat.id?.slice(0, 6)}`}
                     {selectedChat.isAdmin && (
                       <Badge className="bg-primary/5 text-primary border-none text-[9.5px] font-extrabold px-2.5 py-0.5 rounded-full hover:bg-primary/5 select-none">
                         {selectedChat.role}
@@ -280,16 +420,16 @@ export default function SupportCentrePage() {
                     {!selectedChat.isAdmin && (
                       <Badge
                         className={`text-[10px] px-2 py-0.5 rounded-md ${
-                          selectedChat.stage === "queue"
+                          selectedChat.stage === "queue" || selectedChat.stage === "UNASSIGNED"
                             ? "bg-orange-100 text-orange-600 hover:bg-orange-100"
-                            : selectedChat.stage === "active"
+                            : selectedChat.stage === "active" || selectedChat.stage === "ACTIVE"
                               ? "bg-blue-100 text-blue-600 hover:bg-blue-100"
                               : "bg-green-100 text-green-600 hover:bg-green-100"
                         }`}
                       >
-                        {selectedChat.stage === "queue"
+                        {selectedChat.stage === "queue" || selectedChat.stage === "UNASSIGNED"
                           ? "In Queue"
-                          : selectedChat.stage === "active"
+                          : selectedChat.stage === "active" || selectedChat.stage === "ACTIVE"
                             ? "Active"
                             : "Resolved"}
                       </Badge>
@@ -305,7 +445,7 @@ export default function SupportCentrePage() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="text-slate/40 hover:text-dark rounded-full transition-colors outline-none"
+                        className="text-slate/40 hover:text-dark rounded-full transition-colors outline-none cursor-pointer"
                       >
                         <MoreVertical className="h-5 w-5" />
                       </Button>
@@ -314,7 +454,7 @@ export default function SupportCentrePage() {
                       align="end"
                       className="bg-white rounded-xl shadow-lg border-border/50 w-48 p-2"
                     >
-                      {selectedChat.stage === "queue" && (
+                      {(selectedChat.stage === "queue" || selectedChat.stage === "UNASSIGNED") && (
                         <DropdownMenuItem
                           onClick={() => handleClaimChat(selectedChat.id)}
                           className="cursor-pointer font-bold text-xs text-[#155D5F] hover:bg-surface py-2.5 rounded-lg px-3"
@@ -322,7 +462,7 @@ export default function SupportCentrePage() {
                           Claim Chat
                         </DropdownMenuItem>
                       )}
-                      {selectedChat.stage === "active" && (
+                      {(selectedChat.stage === "active" || selectedChat.stage === "ACTIVE") && (
                         <DropdownMenuItem
                           onClick={() => handleCloseChat(selectedChat.id)}
                           className="cursor-pointer font-bold text-xs text-red-600 hover:bg-surface py-2.5 rounded-lg px-3"
@@ -330,7 +470,7 @@ export default function SupportCentrePage() {
                           Close / Resolve Chat
                         </DropdownMenuItem>
                       )}
-                      {selectedChat.stage === "resolved" && (
+                      {(selectedChat.stage === "resolved" || selectedChat.stage === "RESOLVED") && (
                         <DropdownMenuItem
                           onClick={() => handleReopenChat(selectedChat.id)}
                           className="cursor-pointer font-bold text-xs text-[#155D5F] hover:bg-surface py-2.5 rounded-lg px-3"
@@ -346,9 +486,9 @@ export default function SupportCentrePage() {
 
             {/* Messages Area */}
             <div className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar bg-white">
-              {messages.map((msg: any, idx: number) => (
+              {formattedMessages.map((msg: any, idx: number) => (
                 <div
-                  key={msg.id}
+                  key={msg.id || idx}
                   className={`flex gap-4 ${msg.isMe ? "flex-row-reverse" : "flex-row"} animate-in slide-in-from-bottom-2 duration-300`}
                 >
                   <Avatar
@@ -364,9 +504,9 @@ export default function SupportCentrePage() {
                       />
                     ) : (
                       <>
-                        <AvatarImage src={msg.senderImage} />
+                        <AvatarImage src={msg.senderImage || selectedChat.image} />
                         <AvatarFallback className="bg-primary/5 text-[10px] font-bold">
-                          {msg.sender[0]}
+                          {(msg.sender || "C")[0]}
                         </AvatarFallback>
                       </>
                     )}
@@ -400,6 +540,7 @@ export default function SupportCentrePage() {
                   </div>
                 </div>
               ))}
+              <div ref={messagesEndRef} />
             </div>
 
             {/* Input Area */}
@@ -410,7 +551,7 @@ export default function SupportCentrePage() {
                   <Input
                     value={inputText}
                     onChange={(e) => setInputText(e.target.value)}
-                    onKeyPress={(e) => e.key === "Enter" && handleSendMessage()}
+                    onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
                     placeholder="Write a message..."
                     className="flex-1 border-none shadow-none focus-visible:ring-0 text-sm font-medium h-12 bg-transparent"
                   />
@@ -418,7 +559,7 @@ export default function SupportCentrePage() {
                     size="icon"
                     onClick={handleSendMessage}
                     disabled={!inputText.trim()}
-                    className="bg-transparent hover:bg-surface text-[#155D5F] rounded-xl h-10 w-10 shrink-0 transition-all active:scale-90"
+                    className="bg-transparent hover:bg-surface text-[#155D5F] rounded-xl h-10 w-10 shrink-0 transition-all active:scale-90 cursor-pointer"
                   >
                     <Send className="h-5 w-5" />
                   </Button>

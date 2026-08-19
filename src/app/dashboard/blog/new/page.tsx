@@ -59,8 +59,8 @@ const formatRelativeDate = (dateStr: string) => {
     .replace(/\//g, " / ");
 };
 
-const renderPreviewContent = (text: string) => {
-  if (!text) return "No content provided.";
+const renderPreviewContent = (text: any) => {
+  if (!text || typeof text !== "string") return "No content provided.";
 
   return text.split("\n").map((line, i) => {
     // Headers

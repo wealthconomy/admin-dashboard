@@ -61,8 +61,46 @@ const formatRelativeDate = (dateStr: string) => {
     .replace(/\//g, " / ");
 };
 
-const renderPreviewContent = (text: string) => {
-  if (!text) return "No content provided.";
+const parseAuthorName = (author: any): string => {
+  if (!author) return "";
+  if (typeof author === "string") return author;
+  if (typeof author === "object") {
+    return (
+      author.name ||
+      `${author.firstName || ""} ${author.lastName || ""}`.trim() ||
+      author.username ||
+      author.email ||
+      ""
+    );
+  }
+  return String(author);
+};
+
+const parseAuthorAvatar = (item: any): string => {
+  if (typeof item?.authorAvatar === "string" && item.authorAvatar) return item.authorAvatar;
+  const authorObj = typeof item?.author === "object" ? item.author : null;
+  if (authorObj) {
+    return authorObj.image || authorObj.imageUrl || authorObj.avatar || authorObj.avatarUrl || "";
+  }
+  return "";
+};
+
+const parseCategory = (cat: any): string => {
+  if (!cat) return "General";
+  if (typeof cat === "string") return cat;
+  if (typeof cat === "object") return cat.name || cat.title || cat.label || "General";
+  return String(cat);
+};
+
+const parseImage = (img: any): string => {
+  let url = "";
+  if (typeof img === "string") url = img;
+  else if (typeof img === "object" && img?.url) url = img.url;
+  return url;
+};
+
+const renderPreviewContent = (text: any) => {
+  if (!text || typeof text !== "string") return "No content provided.";
 
   return text.split("\n").map((line, i) => {
     // Headers
@@ -142,14 +180,23 @@ export default function EditBlogPage({ params }: { params: Promise<{ id: string 
   useEffect(() => {
     if (blogData?.data || blogData) {
       const b = blogData?.data || blogData;
+      const parsedAuthor = parseAuthorName(b.author ?? b.authorName ?? b.user);
+      const parsedAvatar = parseAuthorAvatar(b);
+      const parsedCategory = parseCategory(b.category);
+      const parsedImage = parseImage(b.image || b.coverImage || b.imageUrl || b.bannerUrl);
+
       const newFormData = {
-        author: b.author || "",
-        title: b.title || "",
-        content: b.content || "",
-        category: b.category || "General",
-        date: b.scheduledFor ? new Date(b.scheduledFor).toISOString().slice(0, 16) : (b.createdAt ? new Date(b.createdAt).toISOString().slice(0, 16) : ""),
-        image: b.image || "",
-        authorAvatar: b.authorAvatar || "",
+        author: parsedAuthor,
+        title: typeof b.title === "string" ? b.title : (b.title?.name || ""),
+        content: typeof b.content === "string" ? b.content : "",
+        category: parsedCategory,
+        date: b.scheduledFor
+          ? new Date(b.scheduledFor).toISOString().slice(0, 16)
+          : b.createdAt
+            ? new Date(b.createdAt).toISOString().slice(0, 16)
+            : "",
+        image: parsedImage,
+        authorAvatar: parsedAvatar,
         publishToApp: b.publishToApp ?? true,
         publishToWeb: b.publishToWeb ?? true,
       };

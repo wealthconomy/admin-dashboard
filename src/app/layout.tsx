@@ -3,6 +3,7 @@ import { Inter, Outfit } from "next/font/google";
 import { Toaster } from "sonner";
 import "./globals.css";
 import StoreProvider from "@/lib/redux/StoreProvider";
+import OfflineGuard from "@/components/OfflineGuard";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -31,7 +32,9 @@ export default function RootLayout({
         suppressHydrationWarning
       >
         <StoreProvider>
-          {children}
+          <OfflineGuard>
+            {children}
+          </OfflineGuard>
         </StoreProvider>
         <Toaster
           position="top-right"

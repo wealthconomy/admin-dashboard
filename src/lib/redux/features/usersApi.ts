@@ -72,29 +72,46 @@ export const usersApi = apiSlice.injectEndpoints({
       }),
     }),
     // KYC Action Endpoints
+    reviewKycDocuments: builder.mutation<any, { id: string; documents: Array<{ type: string; status: "Approved" | "Rejected" | "Pending"; reason?: string }> }>({
+      query: ({ id, documents }) => ({
+        url: `/admin/kyc/users/${id}/credentials/review`,
+        method: "POST",
+        body: { documents },
+      }),
+      invalidatesTags: (_result, _error, { id }) => [{ type: "Users", id }, { type: "Kyc", id }, "Users"],
+    }),
+    updateOverallKycStatus: builder.mutation<any, { id: string; status: string; reason?: string }>({
+      query: ({ id, status, reason }) => ({
+        url: `/admin/kyc/users/${id}`,
+        method: "PUT",
+        body: { status, reason },
+      }),
+      invalidatesTags: (_result, _error, { id }) => [{ type: "Users", id }, { type: "Kyc", id }, "Users"],
+    }),
+    // Legacy aliases
     approveKycDoc: builder.mutation({
       query: ({ id, documentType, reason }) => ({
-        url: `/admin/kyc/users/${id}/credentials/approve`,
+        url: `/admin/kyc/users/${id}/credentials/review`,
         method: "POST",
-        body: { documentType, reason },
+        body: { documents: [{ type: documentType, status: "Approved", reason: reason || "Document verified successfully" }] },
       }),
-      invalidatesTags: ["Kyc"],
+      invalidatesTags: (_result, _error, { id }) => [{ type: "Users", id }, { type: "Kyc", id }, "Users"],
     }),
     rejectKycDoc: builder.mutation({
       query: ({ id, documentType, reason }) => ({
-        url: `/admin/kyc/users/${id}/credentials/reject`,
+        url: `/admin/kyc/users/${id}/credentials/review`,
         method: "POST",
-        body: { documentType, reason },
+        body: { documents: [{ type: documentType, status: "Rejected", reason: reason || "Document rejected" }] },
       }),
-      invalidatesTags: ["Kyc"],
+      invalidatesTags: (_result, _error, { id }) => [{ type: "Users", id }, { type: "Kyc", id }, "Users"],
     }),
     resetKycDoc: builder.mutation({
       query: ({ id, documentType, reason }) => ({
-        url: `/admin/kyc/users/${id}/credentials/reset`,
+        url: `/admin/kyc/users/${id}/credentials/review`,
         method: "POST",
-        body: { documentType, reason },
+        body: { documents: [{ type: documentType, status: "Pending", reason: reason || "Reset" }] },
       }),
-      invalidatesTags: ["Kyc"],
+      invalidatesTags: (_result, _error, { id }) => [{ type: "Users", id }, { type: "Kyc", id }, "Users"],
     }),
     updateKycLevel: builder.mutation({
       query: ({ id, status, reason }) => ({
@@ -102,7 +119,7 @@ export const usersApi = apiSlice.injectEndpoints({
         method: "PUT",
         body: { status, reason },
       }),
-      invalidatesTags: ["Kyc", "Users"],
+      invalidatesTags: (_result, _error, { id }) => [{ type: "Users", id }, { type: "Kyc", id }, "Users"],
     }),
     // Transactions
     getUserTransactions: builder.query({
@@ -144,34 +161,46 @@ export const usersApi = apiSlice.injectEndpoints({
       }),
       invalidatesTags: ["Transactions"],
     }),
-    // Activities
+    // User Activities
     getActivities: builder.query({
       query: (params?: { [key: string]: any }) => {
         const searchParams = new URLSearchParams();
         if (params) {
           Object.entries(params).forEach(([key, value]) => {
             if (value !== undefined && value !== null && value !== "") {
-              searchParams.append(key, value as string);
+              if (Array.isArray(value)) {
+                searchParams.append(key, value.join(","));
+              } else {
+                searchParams.append(key, value as string);
+              }
             }
           });
         }
+        if (!searchParams.has("populate")) {
+          searchParams.append("populate", "user");
+        }
         const queryString = searchParams.toString();
-        return `/admin/activities${queryString ? `?${queryString}` : ""}`;
+        return `/admin/user-activities${queryString ? `?${queryString}` : ""}`;
       },
       providesTags: ["Activities"],
     }),
     searchActivities: builder.query({
-      query: (params: { userId?: string, action?: string }) => {
+      query: (params: { userId?: string; q?: string; type?: string; period?: string }) => {
         const searchParams = new URLSearchParams();
         if (params.userId) searchParams.append("userId", params.userId);
-        if (params.action) searchParams.append("action", params.action);
+        if (params.q) searchParams.append("q", params.q);
+        if (params.type) searchParams.append("type", params.type);
+        if (params.period) searchParams.append("period", params.period);
+        if (!searchParams.has("populate")) {
+          searchParams.append("populate", "user");
+        }
         const queryString = searchParams.toString();
-        return `/admin/activities/search${queryString ? `?${queryString}` : ""}`;
+        return `/admin/user-activities${queryString ? `?${queryString}` : ""}`;
       },
       providesTags: ["Activities"],
     }),
     getActivityDetails: builder.query({
-      query: (id: string) => `/admin/activities/${id}`,
+      query: (id: string) => `/admin/user-activities/${id}`,
       providesTags: (_result, _error, id) => [{ type: "Activities", id }],
     }),
   }),
@@ -192,6 +221,8 @@ export const {
   useRejectKycDocMutation,
   useResetKycDocMutation,
   useUpdateKycLevelMutation,
+  useReviewKycDocumentsMutation,
+  useUpdateOverallKycStatusMutation,
   useGetTransactionsQuery,
   useGetTransactionDetailsQuery,
   useRollbackTransactionMutation,

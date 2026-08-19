@@ -34,6 +34,8 @@ import {
   Send,
   Sliders,
   Loader2,
+  Mail,
+  HelpCircle,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -44,6 +46,8 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { NotificationProvider, useNotifications } from "@/context/NotificationContext";
+import { SocketProvider } from "@/context/SocketContext";
+import { UnreadCountProvider, useUnreadCounts } from "@/context/UnreadCountContext";
 import { toast } from "sonner";
 import { AdminChatWidget } from "@/components/AdminChatWidget";
 import { selectIsAccessDenied, setAccessDenied } from "@/lib/redux/features/authSlice";
@@ -89,10 +93,12 @@ const sidebarItems: SidebarItem[] = [
   },
   { name: "Blog Management", icon: BookOpen, href: "/dashboard/blog" },
   { name: "Library Management", icon: Library, href: "/dashboard/library" },
+  { name: "Financial Assessments", icon: HelpCircle, href: "/dashboard/assessments" },
   { name: "Support Centre", icon: LifeBuoy, href: "/dashboard/support" },
   { name: "Users Referrals", icon: UserPlus, href: "/dashboard/referrals" },
   { name: "Push Notifications", icon: Send, href: "/dashboard/push-notifications" },
   { name: "Reports & Analytics", icon: BarChart, href: "/dashboard/reports" },
+  { name: "Newsletter Subscribers", icon: Mail, href: "/dashboard/newsletter" },
   { name: "Admin Management", icon: ShieldCheck, href: "/dashboard/admin" },
   { name: "System Audit Logs", icon: Terminal, href: "/dashboard/audit-logs" },
   { name: "System Configuration", icon: Sliders, href: "/dashboard/system-config" },
@@ -104,7 +110,6 @@ const sidebarItems: SidebarItem[] = [
 function DashboardHeader({ 
   setIsSidebarOpen, 
   setShowLogoutModal,
-  adminTeamRole,
 }: { 
   setIsSidebarOpen: (val: boolean) => void;
   setShowLogoutModal: (val: boolean) => void;
@@ -129,20 +134,6 @@ function DashboardHeader({
 
   const adminAvatar = userMe?.imageUrl || "";
 
-  // Resolve the display name for the role
-  let displayRole = adminTeamRole || "Admin";
-  const customRoleName = userMe?.adminProfile?.customRole?.name || userMe?.customRole?.name;
-  
-  if (customRoleName) {
-    displayRole = customRoleName;
-  } else if (displayRole === "SUPER_ADMIN") {
-    displayRole = "Super Admin";
-  } else if (displayRole === "ADMIN") {
-    displayRole = "Admin";
-  } else if (displayRole === "CUSTOM") {
-    displayRole = "Custom Role";
-  }
-
   return (
     <header className="h-[65px] w-full max-w-[1138.5px] mx-auto bg-white rounded-[20px] py-[10px] px-[15px] sm:px-[29px] flex items-center justify-between shadow-sm border border-border/50">
       <div className="flex items-center gap-4 lg:hidden">
@@ -161,11 +152,6 @@ function DashboardHeader({
       </div>
 
       <div className="flex items-center gap-2 sm:gap-4">
-        <div className="flex items-center gap-1.5 h-10 px-2.5 bg-amber-500/10 text-amber-600 border border-amber-500/20 rounded-xl font-bold text-xs shrink-0 cursor-default">
-          <ShieldAlert className="h-4 w-4 shrink-0 text-amber-500" />
-          <span className="hidden md:inline" suppressHydrationWarning>Role: {displayRole}</span>
-        </div>
-
         <Popover>
           <PopoverTrigger asChild>
             <button className="relative flex items-center justify-center h-10 w-10 rounded-full bg-surface hover:bg-surface/80 transition-all border border-border/30 active:scale-90 group cursor-pointer">
@@ -274,11 +260,12 @@ function DashboardHeader({
   );
 }
 
-export default function DashboardLayout({
+function DashboardLayoutContent({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const { totalSupportUnread } = useUnreadCounts();
   const pathname = usePathname();
   const router = useRouter();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -373,7 +360,7 @@ export default function DashboardLayout({
   const isPageAllowed = !isAccessDenied && !cachedDenied;
 
   return (
-    <NotificationProvider>
+    <>
       <div className="flex h-dvh bg-surface overflow-hidden">
         {/* Sidebar for Desktop */}
         <aside className="hidden lg:flex w-[269px] h-[calc(100dvh-42px)] flex-col bg-white rounded-[20px] my-[21px] ml-[21px] mr-2 border border-border/50 shadow-sm shrink-0">
@@ -419,13 +406,22 @@ export default function DashboardLayout({
                       <item.icon className="h-5 w-5" />
                       <span className="font-medium text-sm">{item.name}</span>
                     </div>
-                    {item.hasDropdown && (
-                      <ChevronDown
-                        className={`h-4 w-4 transition-transform duration-200 ${
-                          isExpanded ? "rotate-180" : ""
-                        }`}
-                      />
-                    )}
+                    <div className="flex items-center gap-2">
+                      {item.name === "Support Centre" && totalSupportUnread > 0 && (
+                        <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                          isActive || isChildActive ? "bg-white text-primary" : "bg-red-500 text-white"
+                        }`}>
+                          {totalSupportUnread}
+                        </span>
+                      )}
+                      {item.hasDropdown && (
+                        <ChevronDown
+                          className={`h-4 w-4 transition-transform duration-200 ${
+                            isExpanded ? "rotate-180" : ""
+                          }`}
+                        />
+                      )}
+                    </div>
                   </Link>
 
                   {item.hasDropdown && isExpanded && (
@@ -436,114 +432,6 @@ export default function DashboardLayout({
                           <Link
                             key={sub.name}
                             href={sub.href}
-                            className={`flex items-center gap-3 px-4 py-2 rounded-lg text-xs font-medium transition-all duration-200 ${
-                              isSubActive
-                                ? "text-primary bg-primary/5"
-                                : "text-slate hover:text-primary hover:bg-surface"
-                            }`}
-                          >
-                            <sub.icon className="h-4 w-4" />
-                            {sub.name}
-                          </Link>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </nav>
-
-          <div className="p-4 border-t border-border">
-            <Button
-              variant="ghost"
-              onClick={() => setShowLogoutModal(true)}
-              className="w-full justify-start text-red-500 hover:text-red-600 hover:bg-red-50 gap-3"
-            >
-              <LogOut className="h-5 w-5" />
-              <span className="font-medium">Logout</span>
-            </Button>
-          </div>
-        </aside>
-
-        {/* Mobile Sidebar overlay */}
-        {isSidebarOpen && (
-          <div
-            className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-            onClick={() => setIsSidebarOpen(false)}
-          />
-        )}
-
-        {/* Mobile Sidebar */}
-        <aside
-          className={`fixed inset-y-0 left-0 w-64 bg-white z-50 transform transition-transform duration-300 lg:hidden ${
-            isSidebarOpen ? "translate-x-0" : "-translate-x-full"
-          }`}
-        >
-          <div className="px-6 pt-6 pb-2 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="relative w-32 h-10">
-                <Image
-                  src="/logo.png"
-                  alt="Wealthconomy Logo"
-                  fill
-                  className="object-contain"
-                />
-              </div>
-            </div>
-            <button onClick={() => setIsSidebarOpen(false)}>
-              <X className="h-6 w-6 text-slate" />
-            </button>
-          </div>
-          <nav className="flex-1 px-4 space-y-2 mt-1 overflow-y-auto">
-            {sidebarItems.map((item) => {
-              const isActive = pathname === item.href;
-              const isChildActive = item.subItems?.some(
-                (sub) => pathname === sub.href,
-              );
-              const isExpanded =
-                expandedItems.includes(item.name) || isChildActive;
-
-              return (
-                <div key={item.name} className="space-y-1">
-                  <Link
-                    href={item.href}
-                    onClick={(e) => {
-                      if (item.hasDropdown) {
-                        e.preventDefault();
-                        toggleExpand(item.name);
-                      } else {
-                        setIsSidebarOpen(false);
-                      }
-                    }}
-                    className={`flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-200 group ${
-                      isActive || isChildActive
-                        ? "bg-primary text-white shadow-md shadow-primary/10"
-                        : "text-slate hover:bg-surface hover:text-primary"
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <item.icon className="h-5 w-5" />
-                      <span className="font-medium text-sm">{item.name}</span>
-                    </div>
-                    {item.hasDropdown && (
-                      <ChevronDown
-                        className={`h-4 w-4 transition-transform duration-200 ${
-                          isExpanded ? "rotate-180" : ""
-                        }`}
-                      />
-                    )}
-                  </Link>
-
-                  {item.hasDropdown && isExpanded && (
-                    <div className="ml-9 space-y-1">
-                      {item.subItems?.map((sub) => {
-                        const isSubActive = pathname === sub.href;
-                        return (
-                          <Link
-                            key={sub.name}
-                            href={sub.href}
-                            onClick={() => setIsSidebarOpen(false)}
                             className={`flex items-center gap-3 px-4 py-2 rounded-lg text-xs font-medium transition-all duration-200 ${
                               isSubActive
                                 ? "text-primary bg-primary/5"
@@ -565,77 +453,161 @@ export default function DashboardLayout({
           <div className="p-4 border-t border-border mt-auto">
             <Button
               variant="ghost"
-              onClick={() => {
-                setIsSidebarOpen(false);
-                setShowLogoutModal(true);
-              }}
-              className="w-full justify-start text-red-500 hover:text-red-600 hover:bg-red-50 gap-3"
+              onClick={() => setShowLogoutModal(true)}
+              className="w-full justify-start gap-3 text-red-500 hover:text-red-600 hover:bg-red-50 rounded-xl py-6 font-medium text-sm transition-colors cursor-pointer"
             >
               <LogOut className="h-5 w-5" />
-              <span className="font-medium">Logout</span>
+              Log Out
             </Button>
           </div>
         </aside>
 
-        {/* Main Content Area */}
-        <div className="flex-1 flex flex-col h-full overflow-hidden">
-          {/* Header with Persistent Gap Area */}
-          <div className="z-30 pl-4 pr-8 lg:pl-6 lg:pr-12 pt-[21px] pb-5 bg-surface">
-            <DashboardHeader 
-              setIsSidebarOpen={setIsSidebarOpen} 
-              setShowLogoutModal={setShowLogoutModal}
-              adminTeamRole={adminTeamRole}
+        {isSidebarOpen && (
+          <div className="fixed inset-0 z-50 lg:hidden animate-in fade-in duration-300">
+            <div
+              className="fixed inset-0 bg-black/40 backdrop-blur-xs"
+              onClick={() => setIsSidebarOpen(false)}
             />
-          </div>
-
-          {/* Page Content */}
-          <main id="main-scroll-container" className="flex-1 overflow-y-auto pl-4 pr-8 pb-5 lg:pl-6 lg:pr-12 lg:pb-10">
-            {isPageAllowed ? (
-              isTransitioning ? (
-                <div className="flex h-full w-full items-center justify-center min-h-[400px]">
-                  <Loader2 className="w-8 h-8 animate-spin text-[#155D5F]" />
-                </div>
-              ) : children
-            ) : (
-              <div className="w-full h-full min-h-[calc(100vh-130px)] bg-white rounded-[24px] border border-slate-100 flex flex-col md:flex-row shadow-lg relative overflow-hidden animate-in fade-in duration-500">
-                
-                {/* Left Side: Edge-to-Edge Image */}
-                <div className="relative w-full h-[300px] md:h-auto md:flex-1 order-1 md:order-1 bg-slate-50 overflow-hidden">
-                  <div className="absolute inset-0 bg-[#155D5F]/10 mix-blend-multiply z-10" />
-                  <Image 
-                    src="/access-denied-people.png" 
-                    alt="Access Denied" 
-                    fill 
-                    className="object-cover" 
-                    priority
+            <div className="fixed inset-y-0 left-0 w-[280px] bg-white shadow-2xl flex flex-col z-10 animate-in slide-in-from-left duration-300">
+              <div className="p-6 flex items-center justify-between border-b border-border">
+                <div className="relative w-[180px] h-10">
+                  <Image
+                    src="/logo1.png"
+                    alt="Wealthconomy Logo"
+                    fill
+                    className="object-contain object-left"
                   />
                 </div>
+                <button
+                  onClick={() => setIsSidebarOpen(false)}
+                  className="p-1 rounded-lg hover:bg-surface text-slate"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
 
-                {/* Right Side: Text Content */}
-                <div className="flex-1 flex flex-col items-center justify-center text-center p-8 sm:p-12 lg:p-24 space-y-8 z-10 order-2 md:order-2 relative">
-                  <div className="absolute top-[-20%] right-[-10%] w-[500px] h-[500px] bg-[#155D5F]/[0.02] rounded-full blur-[100px] pointer-events-none" />
-                  
-                  <div className="space-y-5 z-10">
-                    <span className="inline-block bg-red-50 text-red-500 border border-red-100 px-4 py-1.5 text-xs font-extrabold uppercase rounded-full tracking-wider">
-                      Restricted Area
-                    </span>
-                    <h1 className="text-4xl lg:text-5xl font-black font-outfit text-slate-800 tracking-tight leading-tight">
-                      Access Denied
-                    </h1>
-                    <p className="text-slate-500 text-base font-medium leading-relaxed max-w-[500px]">
-                      Your administrator account doesn&apos;t have the permissions needed to view this section. Please contact your Super Admin to update your access rights.
+              <nav className="flex-1 px-4 space-y-2 py-4 overflow-y-auto">
+                {sidebarItems.map((item) => {
+                  const isActive = pathname === item.href;
+                  const isChildActive = item.subItems?.some(
+                    (sub) => pathname === sub.href,
+                  );
+                  const isExpanded =
+                    expandedItems.includes(item.name) || isChildActive;
+
+                  return (
+                    <div key={item.name} className="space-y-1">
+                      <Link
+                        href={item.href}
+                        onClick={(e) => {
+                          if (item.hasDropdown) {
+                            e.preventDefault();
+                            toggleExpand(item.name);
+                          } else {
+                            setIsSidebarOpen(false);
+                          }
+                        }}
+                        className={`flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-200 group ${
+                          isActive || isChildActive
+                            ? "bg-primary text-white shadow-md shadow-primary/10"
+                            : "text-slate hover:bg-surface hover:text-primary"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <item.icon className="h-5 w-5" />
+                          <span className="font-medium text-sm">{item.name}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {item.name === "Support Centre" && totalSupportUnread > 0 && (
+                            <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                              isActive || isChildActive ? "bg-white text-primary" : "bg-red-500 text-white"
+                            }`}>
+                              {totalSupportUnread}
+                            </span>
+                          )}
+                          {item.hasDropdown && (
+                            <ChevronDown
+                              className={`h-4 w-4 transition-transform duration-200 ${
+                                isExpanded ? "rotate-180" : ""
+                              }`}
+                            />
+                          )}
+                        </div>
+                      </Link>
+
+                      {item.hasDropdown && isExpanded && (
+                        <div className="ml-9 space-y-1">
+                          {item.subItems?.map((sub) => {
+                            const isSubActive = pathname === sub.href;
+                            return (
+                              <Link
+                                key={sub.name}
+                                href={sub.href}
+                                onClick={() => setIsSidebarOpen(false)}
+                                className={`flex items-center gap-3 px-4 py-2 rounded-lg text-xs font-medium transition-all duration-200 ${
+                                  isSubActive
+                                    ? "text-primary bg-primary/5"
+                                    : "text-slate hover:text-primary hover:bg-surface"
+                                }`}
+                              >
+                                <sub.icon className="h-4 w-4" />
+                                {sub.name}
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </nav>
+
+              <div className="p-4 border-t border-border mt-auto">
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    setIsSidebarOpen(false);
+                    setShowLogoutModal(true);
+                  }}
+                  className="w-full justify-start gap-3 text-red-500 hover:text-red-600 hover:bg-red-50 rounded-xl py-6 font-medium text-sm transition-colors cursor-pointer"
+                >
+                  <LogOut className="h-5 w-5" />
+                  Log Out
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+          <DashboardHeader
+            setIsSidebarOpen={setIsSidebarOpen}
+            setShowLogoutModal={setShowLogoutModal}
+          />
+          <main className="flex-1 overflow-y-auto p-4 md:p-8 bg-surface">
+            {children}
+            {isAccessDenied && (
+              <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-300">
+                <div className="relative bg-white rounded-[24px] p-8 w-full max-w-[420px] shadow-2xl border border-border/50 text-center space-y-5 animate-in zoom-in-95 duration-300">
+                  <div className="h-16 w-16 rounded-full bg-red-50 text-red-500 flex items-center justify-center mx-auto">
+                    <ShieldAlert className="h-8 w-8 text-red-500" />
+                  </div>
+                  <div className="space-y-2">
+                    <h3 className="text-xl font-bold font-outfit text-dark tracking-tight">
+                      Access Restricted
+                    </h3>
+                    <p className="text-sm font-medium text-slate/60 leading-relaxed">
+                      You do not have permission to view or modify this resource. If you believe this is an error, please contact your Super Administrator.
                     </p>
                   </div>
-                  
                   <Button
                     onClick={() => {
                       dispatch(setAccessDenied(false));
-                      router.push("/dashboard/settings");
+                      router.push("/dashboard");
                     }}
-                    className="h-14 px-8 rounded-2xl bg-[#155D5F] hover:bg-[#0F4A4C] text-white font-bold transition-all active:scale-95 flex items-center gap-2 shadow-lg shadow-[#155D5F]/20 text-sm cursor-pointer z-10"
+                    className="w-full h-11 rounded-xl bg-primary hover:bg-primary/90 text-white font-bold text-sm shadow-md"
                   >
-                    <ArrowLeft className="h-5 w-5" />
-                    Go back to Account Settings
+                    Return to Overview
                   </Button>
                 </div>
               </div>
@@ -686,6 +658,22 @@ export default function DashboardLayout({
         )}
       </div>
       <AdminChatWidget />
-    </NotificationProvider>
+    </>
+  );
+}
+
+export default function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <SocketProvider>
+      <UnreadCountProvider>
+        <NotificationProvider>
+          <DashboardLayoutContent>{children}</DashboardLayoutContent>
+        </NotificationProvider>
+      </UnreadCountProvider>
+    </SocketProvider>
   );
 }

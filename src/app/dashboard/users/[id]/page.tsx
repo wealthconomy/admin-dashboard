@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, use } from "react";
+import { useState, use, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import {
   ChevronLeft,
@@ -30,14 +30,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { toast } from "sonner";
 import { 
   useGetUserDetailsQuery,
@@ -52,66 +44,69 @@ import {
   useResetUserMfaMutation
 } from "@/lib/redux/features/adminApi";
 
-const portfolioItems = [
+const normalizePlan = (str: string) => (str || "").replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+
+const formatCurrencyNaira = (val: any) => {
+  if (val === null || val === undefined || isNaN(Number(val))) return "₦0.00";
+  const num = Number(val);
+  const naira = num >= 100 ? num / 100 : num;
+  return `₦${naira.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+};
+
+const BASE_PORTFOLIO_PLANS = [
   {
     name: "WealthFlex",
-    amount: "₦0.00",
-    interest: "₦0.00",
+    key: "wealthflex",
+    backendType: "WEALTH_FLEX",
     icon: Wallet,
     color: "text-red-500",
     bgColor: "bg-red-50",
-    sub: "0 Active WealthFlex",
-    completed: "0 Completed",
+    defaultSub: "Active WealthFlex",
   },
   {
     name: "WealthGoal",
-    amount: "₦0.00",
-    interest: "₦0.00",
+    key: "wealthgoal",
+    backendType: "WEALTH_GOAL",
     icon: Target,
     color: "text-pink-500",
     bgColor: "bg-pink-50",
-    sub: "0 Active WealthGoals",
-    completed: "0 Completed",
+    defaultSub: "Active WealthGoals",
   },
   {
     name: "WealthFix",
-    amount: "₦0.00",
-    interest: "₦0.00",
+    key: "wealthfix",
+    backendType: "WEALTH_FIX",
     icon: Zap,
     color: "text-orange-500",
     bgColor: "bg-orange-50",
-    sub: "0 Active WealthFix",
-    completed: "0 Completed",
+    defaultSub: "Active WealthFix",
   },
   {
     name: "WealthFam",
-    amount: "₦0.00",
-    interest: "₦0.00",
+    key: "wealthfam",
+    backendType: "WEALTH_FAM",
     icon: Users,
     color: "text-purple-500",
     bgColor: "bg-purple-50",
-    sub: "0 Active WealthFam",
-    completed: "0 Completed",
+    defaultSub: "Active WealthFam",
   },
   {
     name: "WealthFlow",
-    amount: "₦0.00",
-    interest: "₦0.00",
+    key: "wealthflow",
+    backendType: "WEALTH_FLOW",
     icon: RefreshCcw,
     color: "text-blue-500",
     bgColor: "bg-blue-50",
-    sub: "0 Active WealthAuto",
-    completed: "0 Complete",
+    defaultSub: "Active WealthFlow",
   },
   {
     name: "WealthGroup",
-    amount: "₦0.00",
-    interest: "₦0.00",
+    key: "wealthgroup",
+    backendType: "WEALTH_GROUP",
     icon: UsersRound,
     color: "text-gray-500",
     bgColor: "bg-gray-50",
-    sub: "0 Active WealthGroup",
-    completed: "0 Completed",
+    defaultSub: "Active WealthGroup",
   },
 ];
 
@@ -124,6 +119,58 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
   const { data: userDataResponse, isLoading, isError, refetch } = useGetUserDetailsQuery(resolvedId);
   // Safely extract the user object whether it's wrapped in { data: ... } or { data: { data: ... } }
   const user = userDataResponse?.data?.data || userDataResponse?.data || userDataResponse;
+
+  const portfolioItems = useMemo(() => {
+    const portfoliosArray: any[] = Array.isArray(user?.portfolios)
+      ? user.portfolios
+      : Array.isArray(user?.portfolioStats)
+      ? user.portfolioStats
+      : [];
+
+    const portfoliosObj: Record<string, any> =
+      typeof user?.portfolios === "object" && !Array.isArray(user?.portfolios)
+        ? user.portfolios
+        : {};
+
+    return BASE_PORTFOLIO_PLANS.map((plan) => {
+      // 1. Look in array by type or name
+      const foundInArray = portfoliosArray.find((p: any) => {
+        const typeStr = normalizePlan(p.type || p.category || p.name || p.planType || "");
+        return typeStr === plan.key || typeStr === normalizePlan(plan.backendType);
+      });
+
+      // 2. Look in object or directly on user object
+      const foundInObj =
+        portfoliosObj[plan.key] ||
+        portfoliosObj[plan.backendType] ||
+        user?.[plan.key] ||
+        user?.[plan.backendType];
+
+      const match = foundInArray || foundInObj || {};
+
+      const balance = match.balance ?? match.amount ?? match.totalSavings ?? match.totalBalance ?? 0;
+      const interest = match.interest ?? match.interestAmount ?? match.totalInterest ?? match.accruedInterest ?? 0;
+      const activeCount = match.activeCount ?? match.active ?? match.count ?? 0;
+      const completedCount = match.completedCount ?? match.completed ?? 0;
+
+      const numBalance = Number(balance) || 0;
+      const displayBalance = numBalance >= 100 ? numBalance / 100 : numBalance;
+
+      const numInterest = Number(interest) || 0;
+      const displayInterest = numInterest >= 100 ? numInterest / 100 : numInterest;
+
+      return {
+        name: plan.name,
+        amount: `₦${displayBalance.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        interest: `${displayInterest.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        icon: plan.icon,
+        color: plan.color,
+        bgColor: plan.bgColor,
+        sub: `${activeCount} ${plan.defaultSub}`,
+        completed: `${completedCount} Completed`,
+      };
+    });
+  }, [user]);
 
   const [suspendUserMutation] = useSuspendUserMutation();
   const [unsuspendUserMutation] = useUnsuspendUserMutation();
@@ -453,12 +500,11 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
               Transaction
             </h3>
             <div className="space-y-6">
-              {/* Monetary values from the API are in kobo — divide by 100 to get naira */}
-              <InfoItem label="Wallet Balance" value={`₦${(Number(user?.walletBalance || 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}`} />
-              <InfoItem label="Total Savings" value={`₦${(Number(user?.totalSavings || 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}`} />
-              <InfoItem label="Total Interest" value={`₦${(Number(user?.totalInterest || 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}`} />
-              <InfoItem label="Pending Transactions" value={`${user?.pendingTransactionsCount || 0} Transactions`} />
-              <InfoItem label="Failed Transactions" value={`${user?.failedTransactionsCount || 0} Transaction`} />
+              <InfoItem label="Wallet Balance" value={formatCurrencyNaira(user?.walletBalance ?? 0)} />
+              <InfoItem label="Total Savings" value={formatCurrencyNaira(user?.totalSavings ?? 0)} />
+              <InfoItem label="Total Interest" value={formatCurrencyNaira(user?.totalInterest ?? 0)} />
+              <InfoItem label="Pending Transactions" value={`${user?.pendingTransactionsCount ?? user?.pendingTransactions ?? 0} Transactions`} />
+              <InfoItem label="Failed Transactions" value={`${user?.failedTransactionsCount ?? user?.failedTransactions ?? 0} Transactions`} />
             </div>
           </div>
         </div>

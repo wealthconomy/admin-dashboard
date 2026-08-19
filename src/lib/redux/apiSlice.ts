@@ -76,6 +76,9 @@ export const apiSlice = createApi({
     'Support',
     'InternalChat',
     'EmailTemplates',
+    'Newsletter',
+    'Assessment',
+    'AssessmentSubmission',
   ],
   endpoints: () => ({}),
 });

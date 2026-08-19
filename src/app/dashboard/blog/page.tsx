@@ -264,10 +264,10 @@ export default function BlogOverviewPage() {
     article.category.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const isStatsLoading = isLoadingArticles || isLoadingStats;
-  const totalPublishedCount = statsData?.data?.totalPublished ?? statsData?.data?.publishedCount ?? published.length;
-  const totalViewsCount = statsData?.data?.totalViews ?? published.reduce((acc, a) => acc + (Number(a.views) || 0), 0);
-  const totalBookmarksCount = statsData?.data?.totalBookmarks ?? statsData?.data?.totalLikes ?? published.reduce((acc, a) => acc + (Number(a.bookmarks) || 0), 0);
+  const isStatsLoading = isLoadingStats;
+  const totalPublishedCount = Number(statsData?.data?.totalPublished ?? 0);
+  const totalViewsCount = Number(statsData?.data?.totalViews ?? 0);
+  const totalBookmarksCount = Number(statsData?.data?.totalBookmarks ?? 0);
 
   const handlePublish = async (id: number) => {
     try {

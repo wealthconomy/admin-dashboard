@@ -52,11 +52,16 @@ export function DashboardAnalytics() {
 
   if (!mounted) return null;
 
-  // Build chart data from API response
+  // Build chart data from API response — both datasets
   const userChartData = userGrowthData?.data?.labels?.map((label: string, i: number) => ({
     name: label,
-    users: userGrowthData?.data?.datasets?.[0]?.data?.[i] ?? 0,
+    registered: userGrowthData?.data?.datasets?.[0]?.data?.[i] ?? 0,
+    verified: userGrowthData?.data?.datasets?.[1]?.data?.[i] ?? 0,
   })) ?? [];
+
+  // Use colors from API response so they're always in sync with backend intent
+  const registeredColor = userGrowthData?.data?.datasets?.[0]?.color ?? "#3B82F6";
+  const verifiedColor   = userGrowthData?.data?.datasets?.[1]?.color ?? "#10B981";
 
   const wealthChartData = wealthGrowthData?.data?.labels?.map((label: string, i: number) => {
     const rawVal = Number(wealthGrowthData?.data?.datasets?.[0]?.data?.[i] ?? 0);
@@ -110,25 +115,37 @@ export function DashboardAnalytics() {
               <ChartHeader title="User Growth Chart" filter={userFilter} setFilter={setUserFilter} />
               <div className="flex justify-between items-center text-xs font-bold text-dark mb-4">
                 <span>{userLoading ? "Loading..." : `${userChartData.length} ${getPeriodLabel(userFilter)}`}</span>
-                <span className="flex items-center gap-1">
-                  Dataset: {userGrowthData?.data?.datasets?.[0]?.label ?? "Users"} <span className="text-[#65D36A]">↑</span>
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="flex items-center gap-1 text-[10px] font-bold" style={{ color: registeredColor }}>
+                    <span className="inline-block h-2 w-4 rounded-full" style={{ background: registeredColor }} />
+                    {userGrowthData?.data?.datasets?.[0]?.label ?? "Registered Users"}
+                  </span>
+                  <span className="flex items-center gap-1 text-[10px] font-bold" style={{ color: verifiedColor }}>
+                    <span className="inline-block h-2 w-4 rounded-full" style={{ background: verifiedColor }} />
+                    {userGrowthData?.data?.datasets?.[1]?.label ?? "Verified Investors"}
+                  </span>
+                </div>
               </div>
             </div>
             <div className="flex-1 w-full relative pl-6 pb-4">
               <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                 <AreaChart data={userChartData} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
                   <defs>
-                    <linearGradient id="colorUsers" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#86D7DA69" stopOpacity={1} />
-                      <stop offset="95%" stopColor="#86D7DA69" stopOpacity={0.2} />
+                    <linearGradient id="colorRegistered" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={registeredColor} stopOpacity={0.35} />
+                      <stop offset="95%" stopColor={registeredColor} stopOpacity={0.03} />
+                    </linearGradient>
+                    <linearGradient id="colorVerified" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={verifiedColor} stopOpacity={0.25} />
+                      <stop offset="95%" stopColor={verifiedColor} stopOpacity={0.03} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748B' }} dy={10} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748B' }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748B' }} allowDecimals={false} />
                   <Tooltip cursor={{ stroke: '#94A3B8', strokeWidth: 1, strokeDasharray: '4 4' }} />
-                  <Area type="monotone" dataKey="users" stroke="#81E0DB" strokeWidth={3} fillOpacity={1} fill="url(#colorUsers)" dot={{ r: 4, fill: '#155D5F', strokeWidth: 0 }} activeDot={{ r: 6, fill: '#155D5F' }} />
+                  <Area type="monotone" dataKey="registered" name={userGrowthData?.data?.datasets?.[0]?.label ?? "Registered Users"} stroke={registeredColor} strokeWidth={2.5} fillOpacity={1} fill="url(#colorRegistered)" dot={{ r: 3.5, fill: registeredColor, strokeWidth: 0 }} activeDot={{ r: 5, fill: registeredColor }} />
+                  <Area type="monotone" dataKey="verified" name={userGrowthData?.data?.datasets?.[1]?.label ?? "Verified Investors"} stroke={verifiedColor} strokeWidth={2.5} fillOpacity={1} fill="url(#colorVerified)" dot={{ r: 3.5, fill: verifiedColor, strokeWidth: 0 }} activeDot={{ r: 5, fill: verifiedColor }} />
                 </AreaChart>
               </ResponsiveContainer>
               <div className="absolute left-0 bottom-[-10px] w-full text-center text-[10px] font-medium text-slate">{getPeriodLabel(userFilter)}</div>
@@ -190,7 +207,7 @@ export function DashboardAnalytics() {
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
-                    <Tooltip />
+                    <Tooltip formatter={(value: any, name: any) => [`${value}%`, name]} />
                   </PieChart>
                 </ResponsiveContainer>
               )}

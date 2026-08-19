@@ -14,6 +14,9 @@ import {
   Globe,
   Monitor,
   Loader2,
+  Repeat,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -268,175 +271,175 @@ export default function AuditLogsPage() {
 
       {/* Summary KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-[#F2FFFF] border border-[#155D5F4D] rounded-[20px] p-5 flex items-start justify-between shadow-[0px_4px_10px_0px_rgba(0,0,0,0.02)]">
-          <div className="space-y-1">
-            {isLoading || isFetching ? (
-              <div className="h-7 flex items-center">
-                <Loader2 className="h-5 w-5 text-[#155D5F] animate-spin" />
+            <div className="bg-[#F2FFFF] border border-[#155D5F4D] rounded-[20px] p-5 flex items-start justify-between shadow-[0px_4px_10px_0px_rgba(0,0,0,0.02)]">
+              <div className="space-y-1">
+                {isLoading || isFetching ? (
+                  <div className="h-7 flex items-center">
+                    <Loader2 className="h-5 w-5 text-[#155D5F] animate-spin" />
+                  </div>
+                ) : (
+                  <p className="text-[26px] font-extrabold text-[#155D5F] leading-none">{totalEvents}</p>
+                )}
+                <p className="text-[11px] font-bold text-[#155D5F] pt-1">Total Audit Events Traced</p>
               </div>
-            ) : (
-              <p className="text-[26px] font-extrabold text-[#155D5F] leading-none">{totalEvents}</p>
-            )}
-            <p className="text-[11px] font-bold text-[#155D5F] pt-1">Total Audit Events Traced</p>
-          </div>
-          <div className="h-9 w-9 bg-[#155D5F] text-white rounded-full flex items-center justify-center shrink-0">
-            <Terminal className="h-4.5 w-4.5" />
-          </div>
-        </div>
-
-        <div className="bg-[#F2FFFF] border border-[#155D5F4D] rounded-[20px] p-5 flex items-start justify-between shadow-[0px_4px_10px_0px_rgba(0,0,0,0.02)]">
-          <div className="space-y-1">
-            {isLoading || isFetching ? (
-              <div className="h-7 flex items-center">
-                <Loader2 className="h-5 w-5 text-[#155D5F] animate-spin" />
+              <div className="h-9 w-9 bg-[#155D5F] text-white rounded-full flex items-center justify-center shrink-0">
+                <Terminal className="h-4.5 w-4.5" />
               </div>
-            ) : (
-              <p className="text-[26px] font-extrabold text-[#155D5F] leading-none">{flaggedIncidents}</p>
-            )}
-            <p className="text-[11px] font-bold text-[#155D5F] pt-1">Flagged Access Incidents</p>
-          </div>
-          <div className="h-9 w-9 bg-red-500 text-white rounded-full flex items-center justify-center shrink-0 shadow-sm shadow-red-500/10">
-            <AlertCircle className="h-4.5 w-4.5" />
-          </div>
-        </div>
+            </div>
 
-        <div className="bg-[#F2FFFF] border border-[#155D5F4D] rounded-[20px] p-5 flex items-start justify-between shadow-[0px_4px_10px_0px_rgba(0,0,0,0.02)]">
-          <div className="space-y-1">
-            {isLoading || isFetching ? (
-              <div className="h-7 flex items-center">
-                <Loader2 className="h-5 w-5 text-[#155D5F] animate-spin" />
+            <div className="bg-[#F2FFFF] border border-[#155D5F4D] rounded-[20px] p-5 flex items-start justify-between shadow-[0px_4px_10px_0px_rgba(0,0,0,0.02)]">
+              <div className="space-y-1">
+                {isLoading || isFetching ? (
+                  <div className="h-7 flex items-center">
+                    <Loader2 className="h-5 w-5 text-[#155D5F] animate-spin" />
+                  </div>
+                ) : (
+                  <p className="text-[26px] font-extrabold text-[#155D5F] leading-none">{flaggedIncidents}</p>
+                )}
+                <p className="text-[11px] font-bold text-[#155D5F] pt-1">Flagged Access Incidents</p>
               </div>
-            ) : (
-              <p className="text-[26px] font-extrabold text-[#155D5F] leading-none">{permissionsAltered}</p>
-            )}
-            <p className="text-[11px] font-bold text-[#155D5F] pt-1">Team Permissions Altered</p>
-          </div>
-          <div className="h-9 w-9 bg-amber-500 text-white rounded-full flex items-center justify-center shrink-0 shadow-sm">
-            <UserCheck className="h-4.5 w-4.5" />
-          </div>
-        </div>
-      </div>
+              <div className="h-9 w-9 bg-red-500 text-white rounded-full flex items-center justify-center shrink-0 shadow-sm shadow-red-500/10">
+                <AlertCircle className="h-4.5 w-4.5" />
+              </div>
+            </div>
 
-      {/* Audit Logs Table */}
-      <div className="border border-border/50 rounded-2xl overflow-hidden shadow-sm bg-white">
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader className="bg-surface/50">
-              <TableRow className="border-border/50 hover:bg-transparent">
-                <TableHead className="py-4 px-4 text-slate/50 font-bold text-[10px] uppercase tracking-widest hidden md:table-cell w-[160px]">Timestamp</TableHead>
-                <TableHead className="py-4 px-4 text-slate/50 font-bold text-[10px] uppercase tracking-widest w-[200px] md:w-[250px]">Administrator</TableHead>
-                <TableHead className="py-4 px-4 text-slate/50 font-bold text-[10px] uppercase tracking-widest hidden sm:table-cell w-[180px]">Event Category</TableHead>
-                <TableHead className="py-4 px-4 text-slate/50 font-bold text-[10px] uppercase tracking-widest">Activity Traced</TableHead>
-                <TableHead className="py-4 px-4 w-[60px]"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="py-20 text-center">
-                    <div className="flex flex-col items-center gap-2">
-                      <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto"></div>
-                      <p className="text-sm font-medium text-slate/40">Loading audit logs...</p>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ) : filteredLogs.length > 0 ? (
-                filteredLogs.map((log: any) => (
-                  <TableRow key={log.id} className="group border-border/50 hover:bg-surface/30 transition-all duration-200">
-                    <TableCell className="py-4 px-4 hidden md:table-cell">
-                      <span className="text-[11px] font-bold text-slate/50 block">{log.timestamp}</span>
-                      <span className="text-[9px] font-bold text-primary/60 uppercase">{log.id}</span>
-                    </TableCell>
-                    <TableCell className="py-4 px-4">
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <Avatar className="h-7 w-7 border border-primary/5 shadow-sm shrink-0">
-                          <AvatarImage src={log.admin.avatarUrl} />
-                          <AvatarFallback className="bg-primary/5 text-primary text-[10px] font-bold">
-                            {log.admin.name.charAt(0)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div className="flex flex-col min-w-0">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="font-extrabold text-[12px] text-dark leading-snug truncate">{log.admin.name}</span>
-                            <Badge className={`px-1.5 py-0 border shadow-none text-[8px] font-bold rounded-md shrink-0 ${
-                              log.admin.role === "Super Admin" 
-                                ? "bg-emerald-50 text-emerald-600 border-emerald-100/50" 
-                                : "bg-surface text-slate/70 border-border/30"
-                            }`}>
-                              {log.admin.role}
-                            </Badge>
-                          </div>
-                          <span className="text-[10px] font-medium text-slate/40 truncate">{log.admin.email}</span>
-                          
-                          {/* Mobile-only metadata */}
-                          <div className="flex flex-col gap-0.5 mt-1 md:hidden">
-                            <span className="text-[9px] font-semibold text-slate/40">{log.timestamp}</span>
-                            <span className="text-[9px] font-bold text-primary/60 uppercase">{log.id}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell className="py-4 px-4 hidden sm:table-cell">
-                      <span className={`text-[10px] font-bold px-2 py-1 rounded-lg ${
-                        log.category === "User Management" ? "bg-amber-50 text-amber-600 border border-amber-100" :
-                        log.category === "Team Management" ? "bg-purple-50 text-purple-600 border border-purple-100" :
-                        log.category === "Content Engine" ? "bg-blue-50 text-blue-600 border border-[#A4C2E6]" :
-                        "bg-slate-50 text-slate-500 border border-slate-100"
-                      }`}>
-                        {log.category}
-                      </span>
-                    </TableCell>
-                    <TableCell className="py-4 px-4">
-                      {/* Mobile-only Category Badge */}
-                      <div className="sm:hidden mb-1">
-                        <span className={`text-[8px] font-extrabold px-1.5 py-0.5 rounded-md ${
-                          log.category === "User Management" ? "bg-amber-50 text-amber-600 border border-amber-100" :
-                          log.category === "Team Management" ? "bg-purple-50 text-purple-600 border border-purple-100" :
-                          log.category === "Content Engine" ? "bg-blue-50 text-blue-600 border border-blue-100" :
-                          "bg-slate-50 text-slate-500 border border-slate-100"
-                        }`}>
-                          {log.category}
-                        </span>
-                      </div>
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-[12px] font-extrabold text-dark leading-snug block">{log.action}</span>
-                        {log.targetName && (
-                          <span className="text-[10px] font-medium text-slate/50">
-                            Target: <span className="font-bold text-primary">{log.targetName}</span>
-                          </span>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="py-4 px-4 text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" className="h-8 w-8 p-0 hover:bg-surface rounded-full">
-                            <MoreVertical className="h-4 w-4 text-slate/40" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-40 rounded-[14px] border-border/50 shadow-xl p-1 bg-white">
-                          <DropdownMenuItem onClick={() => setSelectedLog(log)} className="py-2 px-3.5 text-xs font-bold focus:bg-surface text-dark cursor-pointer rounded-xl gap-2">
-                            <Eye className="h-3.5 w-3.5 text-primary" /> View Details
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
+            <div className="bg-[#F2FFFF] border border-[#155D5F4D] rounded-[20px] p-5 flex items-start justify-between shadow-[0px_4px_10px_0px_rgba(0,0,0,0.02)]">
+              <div className="space-y-1">
+                {isLoading || isFetching ? (
+                  <div className="h-7 flex items-center">
+                    <Loader2 className="h-5 w-5 text-[#155D5F] animate-spin" />
+                  </div>
+                ) : (
+                  <p className="text-[26px] font-extrabold text-[#155D5F] leading-none">{permissionsAltered}</p>
+                )}
+                <p className="text-[11px] font-bold text-[#155D5F] pt-1">Team Permissions Altered</p>
+              </div>
+              <div className="h-9 w-9 bg-amber-500 text-white rounded-full flex items-center justify-center shrink-0 shadow-sm">
+                <UserCheck className="h-4.5 w-4.5" />
+              </div>
+            </div>
+          </div>
+
+          {/* Audit Logs Table */}
+          <div className="border border-border/50 rounded-2xl overflow-hidden shadow-sm bg-white">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader className="bg-surface/50">
+                  <TableRow className="border-border/50 hover:bg-transparent">
+                    <TableHead className="py-4 px-4 text-slate/50 font-bold text-[10px] uppercase tracking-widest hidden md:table-cell w-[160px]">Timestamp</TableHead>
+                    <TableHead className="py-4 px-4 text-slate/50 font-bold text-[10px] uppercase tracking-widest w-[200px] md:w-[250px]">Administrator</TableHead>
+                    <TableHead className="py-4 px-4 text-slate/50 font-bold text-[10px] uppercase tracking-widest hidden sm:table-cell w-[180px]">Event Category</TableHead>
+                    <TableHead className="py-4 px-4 text-slate/50 font-bold text-[10px] uppercase tracking-widest">Activity Traced</TableHead>
+                    <TableHead className="py-4 px-4 w-[60px]"></TableHead>
                   </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell colSpan={5} className="py-20 text-center">
-                    <div className="flex flex-col items-center gap-2">
-                      <Terminal className="h-8 w-8 text-slate/20" />
-                      <p className="text-sm font-medium text-slate/40">No audit events match your search parameters.</p>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </div>
+                </TableHeader>
+                <TableBody>
+                  {isLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="py-20 text-center">
+                        <div className="flex flex-col items-center gap-2">
+                          <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto"></div>
+                          <p className="text-sm font-medium text-slate/40">Loading audit logs...</p>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : filteredLogs.length > 0 ? (
+                    filteredLogs.map((log: any) => (
+                      <TableRow key={log.id} className="group border-border/50 hover:bg-surface/30 transition-all duration-200">
+                        <TableCell className="py-4 px-4 hidden md:table-cell">
+                          <span className="text-[11px] font-bold text-slate/50 block">{log.timestamp}</span>
+                          <span className="text-[9px] font-bold text-primary/60 uppercase">{log.id}</span>
+                        </TableCell>
+                        <TableCell className="py-4 px-4">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <Avatar className="h-7 w-7 border border-primary/5 shadow-sm shrink-0">
+                              <AvatarImage src={log.admin.avatarUrl} />
+                              <AvatarFallback className="bg-primary/5 text-primary text-[10px] font-bold">
+                                {log.admin.name.charAt(0)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="flex flex-col min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-extrabold text-[12px] text-dark leading-snug truncate">{log.admin.name}</span>
+                                <Badge className={`px-1.5 py-0 border shadow-none text-[8px] font-bold rounded-md shrink-0 ${
+                                  log.admin.role === "Super Admin" 
+                                    ? "bg-emerald-50 text-emerald-600 border-emerald-100/50" 
+                                    : "bg-surface text-slate/70 border-border/30"
+                                }`}>
+                                  {log.admin.role}
+                                </Badge>
+                              </div>
+                              <span className="text-[10px] font-medium text-slate/40 truncate">{log.admin.email}</span>
+                              
+                              {/* Mobile-only metadata */}
+                              <div className="flex flex-col gap-0.5 mt-1 md:hidden">
+                                <span className="text-[9px] font-semibold text-slate/40">{log.timestamp}</span>
+                                <span className="text-[9px] font-bold text-primary/60 uppercase">{log.id}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell className="py-4 px-4 hidden sm:table-cell">
+                          <span className={`text-[10px] font-bold px-2 py-1 rounded-lg ${
+                            log.category === "User Management" ? "bg-amber-50 text-amber-600 border border-amber-100" :
+                            log.category === "Team Management" ? "bg-purple-50 text-purple-600 border border-purple-100" :
+                            log.category === "Content Engine" ? "bg-blue-50 text-blue-600 border border-[#A4C2E6]" :
+                            "bg-slate-50 text-slate-500 border border-slate-100"
+                          }`}>
+                            {log.category}
+                          </span>
+                        </TableCell>
+                        <TableCell className="py-4 px-4">
+                          {/* Mobile-only Category Badge */}
+                          <div className="sm:hidden mb-1">
+                            <span className={`text-[8px] font-extrabold px-1.5 py-0.5 rounded-md ${
+                              log.category === "User Management" ? "bg-amber-50 text-amber-600 border border-amber-100" :
+                              log.category === "Team Management" ? "bg-purple-50 text-purple-600 border border-purple-100" :
+                              log.category === "Content Engine" ? "bg-blue-50 text-blue-600 border border-blue-100" :
+                              "bg-slate-50 text-slate-500 border border-slate-100"
+                            }`}>
+                              {log.category}
+                            </span>
+                          </div>
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-[12px] font-extrabold text-dark leading-snug block">{log.action}</span>
+                            {log.targetName && (
+                              <span className="text-[10px] font-medium text-slate/50">
+                                Target: <span className="font-bold text-primary">{log.targetName}</span>
+                              </span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="py-4 px-4 text-right">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" className="h-8 w-8 p-0 hover:bg-surface rounded-full">
+                                <MoreVertical className="h-4 w-4 text-slate/40" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-40 rounded-[14px] border-border/50 shadow-xl p-1 bg-white">
+                              <DropdownMenuItem onClick={() => setSelectedLog(log)} className="py-2 px-3.5 text-xs font-bold focus:bg-surface text-dark cursor-pointer rounded-xl gap-2">
+                                <Eye className="h-3.5 w-3.5 text-primary" /> View Details
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={5} className="py-20 text-center">
+                        <div className="flex flex-col items-center gap-2">
+                          <Terminal className="h-8 w-8 text-slate/20" />
+                          <p className="text-sm font-medium text-slate/40">No audit events match your search parameters.</p>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
 
       {/* Pagination indicators */}
       <div className="flex justify-between items-center text-xs font-bold text-slate/40 pt-2 px-1">

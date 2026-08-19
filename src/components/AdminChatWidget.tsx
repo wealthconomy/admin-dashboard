@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { MessageSquare, X, Send, ChevronRight, CheckCheck, Minimize2 } from "lucide-react";
-import Image from "next/image";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -14,11 +13,16 @@ import {
   useGetInternalMessagesQuery, 
   useSendInternalMessageMutation 
 } from "@/lib/redux/features/chatApi";
+import { useSocket } from "@/context/SocketContext";
+import { useUnreadCounts } from "@/context/UnreadCountContext";
 import { Loader2 } from "lucide-react";
 
 export function AdminChatWidget() {
-  const { data: teamData, isLoading: isTeamLoading } = useGetInternalTeamQuery();
-  const team = Array.isArray(teamData) ? teamData : (teamData?.data || []);
+  const { socket, isConnected } = useSocket();
+  const { totalInternalUnread, markInternalRead } = useUnreadCounts();
+
+  const { data: teamData, isLoading: isTeamLoading, refetch: refetchTeam } = useGetInternalTeamQuery();
+  const rawTeam = Array.isArray(teamData) ? teamData : (teamData?.data || []);
 
   const { data: meData } = useGetMeQuery(undefined);
   const loggedInUser = useSelector((state: any) => state.auth.user);
@@ -28,16 +32,101 @@ export function AdminChatWidget() {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedAdmin, setSelectedAdmin] = useState<any | null>(null);
   const [inputText, setInputText] = useState("");
+  const [liveOnlineStatus, setLiveOnlineStatus] = useState<Record<string, "online" | "offline">>({});
+  const [liveMessages, setLiveMessages] = useState<any[]>([]);
 
-  const currentAdminId = selectedAdmin?.userId || selectedAdmin?.id || selectedAdmin?._id;
-  const { data: messagesData, isFetching } = useGetInternalMessagesQuery(currentAdminId, {
+  const currentAdminId = selectedAdmin?.userId || selectedAdmin?.adminId || selectedAdmin?.id || selectedAdmin?._id;
+  const { data: messagesData, isFetching, refetch: refetchMessages } = useGetInternalMessagesQuery(currentAdminId, {
     skip: !selectedAdmin,
-    pollingInterval: isOpen && selectedAdmin ? 5000 : 0,
   });
 
   const [sendMessage] = useSendInternalMessageMutation();
-
   const [lastMessagesMap, setLastMessagesMap] = useState<Record<string, { text: string; time: string }>>({});
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  // Sync initial REST messages into local state when switching admin or fetching
+  useEffect(() => {
+    const raw = Array.isArray(messagesData) ? messagesData : (messagesData?.data || []);
+    setLiveMessages(raw);
+  }, [messagesData, currentAdminId]);
+
+  // When selecting an admin, mark conversation as read
+  useEffect(() => {
+    if (selectedAdmin && currentAdminId) {
+      markInternalRead(currentAdminId);
+    }
+  }, [selectedAdmin, currentAdminId, markInternalRead]);
+
+  // Listen to WebSocket events: internal:new_message & user:status_change
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleNewMessage = (data: {
+      message: {
+        id: string;
+        senderId: string;
+        receiverId: string;
+        text: string;
+        createdAt?: string;
+      };
+      senderId: string;
+    }) => {
+      console.log("[WebSocket] internal:new_message received:", data);
+
+      const msg = data.message || data;
+      const sender = data.senderId || msg.senderId;
+
+      // Update preview map
+      const timeStr = new Date(msg.createdAt || Date.now()).toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      setLastMessagesMap((prev) => ({
+        ...prev,
+        [sender]: {
+          text: msg.text,
+          time: timeStr,
+        },
+      }));
+
+      // If this conversation is currently open, append immediately
+      if (currentAdminId && (sender === currentAdminId || msg.receiverId === currentAdminId)) {
+        setLiveMessages((prev) => {
+          if (prev.some((m) => m.id === msg.id)) return prev;
+          return [...prev, msg];
+        });
+        // Automatically mark read
+        markInternalRead(currentAdminId);
+      } else {
+        // Refresh team list to update unread badge
+        refetchTeam();
+      }
+    };
+
+    const handleStatusChange = (event: {
+      adminId?: string;
+      userId?: string;
+      name?: string;
+      status: "online" | "offline";
+    }) => {
+      console.log("[WebSocket] user:status_change received:", event);
+      const targetId = event.userId || event.adminId;
+      if (targetId) {
+        setLiveOnlineStatus((prev) => ({
+          ...prev,
+          [targetId]: event.status,
+        }));
+      }
+    };
+
+    socket.on("internal:new_message", handleNewMessage);
+    socket.on("user:status_change", handleStatusChange);
+
+    return () => {
+      socket.off("internal:new_message", handleNewMessage);
+      socket.off("user:status_change", handleStatusChange);
+    };
+  }, [socket, currentAdminId, markInternalRead, refetchTeam]);
 
   // Load cache when currentUserId is resolved
   useEffect(() => {
@@ -46,8 +135,6 @@ export function AdminChatWidget() {
         const saved = localStorage.getItem(`admin_chat_last_messages_${currentUserId}`);
         if (saved) {
           setLastMessagesMap(JSON.parse(saved));
-        } else {
-          setLastMessagesMap({});
         }
       } catch {
         setLastMessagesMap({});
@@ -55,16 +142,15 @@ export function AdminChatWidget() {
     }
   }, [currentUserId]);
 
-  // Save cache when lastMessagesMap or currentUserId changes
+  // Save cache when lastMessagesMap changes
   useEffect(() => {
     if (typeof window !== "undefined" && currentUserId !== "default") {
       localStorage.setItem(`admin_chat_last_messages_${currentUserId}`, JSON.stringify(lastMessagesMap));
     }
   }, [lastMessagesMap, currentUserId]);
 
-  const rawMessages = Array.isArray(messagesData) ? messagesData : (messagesData?.data || []);
   const activeMessages = useMemo(() => {
-    return rawMessages.map((msg: any) => {
+    return liveMessages.map((msg: any) => {
       const isMe = msg.senderId === currentUserId;
       const time = msg.createdAt 
         ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
@@ -75,67 +161,79 @@ export function AdminChatWidget() {
         time
       };
     });
-  }, [rawMessages, currentUserId]);
+  }, [liveMessages, currentUserId]);
 
+  // Scroll to bottom on new messages
   useEffect(() => {
-    if (currentAdminId && activeMessages.length > 0 && !isFetching) {
-      const lastMsg = activeMessages[activeMessages.length - 1];
-      const timeStr = lastMsg.time || "";
-      
-      setLastMessagesMap(prev => {
-        const existing = prev[currentAdminId];
-        if (existing && existing.text === lastMsg.text && existing.time === timeStr) {
-          return prev;
-        }
-        return {
-          ...prev,
-          [currentAdminId]: {
-            text: lastMsg.text,
-            time: timeStr
-          }
-        };
-      });
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
-  }, [activeMessages, currentAdminId, isFetching]);
+  }, [activeMessages]);
 
   const toggleOpen = () => setIsOpen(!isOpen);
 
   const handleSendMessage = async () => {
     if (!inputText.trim() || !selectedAdmin) return;
     
+    const textToSend = inputText.trim();
+    const recipientId = selectedAdmin.userId || selectedAdmin.adminId || selectedAdmin.id || selectedAdmin._id;
+    setInputText("");
+
+    // Optimistic local message
+    const tempId = `temp_${Date.now()}`;
+    const optimisticMsg = {
+      id: tempId,
+      senderId: currentUserId,
+      receiverId: recipientId,
+      text: textToSend,
+      createdAt: new Date().toISOString(),
+    };
+    setLiveMessages((prev) => [...prev, optimisticMsg]);
+
+    const timeStr = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    setLastMessagesMap((prev) => ({
+      ...prev,
+      [recipientId]: {
+        text: textToSend,
+        time: timeStr,
+      },
+    }));
+
+    // 1. Emit real-time WebSocket event
+    if (socket && isConnected) {
+      socket.emit("internal:send_message", {
+        receiverId: recipientId,
+        text: textToSend,
+      });
+    }
+
+    // 2. Execute REST mutation for database persistence & tag invalidation
     try {
-      const recipientId = selectedAdmin.userId || selectedAdmin.id || selectedAdmin._id;
-      await sendMessage({ receiverId: recipientId, text: inputText }).unwrap();
-      
-      // Instantly update the last message map for better responsiveness
-      const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      setLastMessagesMap(prev => ({
-        ...prev,
-        [recipientId]: {
-          text: inputText,
-          time: timeStr
-        }
-      }));
-      
-      setInputText("");
+      await sendMessage({ receiverId: recipientId, text: textToSend }).unwrap();
     } catch (err) {
-      console.error("Failed to send message: ", err);
+      console.warn("REST sendMessage fallback handled:", err);
     }
   };
 
   return (
     <>
-      {/* Floating Button */}
+      {/* Floating Button with Live Badge */}
       {!isOpen && (
         <button 
           onClick={toggleOpen}
-          className="fixed bottom-6 right-6 h-14 w-14 rounded-full bg-[#155D5F] hover:bg-[#0F4A4C] text-white shadow-xl shadow-[#155D5F]/20 flex items-center justify-center transition-all hover:scale-105 active:scale-95 z-50 group"
+          className="fixed bottom-6 right-6 h-14 w-14 rounded-full bg-[#155D5F] hover:bg-[#0F4A4C] text-white shadow-xl shadow-[#155D5F]/20 flex items-center justify-center transition-all hover:scale-105 active:scale-95 z-50 group cursor-pointer"
         >
           <MessageSquare className="h-6 w-6 group-hover:-translate-y-0.5 transition-transform" />
-          <span className="absolute top-0 right-0 flex h-3.5 w-3.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-orange-500 border-2 border-[#155D5F]"></span>
-          </span>
+          {totalInternalUnread > 0 ? (
+            <span className="absolute -top-1 -right-1 flex h-5 min-w-5 px-1 items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-extrabold border-2 border-white shadow-sm animate-in zoom-in-75 duration-200">
+              {totalInternalUnread}
+            </span>
+          ) : (
+            <span className="absolute top-0 right-0 flex h-3.5 w-3.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500 border-2 border-[#155D5F]"></span>
+            </span>
+          )}
         </button>
       )}
 
@@ -148,10 +246,13 @@ export function AdminChatWidget() {
             <div>
               <h3 className="font-bold font-outfit text-lg flex items-center gap-2">
                 Team Chat
+                {isConnected && (
+                  <span className="h-2 w-2 rounded-full bg-emerald-400 inline-block" title="Connected" />
+                )}
               </h3>
               <p className="text-[11px] text-white/70 font-medium">Internal administrative communication</p>
             </div>
-            <button onClick={toggleOpen} className="h-8 w-8 rounded-full hover:bg-white/10 flex items-center justify-center transition-colors">
+            <button onClick={toggleOpen} className="h-8 w-8 rounded-full hover:bg-white/10 flex items-center justify-center transition-colors cursor-pointer">
               <Minimize2 className="h-4.5 w-4.5" />
             </button>
           </div>
@@ -159,25 +260,34 @@ export function AdminChatWidget() {
           {!selectedAdmin ? (
             /* Admin List View */
             <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-1">
-              <div className="px-2 py-3">
+              <div className="px-2 py-3 flex items-center justify-between">
                 <span className="text-[11px] font-bold text-slate/50 uppercase tracking-widest">Active Team Members</span>
+                {totalInternalUnread > 0 && (
+                  <span className="text-[10px] font-extrabold bg-red-50 text-red-600 px-2 py-0.5 rounded-full border border-red-100">
+                    {totalInternalUnread} unread
+                  </span>
+                )}
               </div>
-              {team.map((admin: any) => {
-                const adminId = admin.id || admin._id;
+              {rawTeam.map((admin: any) => {
+                const adminId = admin.adminId || admin.id || admin._id;
                 const userObj = admin.user || admin;
-                const displayName = `${userObj.firstName || ""} ${userObj.lastName || ""}`.trim() || userObj.name || userObj.email || "Admin";
-                const displayImage = userObj.imageUrl || admin.imageUrl || admin.avatarUrl || admin.image || "";
-                const displayRole = admin.role === "CUSTOM" && admin.customRole ? admin.customRole.name : admin.role || "Admin";
-                
-                const recipientKey = userObj.userId || admin.userId || adminId;
-                const lastMsgData = lastMessagesMap[recipientKey];
-                const displayLastMsg = lastMsgData ? lastMsgData.text : "Click to view chat";
-                const displayTime = lastMsgData ? lastMsgData.time : "";
+                const targetKey = admin.userId || userObj.userId || userObj.id || adminId;
+                const displayName = admin.name || `${userObj.firstName || ""} ${userObj.lastName || ""}`.trim() || userObj.email || "Admin";
+                const displayImage = admin.avatarUrl || userObj.imageUrl || admin.imageUrl || admin.image || "";
+                const displayRole = admin.role || (admin.customRole ? admin.customRole.name : "Admin");
+                const unreadCount = admin.unreadCount ?? 0;
+
+                const liveStatus = liveOnlineStatus[targetKey] || admin.status || "offline";
+                const isOnline = liveStatus === "online";
+
+                const lastMsgData = lastMessagesMap[targetKey];
+                const displayLastMsg = lastMsgData ? lastMsgData.text : (admin.lastMessage?.text || "Click to start chat");
+                const displayTime = lastMsgData ? lastMsgData.time : (admin.lastMessage?.createdAt ? new Date(admin.lastMessage.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "");
 
                 return (
                 <div 
-                  key={adminId} 
-                  onClick={() => setSelectedAdmin({ ...admin, displayName, displayImage, displayRole })}
+                  key={adminId || targetKey} 
+                  onClick={() => setSelectedAdmin({ ...admin, userId: targetKey, displayName, displayImage, displayRole, isOnline })}
                   className="flex items-center gap-3 p-3 rounded-xl hover:bg-surface/60 cursor-pointer transition-colors group"
                 >
                   <div className="relative shrink-0 flex items-center justify-center">
@@ -185,7 +295,7 @@ export function AdminChatWidget() {
                       <AvatarImage src={displayImage} className="object-cover" />
                       <AvatarFallback className="bg-primary/10 font-bold text-primary flex items-center justify-center">{displayName.charAt(0).toUpperCase()}</AvatarFallback>
                     </Avatar>
-                    {admin.status === "online" && (
+                    {isOnline && (
                       <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-emerald-500 border-2 border-white" />
                     )}
                   </div>
@@ -195,10 +305,19 @@ export function AdminChatWidget() {
                       <span className="text-[9px] text-slate/40 font-bold">{displayTime}</span>
                     </div>
                     <div className="flex justify-between items-center mt-1.5">
-                      <span className="text-[11px] text-slate/50 truncate max-w-[140px] leading-none">{displayLastMsg}</span>
-                      <Badge className="bg-slate-50 text-slate-400 border-none text-[8px] font-bold px-1.5 py-0 leading-none">
-                        {displayRole}
-                      </Badge>
+                      <span className={`text-[11px] truncate max-w-[140px] leading-none ${unreadCount > 0 ? "font-bold text-dark" : "text-slate/50"}`}>
+                        {displayLastMsg}
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <Badge className="bg-slate-50 text-slate-400 border-none text-[8px] font-bold px-1.5 py-0 leading-none">
+                          {displayRole}
+                        </Badge>
+                        {unreadCount > 0 && (
+                          <span className="h-4 min-w-4 px-1 rounded-full bg-[#155D5F] text-white text-[9px] font-extrabold flex items-center justify-center">
+                            {unreadCount}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -211,7 +330,7 @@ export function AdminChatWidget() {
               
               {/* Back Header */}
               <div className="p-3 border-b border-border/50 bg-white/80 backdrop-blur-md sticky top-0 flex items-center gap-3 shrink-0">
-                <button onClick={() => setSelectedAdmin(null)} className="h-8 w-8 rounded-full hover:bg-surface flex items-center justify-center">
+                <button onClick={() => setSelectedAdmin(null)} className="h-8 w-8 rounded-full hover:bg-surface flex items-center justify-center cursor-pointer">
                   <ChevronRight className="h-4.5 w-4.5 rotate-180 text-slate/60" />
                 </button>
                 <Avatar className="h-9 w-9 shrink-0">
@@ -252,6 +371,7 @@ export function AdminChatWidget() {
                     </div>
                   ))
                 )}
+                <div ref={messagesEndRef} />
               </div>
 
               {/* Input */}
@@ -268,7 +388,7 @@ export function AdminChatWidget() {
                     size="icon" 
                     onClick={handleSendMessage}
                     disabled={!inputText.trim()}
-                    className="h-8 w-8 rounded-lg bg-[#155D5F] hover:bg-[#0F4A4C] text-white shrink-0 shadow-md"
+                    className="h-8 w-8 rounded-lg bg-[#155D5F] hover:bg-[#0F4A4C] text-white shrink-0 shadow-md cursor-pointer"
                   >
                     <Send className="h-3.5 w-3.5 -ml-0.5" />
                   </Button>

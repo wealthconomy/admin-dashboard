@@ -4,14 +4,15 @@ import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft, Wallet, Target, Crosshair, Users, Activity,
   Briefcase, TrendingUp, Minus, Calendar, FileText, FileSpreadsheet,
-  ShieldCheck, ChevronDown, ChevronUp, Leaf, BarChart2, Blend, Loader2
+  ShieldCheck, ChevronDown, ChevronUp, Leaf, BarChart2, Blend, Loader2,
+  AlertCircle
 } from "lucide-react";
 import { useState, useMemo } from "react";
 import { 
   useGetPortfoliosByTypeQuery, 
   useGetTribesQuery,
   useLazyExportTribesQuery,
-  useLazyExportPortfoliosByTypeQuery
+  useLazyExportPortfoliosByTypeQuery,
 } from "@/lib/redux/features/portfolioApi";
 import { toast } from "sonner";
 
@@ -360,7 +361,6 @@ export default function PlanUsersPage() {
   const router = useRouter();
   const [dateFilter, setDateFilter] = useState("all_time");
   const [isExpanded, setIsExpanded] = useState(false);
-
 
   const planKey = plan?.toLowerCase();
   const meta = PLAN_META[planKey as string];
@@ -737,7 +737,9 @@ export default function PlanUsersPage() {
     </div>
   );
 }
+
 function downloadCSV(arg0: string, users: PlanUser[], groups: WealthGroupData[], label: string, isWealthFix: boolean, isWealthGoal: boolean, isWealthGroup: boolean) {
   throw new Error("Function not implemented.");
 }
+
 
