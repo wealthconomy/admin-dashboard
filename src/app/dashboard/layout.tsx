@@ -105,7 +105,103 @@ const sidebarItems: SidebarItem[] = [
   { name: "Account Settings", icon: Settings, href: "/dashboard/settings" },
 ];
 
+// Maps each dashboard section to its required permissions
+const PAGE_PERMISSIONS: Record<string, string[]> = {
+  "/dashboard":                      ["dashboard:view"],
+  "/dashboard/users":                ["users:view", "users:edit"],
+  "/dashboard/users/activities":     ["activities:view"],
+  "/dashboard/users/transactions":   ["transactions:view", "transactions:edit"],
+  "/dashboard/blog":                 ["blogs:view", "blogs:edit"],
+  "/dashboard/library":              ["library:view", "library:edit"],
+  "/dashboard/assessments":          ["assessments:view", "assessments:edit", "dashboard:view"],
+  "/dashboard/reports":              ["dashboard:view", "reports:view"],
+  "/dashboard/admin":                ["dashboard:view", "admins:view", "admins:edit"],
+  "/dashboard/audit-logs":           ["audit:view"],
+  "/dashboard/referrals":            ["users:view", "referrals:view"],
+  "/dashboard/settings":             ["settings:view", "settings:edit"],
+  "/dashboard/system-config":        ["settings:view", "settings:edit", "system:config"],
+  "/dashboard/support":              ["users:view", "support:view"],
+  "/dashboard/push-notifications":   ["notifications:view", "notifications:edit"],
+  "/dashboard/newsletter":           ["newsletter:view", "notifications:view", "dashboard:view"],
+};
 
+function checkRoutePermission(pathname: string, user: any): boolean {
+  if (!user || Object.keys(user).length === 0) return true;
+
+  const role = user.role || user.adminRole;
+  if (role === "SUPER_ADMIN" || role === "super_admin") return true;
+
+  // Account Settings, Notifications and Access Denied are always allowed for all admins
+  if (
+    pathname === "/dashboard/settings" ||
+    pathname === "/dashboard/notifications" ||
+    pathname === "/dashboard/access-denied"
+  ) {
+    return true;
+  }
+
+  const allowedPages: string[] = user.allowedPages || user.customRole?.allowedPages || [];
+  const permissions: string[] = user.permissions || user.customRole?.permissions || [];
+
+  if (allowedPages.includes("*") || permissions.includes("*")) {
+    return true;
+  }
+
+  // Check direct page paths or subroutes
+  const isExplicitlyAllowed = allowedPages.some((p) => {
+    if (p === pathname) return true;
+    if (p !== "/dashboard" && pathname.startsWith(p)) return true;
+    return false;
+  });
+  if (isExplicitlyAllowed) return true;
+
+  // Check semantic permissions against the base section
+  const matchingSection = Object.keys(PAGE_PERMISSIONS).find((basePath) => {
+    if (basePath === "/dashboard") return pathname === "/dashboard";
+    return pathname === basePath || pathname.startsWith(basePath + "/");
+  });
+
+  if (matchingSection) {
+    const requiredPerms = PAGE_PERMISSIONS[matchingSection] || [];
+    if (requiredPerms.some((perm) => permissions.includes(perm))) return true;
+    if (allowedPages.includes(matchingSection)) return true;
+  }
+
+  // If standard ADMIN with no custom restrictions, allow
+  if (role === "ADMIN" && !user.customRole && allowedPages.length === 0 && permissions.length === 0) {
+    return true;
+  }
+
+  // If user has no custom restrictions configured, allow
+  if (!user.customRole && allowedPages.length === 0 && permissions.length === 0) {
+    return true;
+  }
+
+  return false;
+}
+
+function getFirstAllowedRoute(user: any): string {
+  const candidateRoutes = [
+    "/dashboard/blog",
+    "/dashboard/library",
+    "/dashboard/assessments",
+    "/dashboard/support",
+    "/dashboard/newsletter",
+    "/dashboard/users",
+    "/dashboard/users/activities",
+    "/dashboard/users/transactions",
+    "/dashboard/reports",
+    "/dashboard/referrals",
+    "/dashboard/push-notifications",
+    "/dashboard/admin",
+    "/dashboard/audit-logs",
+    "/dashboard/system-config",
+    "/dashboard/settings",
+  ];
+
+  const found = candidateRoutes.find((r) => checkRoutePermission(r, user));
+  return found || "/dashboard/settings";
+}
 
 function DashboardHeader({ 
   setIsSidebarOpen, 
@@ -118,24 +214,15 @@ function DashboardHeader({
   const router = useRouter();
   const { unreadCount, notifications } = useNotifications();
   // Read the real logged-in user from Redux state first
-  const loggedInUser = useSelector((state: any) => state.auth.user);
   const { data: meData } = useGetMeQuery(undefined);
-  const userMe = meData?.data || loggedInUser || {};
-  const [adminName, setAdminName] = useState("Admin");
-
-  useEffect(() => {
-    if (userMe?.firstName) {
-      setAdminName(userMe.firstName);
-    } else {
-      const stored = localStorage.getItem("adminName");
-      if (stored) setAdminName(stored);
-    }
-  }, [userMe?.firstName]);
-
-  const adminAvatar = userMe?.imageUrl || "";
+  const loggedInUser = useSelector((state: any) => state.auth.user);
+  const user = meData?.data || loggedInUser;
+  
+  const adminName = user ? `${user.firstName} ${user.lastName}` : (typeof window !== "undefined" ? localStorage.getItem("adminName") || "Admin" : "Admin");
+  const adminAvatar = user?.imageUrl || user?.image || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=256&auto=format&fit=crop";
 
   return (
-    <header className="h-[65px] w-full max-w-[1138.5px] mx-auto bg-white rounded-[20px] py-[10px] px-[15px] sm:px-[29px] flex items-center justify-between shadow-sm border border-border/50">
+    <header className="h-[73px] bg-white border-b border-border/50 flex items-center justify-between px-4 sm:px-8 shrink-0">
       <div className="flex items-center gap-4 lg:hidden">
         <button onClick={() => setIsSidebarOpen(true)}>
           <Menu className="h-6 w-6 text-slate" />
@@ -272,6 +359,10 @@ function DashboardLayoutContent({
   const [expandedItems, setExpandedItems] = useState<string[]>([]);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
+  const { data: meData } = useGetMeQuery(undefined);
+  const loggedInUser = useSelector((state: any) => state.auth.user);
+  const userMe = meData?.data || loggedInUser || {};
+
   const toggleExpand = (itemName: string) => {
     setExpandedItems((prev) =>
       prev.includes(itemName)
@@ -282,21 +373,17 @@ function DashboardLayoutContent({
 
   const handeLogout = () => {
     setShowLogoutModal(false);
-    // Clear all auth and permission caches
     localStorage.removeItem("token");
     localStorage.removeItem("adminRole");
     localStorage.removeItem("adminName");
     localStorage.removeItem("deniedPaths");
-    // Hard navigate to login to clear all in-memory Redux states
     window.location.href = "/login";
   };
 
   const dispatch = useDispatch();
   const isAccessDenied = useSelector(selectIsAccessDenied);
 
-  // Automatically reset the access denied state ONLY when the route changes.
-  // We use a ref to track pathname to prevent an infinite loop where 
-  // isAccessDenied changing triggers this effect and resets itself instantly.
+  // Reset access denied on navigation
   const prevPathname = useRef(pathname);
   useEffect(() => {
     if (prevPathname.current !== pathname) {
@@ -305,59 +392,19 @@ function DashboardLayoutContent({
     }
   }, [pathname, dispatch]);
 
-  // Global transition state to prevent page flicker before API 403 resolves
-  const [isTransitioning, setIsTransitioning] = useState(true);
-  useEffect(() => {
-    setIsTransitioning(true);
-    const timer = setTimeout(() => setIsTransitioning(false), 300);
-    return () => clearTimeout(timer);
-  }, [pathname]);
+  // Pre-emptive route checking
+  const isAllowed = checkRoutePermission(pathname, userMe);
+  const isBlocked = isAccessDenied || !isAllowed;
 
-  // Read instantly cached denied paths to prevent page load flicker
-  const [cachedDenied, setCachedDenied] = useState(false);
+  // If user opens /dashboard and does not have permission for Overview, auto-redirect to first allowed page
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      // Super Admins bypass cache and should wipe any stale denied paths
-      const role = localStorage.getItem("adminRole");
-      if (role === "SUPER_ADMIN") {
-        setCachedDenied(false);
-        localStorage.removeItem("deniedPaths");
-        return;
-      }
-
-      const deniedPaths = JSON.parse(localStorage.getItem('deniedPaths') || '[]');
-      if (deniedPaths.includes(pathname)) {
-        setCachedDenied(true);
-      } else {
-        setCachedDenied(false);
+    if (pathname === "/dashboard" && userMe && Object.keys(userMe).length > 0) {
+      if (!checkRoutePermission("/dashboard", userMe)) {
+        const target = getFirstAllowedRoute(userMe);
+        router.replace(target);
       }
     }
-  }, [pathname]);
-
-  // Read the admin role for the header fallback
-  let adminTeamRole = "Admin";
-  if (typeof window !== "undefined") {
-    const storedRole = localStorage.getItem("adminRole");
-    if (storedRole) {
-      adminTeamRole = storedRole;
-    } else {
-      // If not explicitly set, extract it directly from the JWT token payload
-      const token = localStorage.getItem("token");
-      if (token) {
-        try {
-          const payload = JSON.parse(atob(token.split('.')[1]));
-          if (payload.adminRole) {
-            adminTeamRole = payload.adminRole;
-            localStorage.setItem("adminRole", payload.adminRole); // Cache it for next time
-          }
-        } catch (e) {
-          // Token decode failed, fallback to "Admin"
-        }
-      }
-    }
-  }
-
-  const isPageAllowed = !isAccessDenied && !cachedDenied;
+  }, [pathname, userMe, router]);
 
   return (
     <>
@@ -373,6 +420,7 @@ function DashboardLayoutContent({
                 sizes="(max-width: 768px) 100vw, 269px"
                 className="object-contain object-left"
                 priority
+                unoptimized
               />
             </div>
           </div>
@@ -434,7 +482,7 @@ function DashboardLayoutContent({
                             href={sub.href}
                             className={`flex items-center gap-3 px-4 py-2 rounded-lg text-xs font-medium transition-all duration-200 ${
                               isSubActive
-                                ? "text-primary bg-primary/5"
+                                ? "text-primary bg-primary/5 font-bold"
                                 : "text-slate hover:text-primary hover:bg-surface"
                             }`}
                           >
@@ -462,31 +510,33 @@ function DashboardLayoutContent({
           </div>
         </aside>
 
+        {/* Mobile Sidebar Drawer */}
         {isSidebarOpen && (
           <div className="fixed inset-0 z-50 lg:hidden animate-in fade-in duration-300">
             <div
-              className="fixed inset-0 bg-black/40 backdrop-blur-xs"
+              className="fixed inset-0 bg-black/40 backdrop-blur-sm"
               onClick={() => setIsSidebarOpen(false)}
             />
-            <div className="fixed inset-y-0 left-0 w-[280px] bg-white shadow-2xl flex flex-col z-10 animate-in slide-in-from-left duration-300">
-              <div className="p-6 flex items-center justify-between border-b border-border">
-                <div className="relative w-[180px] h-10">
+            <div className="fixed inset-y-0 left-0 w-[280px] bg-white flex flex-col z-50 p-4 shadow-2xl animate-in slide-in-from-left duration-300">
+              <div className="flex items-center justify-between px-4 py-2 mb-2">
+                <div className="relative w-36 h-10">
                   <Image
                     src="/logo1.png"
                     alt="Wealthconomy Logo"
                     fill
                     className="object-contain object-left"
+                    unoptimized
                   />
                 </div>
                 <button
                   onClick={() => setIsSidebarOpen(false)}
-                  className="p-1 rounded-lg hover:bg-surface text-slate"
+                  className="p-2 rounded-full hover:bg-surface text-slate"
                 >
-                  <X className="h-6 w-6" />
+                  <X className="h-5 w-5" />
                 </button>
               </div>
 
-              <nav className="flex-1 px-4 space-y-2 py-4 overflow-y-auto">
+              <nav className="flex-1 space-y-1 overflow-y-auto">
                 {sidebarItems.map((item) => {
                   const isActive = pathname === item.href;
                   const isChildActive = item.subItems?.some(
@@ -546,7 +596,7 @@ function DashboardLayoutContent({
                                 onClick={() => setIsSidebarOpen(false)}
                                 className={`flex items-center gap-3 px-4 py-2 rounded-lg text-xs font-medium transition-all duration-200 ${
                                   isSubActive
-                                    ? "text-primary bg-primary/5"
+                                    ? "text-primary bg-primary/5 font-bold"
                                     : "text-slate hover:text-primary hover:bg-surface"
                                 }`}
                               >
@@ -584,33 +634,50 @@ function DashboardLayoutContent({
             setIsSidebarOpen={setIsSidebarOpen}
             setShowLogoutModal={setShowLogoutModal}
           />
-          <main className="flex-1 overflow-y-auto p-4 md:p-8 bg-surface">
-            {children}
-            {isAccessDenied && (
-              <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-300">
-                <div className="relative bg-white rounded-[24px] p-8 w-full max-w-[420px] shadow-2xl border border-border/50 text-center space-y-5 animate-in zoom-in-95 duration-300">
-                  <div className="h-16 w-16 rounded-full bg-red-50 text-red-500 flex items-center justify-center mx-auto">
-                    <ShieldAlert className="h-8 w-8 text-red-500" />
+          <main className="flex-1 overflow-y-auto p-4 md:p-8 bg-surface flex flex-col">
+            {isBlocked ? (
+              <div className="flex-1 flex items-center justify-center min-h-[500px] p-6 animate-in fade-in duration-300">
+                <div className="relative bg-white rounded-[28px] p-8 sm:p-12 w-full max-w-[480px] shadow-2xl border border-border/50 text-center space-y-6 animate-in zoom-in-95 duration-300">
+                  <div className="h-20 w-20 rounded-full bg-red-50 text-red-500 flex items-center justify-center mx-auto shadow-inner">
+                    <ShieldAlert className="h-10 w-10 text-red-500" />
                   </div>
                   <div className="space-y-2">
-                    <h3 className="text-xl font-bold font-outfit text-dark tracking-tight">
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-red-50 text-red-600 rounded-full text-xs font-bold border border-red-100">
+                      <span>Permission Required</span>
+                    </div>
+                    <h3 className="text-2xl font-bold font-outfit text-dark tracking-tight">
                       Access Restricted
                     </h3>
                     <p className="text-sm font-medium text-slate/60 leading-relaxed">
-                      You do not have permission to view or modify this resource. If you believe this is an error, please contact your Super Administrator.
+                      You do not have permission to view or modify this section. Please select an authorized menu item from the sidebar or contact your Super Administrator.
                     </p>
                   </div>
-                  <Button
-                    onClick={() => {
-                      dispatch(setAccessDenied(false));
-                      router.push("/dashboard");
-                    }}
-                    className="w-full h-11 rounded-xl bg-primary hover:bg-primary/90 text-white font-bold text-sm shadow-md"
-                  >
-                    Return to Overview
-                  </Button>
+                  <div className="pt-2 flex flex-col sm:flex-row gap-3">
+                    <Button
+                      onClick={() => {
+                        dispatch(setAccessDenied(false));
+                        const target = getFirstAllowedRoute(userMe);
+                        router.push(target);
+                      }}
+                      className="flex-1 h-12 rounded-xl bg-[#155D5F] hover:bg-[#0F4A4C] text-white font-bold text-sm shadow-md transition-all active:scale-95"
+                    >
+                      Go to Allowed Page
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        dispatch(setAccessDenied(false));
+                        router.push("/dashboard/settings");
+                      }}
+                      className="h-12 rounded-xl border-border/60 text-slate hover:bg-surface font-bold text-sm"
+                    >
+                      Account Settings
+                    </Button>
+                  </div>
                 </div>
               </div>
+            ) : (
+              children
             )}
           </main>
         </div>

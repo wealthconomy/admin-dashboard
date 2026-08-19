@@ -32,14 +32,13 @@ export function UnreadCountProvider({ children }: { children: React.ReactNode })
   const [totalSupportUnread, setTotalSupportUnread] = useState(0);
 
   const { data: summaryData, refetch: refetchSummary } = useGetUnreadSummaryQuery(undefined, {
-    // Poll only as a lazy fallback every 60s if socket is disconnected
-    pollingInterval: isConnected ? 0 : 60000,
+    pollingInterval: 4000,
   });
 
   const [markInternalMutation] = useMarkInternalAsReadMutation();
   const [markSupportMutation] = useMarkSupportChatReadMutation();
 
-  // Sync initial REST summary when fetched
+  // Sync REST summary whenever data updates
   useEffect(() => {
     if (summaryData?.data) {
       if (typeof summaryData.data.totalInternalUnread === "number") {
@@ -51,7 +50,7 @@ export function UnreadCountProvider({ children }: { children: React.ReactNode })
     }
   }, [summaryData]);
 
-  // Listen to real-time chat:unread_count_update WebSocket events
+  // Listen to real-time WebSocket events
   useEffect(() => {
     if (!socket) return;
 
@@ -59,21 +58,33 @@ export function UnreadCountProvider({ children }: { children: React.ReactNode })
       totalInternalUnread?: number;
       totalSupportUnread?: number;
     }) => {
-      console.log("[WebSocket] chat:unread_count_update received:", data);
-      if (typeof data.totalInternalUnread === "number") {
+      if (typeof data?.totalInternalUnread === "number") {
         setTotalInternalUnread(data.totalInternalUnread);
       }
-      if (typeof data.totalSupportUnread === "number") {
+      if (typeof data?.totalSupportUnread === "number") {
         setTotalSupportUnread(data.totalSupportUnread);
       }
+      refetchSummary();
+    };
+
+    const handleAnyNewMessage = () => {
+      refetchSummary();
     };
 
     socket.on("chat:unread_count_update", handleUnreadUpdate);
+    socket.on("unread_count_update", handleUnreadUpdate);
+    socket.on("internal:new_message", handleAnyNewMessage);
+    socket.on("chat:new_message", handleAnyNewMessage);
+    socket.on("support:new_message", handleAnyNewMessage);
 
     return () => {
       socket.off("chat:unread_count_update", handleUnreadUpdate);
+      socket.off("unread_count_update", handleUnreadUpdate);
+      socket.off("internal:new_message", handleAnyNewMessage);
+      socket.off("chat:new_message", handleAnyNewMessage);
+      socket.off("support:new_message", handleAnyNewMessage);
     };
-  }, [socket]);
+  }, [socket, refetchSummary]);
 
   // Mark an internal admin chat thread as read
   const markInternalRead = useCallback(

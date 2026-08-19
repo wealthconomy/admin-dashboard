@@ -19,9 +19,11 @@ import { Loader2 } from "lucide-react";
 
 export function AdminChatWidget() {
   const { socket, isConnected } = useSocket();
-  const { totalInternalUnread, markInternalRead } = useUnreadCounts();
+  const { totalInternalUnread, markInternalRead, refetchSummary } = useUnreadCounts();
 
-  const { data: teamData, isLoading: isTeamLoading, refetch: refetchTeam } = useGetInternalTeamQuery();
+  const { data: teamData, isLoading: isTeamLoading, refetch: refetchTeam } = useGetInternalTeamQuery(undefined, {
+    pollingInterval: 4000,
+  });
   const rawTeam = Array.isArray(teamData) ? teamData : (teamData?.data || []);
 
   const { data: meData } = useGetMeQuery(undefined);
@@ -38,10 +40,11 @@ export function AdminChatWidget() {
   const currentAdminId = selectedAdmin?.userId || selectedAdmin?.adminId || selectedAdmin?.id || selectedAdmin?._id;
   const { data: messagesData, isFetching, refetch: refetchMessages } = useGetInternalMessagesQuery(currentAdminId, {
     skip: !selectedAdmin,
+    pollingInterval: selectedAdmin ? 3000 : 0,
   });
 
   const [sendMessage] = useSendInternalMessageMutation();
-  const [lastMessagesMap, setLastMessagesMap] = useState<Record<string, { text: string; time: string }>>({});
+  const [lastMessagesMap, setLastMessagesMap] = useState<Record<string, { text: string; time: string; timestamp: number }>>({});
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   // Sync initial REST messages into local state when switching admin or fetching
@@ -54,52 +57,51 @@ export function AdminChatWidget() {
   useEffect(() => {
     if (selectedAdmin && currentAdminId) {
       markInternalRead(currentAdminId);
+      refetchTeam();
     }
-  }, [selectedAdmin, currentAdminId, markInternalRead]);
+  }, [selectedAdmin, currentAdminId, markInternalRead, refetchTeam]);
+
+  const updateLastMessageForAdmin = (adminIds: (string | undefined)[], text: string, timeStr?: string, createdAt?: string) => {
+    const timestamp = createdAt ? new Date(createdAt).getTime() : Date.now();
+    const time = timeStr || new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    setLastMessagesMap((prev) => {
+      const next = { ...prev };
+      adminIds.forEach((id) => {
+        if (id) {
+          const existing = next[id];
+          if (!existing || existing.timestamp <= timestamp) {
+            next[id] = { text, time, timestamp };
+          }
+        }
+      });
+      return next;
+    });
+  };
 
   // Listen to WebSocket events: internal:new_message & user:status_change
   useEffect(() => {
     if (!socket) return;
 
-    const handleNewMessage = (data: {
-      message: {
-        id: string;
-        senderId: string;
-        receiverId: string;
-        text: string;
-        createdAt?: string;
-      };
-      senderId: string;
-    }) => {
+    const handleNewMessage = (data: any) => {
       console.log("[WebSocket] internal:new_message received:", data);
 
       const msg = data.message || data;
-      const sender = data.senderId || msg.senderId;
+      const sender = data.senderId || msg.senderId || msg.sender;
+      const receiver = data.receiverId || msg.receiverId;
 
-      // Update preview map
-      const timeStr = new Date(msg.createdAt || Date.now()).toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-      setLastMessagesMap((prev) => ({
-        ...prev,
-        [sender]: {
-          text: msg.text,
-          time: timeStr,
-        },
-      }));
+      updateLastMessageForAdmin([sender, receiver], msg.text || msg.content || "", undefined, msg.createdAt);
+
+      // Refresh team list & unread count badge in real time
+      refetchTeam();
+      refetchSummary();
 
       // If this conversation is currently open, append immediately
-      if (currentAdminId && (sender === currentAdminId || msg.receiverId === currentAdminId)) {
+      if (currentAdminId && (sender === currentAdminId || receiver === currentAdminId)) {
         setLiveMessages((prev) => {
           if (prev.some((m) => m.id === msg.id)) return prev;
           return [...prev, msg];
         });
-        // Automatically mark read
         markInternalRead(currentAdminId);
-      } else {
-        // Refresh team list to update unread badge
-        refetchTeam();
       }
     };
 
@@ -109,7 +111,6 @@ export function AdminChatWidget() {
       name?: string;
       status: "online" | "offline";
     }) => {
-      console.log("[WebSocket] user:status_change received:", event);
       const targetId = event.userId || event.adminId;
       if (targetId) {
         setLiveOnlineStatus((prev) => ({
@@ -120,34 +121,15 @@ export function AdminChatWidget() {
     };
 
     socket.on("internal:new_message", handleNewMessage);
+    socket.on("chat:new_message", handleNewMessage);
     socket.on("user:status_change", handleStatusChange);
 
     return () => {
       socket.off("internal:new_message", handleNewMessage);
+      socket.off("chat:new_message", handleNewMessage);
       socket.off("user:status_change", handleStatusChange);
     };
-  }, [socket, currentAdminId, markInternalRead, refetchTeam]);
-
-  // Load cache when currentUserId is resolved
-  useEffect(() => {
-    if (typeof window !== "undefined" && currentUserId !== "default") {
-      try {
-        const saved = localStorage.getItem(`admin_chat_last_messages_${currentUserId}`);
-        if (saved) {
-          setLastMessagesMap(JSON.parse(saved));
-        }
-      } catch {
-        setLastMessagesMap({});
-      }
-    }
-  }, [currentUserId]);
-
-  // Save cache when lastMessagesMap changes
-  useEffect(() => {
-    if (typeof window !== "undefined" && currentUserId !== "default") {
-      localStorage.setItem(`admin_chat_last_messages_${currentUserId}`, JSON.stringify(lastMessagesMap));
-    }
-  }, [lastMessagesMap, currentUserId]);
+  }, [socket, currentAdminId, markInternalRead, refetchTeam, refetchSummary]);
 
   const activeMessages = useMemo(() => {
     return liveMessages.map((msg: any) => {
@@ -179,6 +161,9 @@ export function AdminChatWidget() {
     const recipientId = selectedAdmin.userId || selectedAdmin.adminId || selectedAdmin.id || selectedAdmin._id;
     setInputText("");
 
+    const nowIso = new Date().toISOString();
+    const timeStr = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
     // Optimistic local message
     const tempId = `temp_${Date.now()}`;
     const optimisticMsg = {
@@ -186,18 +171,18 @@ export function AdminChatWidget() {
       senderId: currentUserId,
       receiverId: recipientId,
       text: textToSend,
-      createdAt: new Date().toISOString(),
+      createdAt: nowIso,
     };
     setLiveMessages((prev) => [...prev, optimisticMsg]);
 
-    const timeStr = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    setLastMessagesMap((prev) => ({
-      ...prev,
-      [recipientId]: {
-        text: textToSend,
-        time: timeStr,
-      },
-    }));
+    const allRecipientKeys = [
+      recipientId,
+      selectedAdmin.userId,
+      selectedAdmin.adminId,
+      selectedAdmin.id,
+      selectedAdmin._id,
+    ];
+    updateLastMessageForAdmin(allRecipientKeys, textToSend, timeStr, nowIso);
 
     // 1. Emit real-time WebSocket event
     if (socket && isConnected) {
@@ -210,6 +195,7 @@ export function AdminChatWidget() {
     // 2. Execute REST mutation for database persistence & tag invalidation
     try {
       await sendMessage({ receiverId: recipientId, text: textToSend }).unwrap();
+      refetchTeam();
     } catch (err) {
       console.warn("REST sendMessage fallback handled:", err);
     }
@@ -272,6 +258,7 @@ export function AdminChatWidget() {
                 const adminId = admin.adminId || admin.id || admin._id;
                 const userObj = admin.user || admin;
                 const targetKey = admin.userId || userObj.userId || userObj.id || adminId;
+                const allKeys = [admin.userId, userObj.userId, userObj.id, userObj._id, adminId, admin.id, admin._id].filter(Boolean);
                 const displayName = admin.name || `${userObj.firstName || ""} ${userObj.lastName || ""}`.trim() || userObj.email || "Admin";
                 const displayImage = admin.avatarUrl || userObj.imageUrl || admin.imageUrl || admin.image || "";
                 const displayRole = admin.role || (admin.customRole ? admin.customRole.name : "Admin");
@@ -280,9 +267,41 @@ export function AdminChatWidget() {
                 const liveStatus = liveOnlineStatus[targetKey] || admin.status || "offline";
                 const isOnline = liveStatus === "online";
 
-                const lastMsgData = lastMessagesMap[targetKey];
-                const displayLastMsg = lastMsgData ? lastMsgData.text : (admin.lastMessage?.text || "Click to start chat");
-                const displayTime = lastMsgData ? lastMsgData.time : (admin.lastMessage?.createdAt ? new Date(admin.lastMessage.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "");
+                // Dynamically determine true latest message between active messages, map, and API
+                const isCurrentSelected = selectedAdmin && allKeys.some(k => k === currentAdminId);
+                let latestMsgText = "";
+                let latestMsgTime = "";
+                let latestTimestamp = 0;
+
+                // 1. Direct active chat messages in current view
+                if (isCurrentSelected && liveMessages.length > 0) {
+                  const lastLive = liveMessages[liveMessages.length - 1];
+                  latestMsgText = lastLive.text || lastLive.content || "";
+                  latestMsgTime = lastLive.createdAt ? new Date(lastLive.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "";
+                  latestTimestamp = lastLive.createdAt ? new Date(lastLive.createdAt).getTime() : Date.now();
+                }
+
+                // 2. Real-time message map
+                allKeys.forEach((k) => {
+                  const m = lastMessagesMap[k];
+                  if (m && m.timestamp >= latestTimestamp) {
+                    latestMsgText = m.text;
+                    latestMsgTime = m.time;
+                    latestTimestamp = m.timestamp;
+                  }
+                });
+
+                // 3. API provided lastMessage
+                if (admin.lastMessage) {
+                  const apiTimestamp = admin.lastMessage.createdAt ? new Date(admin.lastMessage.createdAt).getTime() : 0;
+                  if (apiTimestamp >= latestTimestamp || !latestMsgText) {
+                    latestMsgText = admin.lastMessage.text || admin.lastMessage.content || latestMsgText;
+                    latestMsgTime = admin.lastMessage.createdAt ? new Date(admin.lastMessage.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : latestMsgTime;
+                  }
+                }
+
+                const displayLastMsg = latestMsgText || "Click to start chat";
+                const displayTime = latestMsgTime;
 
                 return (
                 <div 

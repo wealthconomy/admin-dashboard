@@ -39,14 +39,19 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       process.env.NEXT_PUBLIC_API_URL ||
       "https://backend-5kr0.onrender.com";
 
-    // Initialize Socket.IO instance
+    // Initialize Socket.IO instance with comprehensive auth parameters
     const socketInstance: Socket = io(wsUrl, {
-      transports: ["websocket"],
+      transports: ["websocket", "polling"],
       auth: {
-        token: `Bearer ${token}`,
+        token: token,
+        Bearer: token,
+        authorization: `Bearer ${token}`,
       },
       extraHeaders: {
         authorization: `Bearer ${token}`,
+      },
+      query: {
+        token: token,
       },
       reconnection: true,
       reconnectionAttempts: Infinity,
