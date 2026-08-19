@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useSyncExternalStore, useState, useEffect } from "react";
 import Image from "next/image";
 import { WifiOff, ShieldAlert } from "lucide-react";
 
@@ -24,6 +24,15 @@ function getServerSnapshot() {
 export default function OfflineGuard({ children }: { children: React.ReactNode }) {
   // Synchronous browser network state listener (handles refresh while offline instantly)
   const isOffline = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const [logoFailed, setLogoFailed] = useState(false);
+
+  // Eagerly preload logo into browser cache while the user is online
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const img = new window.Image();
+      img.src = "/logo1.png";
+    }
+  }, []);
 
   return (
     <>
@@ -41,15 +50,28 @@ export default function OfflineGuard({ children }: { children: React.ReactNode }
           <div className="relative max-w-[460px] w-full bg-white rounded-[32px] p-8 sm:p-10 shadow-2xl border border-slate-100 flex flex-col items-center space-y-6">
             
             {/* Logo */}
-            <div className="relative w-44 h-12">
-              <Image
-                src="/logo1.png"
-                alt="Wealthconomy Logo"
-                fill
-                sizes="176px"
-                className="object-contain"
-                priority
-              />
+            <div className="relative w-44 h-12 flex items-center justify-center">
+              {!logoFailed ? (
+                <Image
+                  src="/logo1.png"
+                  alt="Wealthconomy Logo"
+                  fill
+                  sizes="176px"
+                  className="object-contain"
+                  priority
+                  unoptimized
+                  onError={() => setLogoFailed(true)}
+                />
+              ) : (
+                <div className="flex items-center gap-2.5">
+                  <div className="h-9 w-9 rounded-xl bg-[#155D5F] flex items-center justify-center text-white font-extrabold text-lg font-outfit shadow-sm">
+                    W
+                  </div>
+                  <span className="text-xl font-bold font-outfit text-slate-800 tracking-tight">
+                    Wealthconomy
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Offline Icon with Pulse Effect */}
