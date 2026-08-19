@@ -105,103 +105,7 @@ const sidebarItems: SidebarItem[] = [
   { name: "Account Settings", icon: Settings, href: "/dashboard/settings" },
 ];
 
-// Maps each dashboard section to its required permissions
-const PAGE_PERMISSIONS: Record<string, string[]> = {
-  "/dashboard":                      ["dashboard:view"],
-  "/dashboard/users":                ["users:view", "users:edit"],
-  "/dashboard/users/activities":     ["activities:view"],
-  "/dashboard/users/transactions":   ["transactions:view", "transactions:edit"],
-  "/dashboard/blog":                 ["blogs:view", "blogs:edit"],
-  "/dashboard/library":              ["library:view", "library:edit"],
-  "/dashboard/assessments":          ["assessments:view", "assessments:edit", "dashboard:view"],
-  "/dashboard/reports":              ["dashboard:view", "reports:view"],
-  "/dashboard/admin":                ["dashboard:view", "admins:view", "admins:edit"],
-  "/dashboard/audit-logs":           ["audit:view"],
-  "/dashboard/referrals":            ["users:view", "referrals:view"],
-  "/dashboard/settings":             ["settings:view", "settings:edit"],
-  "/dashboard/system-config":        ["settings:view", "settings:edit", "system:config"],
-  "/dashboard/support":              ["users:view", "support:view"],
-  "/dashboard/push-notifications":   ["notifications:view", "notifications:edit"],
-  "/dashboard/newsletter":           ["newsletter:view", "notifications:view", "dashboard:view"],
-};
-
-function checkRoutePermission(pathname: string, user: any): boolean {
-  if (!user || Object.keys(user).length === 0) return true;
-
-  const role = user.role || user.adminRole;
-  if (role === "SUPER_ADMIN" || role === "super_admin") return true;
-
-  // Account Settings, Notifications and Access Denied are always allowed for all admins
-  if (
-    pathname === "/dashboard/settings" ||
-    pathname === "/dashboard/notifications" ||
-    pathname === "/dashboard/access-denied"
-  ) {
-    return true;
-  }
-
-  const allowedPages: string[] = user.allowedPages || user.customRole?.allowedPages || [];
-  const permissions: string[] = user.permissions || user.customRole?.permissions || [];
-
-  if (allowedPages.includes("*") || permissions.includes("*")) {
-    return true;
-  }
-
-  // Check direct page paths or subroutes
-  const isExplicitlyAllowed = allowedPages.some((p) => {
-    if (p === pathname) return true;
-    if (p !== "/dashboard" && pathname.startsWith(p)) return true;
-    return false;
-  });
-  if (isExplicitlyAllowed) return true;
-
-  // Check semantic permissions against the base section
-  const matchingSection = Object.keys(PAGE_PERMISSIONS).find((basePath) => {
-    if (basePath === "/dashboard") return pathname === "/dashboard";
-    return pathname === basePath || pathname.startsWith(basePath + "/");
-  });
-
-  if (matchingSection) {
-    const requiredPerms = PAGE_PERMISSIONS[matchingSection] || [];
-    if (requiredPerms.some((perm) => permissions.includes(perm))) return true;
-    if (allowedPages.includes(matchingSection)) return true;
-  }
-
-  // If standard ADMIN with no custom restrictions, allow
-  if (role === "ADMIN" && !user.customRole && allowedPages.length === 0 && permissions.length === 0) {
-    return true;
-  }
-
-  // If user has no custom restrictions configured, allow
-  if (!user.customRole && allowedPages.length === 0 && permissions.length === 0) {
-    return true;
-  }
-
-  return false;
-}
-
-function getFirstAllowedRoute(user: any): string {
-  const candidateRoutes = [
-    "/dashboard/blog",
-    "/dashboard/library",
-    "/dashboard/assessments",
-    "/dashboard/support",
-    "/dashboard/newsletter",
-    "/dashboard/users",
-    "/dashboard/users/activities",
-    "/dashboard/users/transactions",
-    "/dashboard/reports",
-    "/dashboard/referrals",
-    "/dashboard/push-notifications",
-    "/dashboard/admin",
-    "/dashboard/audit-logs",
-    "/dashboard/system-config",
-    "/dashboard/settings",
-  ];
-
-  const found = candidateRoutes.find((r) => checkRoutePermission(r, user));
-  return found || "/dashboard/settings";
-}
+import { checkRoutePermission, getFirstAllowedRoute } from "@/lib/permissions";
 
 function DashboardHeader({ 
   setIsSidebarOpen, 
@@ -651,28 +555,6 @@ function DashboardLayoutContent({
                     <p className="text-sm font-medium text-slate/60 leading-relaxed">
                       You do not have permission to view or modify this section. Please select an authorized menu item from the sidebar or contact your Super Administrator.
                     </p>
-                  </div>
-                  <div className="pt-2 flex flex-col sm:flex-row gap-3">
-                    <Button
-                      onClick={() => {
-                        dispatch(setAccessDenied(false));
-                        const target = getFirstAllowedRoute(userMe);
-                        router.push(target);
-                      }}
-                      className="flex-1 h-12 rounded-xl bg-[#155D5F] hover:bg-[#0F4A4C] text-white font-bold text-sm shadow-md transition-all active:scale-95"
-                    >
-                      Go to Allowed Page
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        dispatch(setAccessDenied(false));
-                        router.push("/dashboard/settings");
-                      }}
-                      className="h-12 rounded-xl border-border/60 text-slate hover:bg-surface font-bold text-sm"
-                    >
-                      Account Settings
-                    </Button>
                   </div>
                 </div>
               </div>

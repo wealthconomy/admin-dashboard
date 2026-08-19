@@ -12,6 +12,8 @@ import { toast } from "sonner";
 import { useLoginMutation } from "@/lib/redux/features/authApi";
 import { setCredentials } from "@/lib/redux/features/authSlice";
 
+import { getFirstAllowedRoute } from "@/lib/permissions";
+
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [username, setUsername] = useState("");
@@ -25,15 +27,18 @@ export default function LoginPage() {
 
     try {
       const result = await login({ email: username, password }).unwrap();
+      const loggedUser = result.data?.user || result.user || result.data;
       dispatch(
         setCredentials({
-          user: result.data.user,
+          user: loggedUser,
           accessToken: result.data.accessToken,
           refreshToken: result.data.refreshToken,
         })
       );
       toast.success(result.message || "Login successful!");
-      router.push("/dashboard");
+      
+      const targetRoute = getFirstAllowedRoute(loggedUser);
+      router.push(targetRoute);
     } catch (err: any) {
       const errorMsg = err?.data?.message || err?.message || "Login failed";
       toast.error(errorMsg);
