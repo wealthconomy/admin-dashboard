@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
-import { MessageSquare, X, Send, ChevronRight, CheckCheck, Minimize2 } from "lucide-react";
+import { MessageSquare, X, Send, ChevronRight, CheckCheck, Minimize2, Check } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -34,7 +34,7 @@ export function AdminChatWidget() {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedAdmin, setSelectedAdmin] = useState<any | null>(null);
   const [inputText, setInputText] = useState("");
-  const [liveOnlineStatus, setLiveOnlineStatus] = useState<Record<string, "online" | "offline">>({});
+  const [liveOnlineStatus, setLiveOnlineStatus] = useState<Record<string, string>>({});
   const [liveMessages, setLiveMessages] = useState<any[]>([]);
 
   const currentAdminId = selectedAdmin?.userId || selectedAdmin?.adminId || selectedAdmin?.id || selectedAdmin?._id;
@@ -50,7 +50,21 @@ export function AdminChatWidget() {
   // Sync initial REST messages into local state when switching admin or fetching
   useEffect(() => {
     const raw = Array.isArray(messagesData) ? messagesData : (messagesData?.data || []);
-    setLiveMessages(raw);
+    if (!raw || raw.length === 0) {
+      setLiveMessages((prev) => prev.filter(m => String(m.id).startsWith("temp_")));
+      return;
+    }
+    setLiveMessages((prev) => {
+      // Keep optimistic messages that haven't been confirmed yet
+      const pendingOptimistic = prev.filter((m) => 
+        String(m.id).startsWith("temp_") && 
+        !raw.some((r: any) => 
+          (r.text === m.text || r.content === m.text) && 
+          r.senderId === m.senderId
+        )
+      );
+      return [...raw, ...pendingOptimistic];
+    });
   }, [messagesData, currentAdminId]);
 
   // When selecting an admin, mark conversation as read
@@ -112,7 +126,7 @@ export function AdminChatWidget() {
     });
   }, [rawTeam]);
 
-  // Listen to WebSocket events: internal:new_message & user:status_change
+  // Listen to WebSocket events: internal:new_message, messages_read & user:status_change
   useEffect(() => {
     if (!socket) return;
 
@@ -131,51 +145,78 @@ export function AdminChatWidget() {
       refetchTeam();
       refetchSummary();
 
-      // If this conversation is currently open, append immediately
+      // If this conversation is currently open, append or replace optimistic message
       if (currentAdminId && (sender === currentAdminId || receiver === currentAdminId)) {
         setLiveMessages((prev) => {
           if (prev.some((m) => m.id === msg.id)) return prev;
+
+          // Replace optimistic message if one matches
+          const tempIdx = prev.findIndex((m) => 
+            String(m.id).startsWith("temp_") && 
+            m.senderId === sender && 
+            (m.text === text || m.content === text)
+          );
+          if (tempIdx !== -1) {
+            const next = [...prev];
+            next[tempIdx] = msg;
+            return next;
+          }
+
           return [...prev, msg];
         });
         markInternalRead(currentAdminId);
       }
     };
 
-    const handleStatusChange = (event: {
-      adminId?: string;
-      userId?: string;
-      name?: string;
-      status: "online" | "offline";
-    }) => {
-      const targetId = event.userId || event.adminId;
+    const handleMessagesRead = (data: any) => {
+      console.log("[WebSocket] internal:messages_read received:", data);
+      setLiveMessages((prev) =>
+        prev.map((m) => {
+          if (m.senderId === currentUserId) {
+            return { ...m, isRead: true, read: true, status: "read" };
+          }
+          return m;
+        })
+      );
+    };
+
+    const handleStatusChange = (event: any) => {
+      const targetId = event.userId || event.adminId || event.id;
+      const status = (event.status || "").toLowerCase();
       if (targetId) {
         setLiveOnlineStatus((prev) => ({
           ...prev,
-          [targetId]: event.status,
+          [targetId]: status,
         }));
       }
     };
 
     socket.on("internal:new_message", handleNewMessage);
     socket.on("chat:new_message", handleNewMessage);
+    socket.on("internal:messages_read", handleMessagesRead);
+    socket.on("chat:messages_read", handleMessagesRead);
     socket.on("user:status_change", handleStatusChange);
 
     return () => {
       socket.off("internal:new_message", handleNewMessage);
       socket.off("chat:new_message", handleNewMessage);
+      socket.off("internal:messages_read", handleMessagesRead);
+      socket.off("chat:messages_read", handleMessagesRead);
       socket.off("user:status_change", handleStatusChange);
     };
-  }, [socket, currentAdminId, markInternalRead, refetchTeam, refetchSummary]);
+  }, [socket, currentAdminId, currentUserId, markInternalRead, refetchTeam, refetchSummary]);
 
   const activeMessages = useMemo(() => {
     return liveMessages.map((msg: any) => {
       const isMe = msg.senderId === currentUserId;
+      const isRead = Boolean(msg.isRead || msg.read || msg.is_read || msg.readAt || msg.status === "read" || msg.status === "READ");
       const time = msg.createdAt 
         ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         : "";
       return {
         ...msg,
         isMe,
+        isRead,
         time
       };
     });
@@ -220,20 +261,22 @@ export function AdminChatWidget() {
     ];
     updateLastMessageForAdmin(allRecipientKeys, textToSend, timeStr, nowIso);
 
-    // 1. Emit real-time WebSocket event
-    if (socket && isConnected) {
-      socket.emit("internal:send_message", {
-        receiverId: recipientId,
-        text: textToSend,
-      });
-    }
-
-    // 2. Execute REST mutation for database persistence & tag invalidation
+    // Send via REST endpoint (backend saves to DB and broadcasts via WebSocket)
     try {
-      await sendMessage({ receiverId: recipientId, text: textToSend }).unwrap();
+      const res = await sendMessage({ receiverId: recipientId, text: textToSend }).unwrap();
+      if (res?.data || res?.id) {
+        const savedMsg = res.data || res;
+        setLiveMessages((prev) => prev.map((m) => m.id === tempId ? { ...savedMsg, text: savedMsg.text || textToSend } : m));
+      }
       refetchTeam();
     } catch (err) {
-      console.warn("REST sendMessage fallback handled:", err);
+      // Fallback: If REST fails, try socket emit
+      if (socket && isConnected) {
+        socket.emit("internal:send_message", {
+          receiverId: recipientId,
+          text: textToSend,
+        });
+      }
     }
   };
 
@@ -300,8 +343,32 @@ export function AdminChatWidget() {
                 const displayRole = admin.role || (admin.customRole ? admin.customRole.name : "Admin");
                 const unreadCount = admin.unreadCount ?? 0;
 
-                const liveStatus = liveOnlineStatus[targetKey] || admin.status || "offline";
-                const isOnline = liveStatus === "online";
+                const isExplicitlyOffline = 
+                  allKeys.some(k => liveOnlineStatus[k] === "offline") ||
+                  admin.isOnline === false ||
+                  admin.is_online === false ||
+                  userObj.isOnline === false ||
+                  userObj.is_online === false ||
+                  String(admin.status || "").toLowerCase() === "offline" ||
+                  String(userObj.status || "").toLowerCase() === "offline";
+
+                const isOnline = !isExplicitlyOffline && Boolean(
+                  allKeys.some(k => liveOnlineStatus[k] === "online" || liveOnlineStatus[k] === "active") ||
+                  admin.isOnline === true ||
+                  admin.is_online === true ||
+                  admin.online === true ||
+                  userObj.isOnline === true ||
+                  userObj.is_online === true ||
+                  userObj.online === true ||
+                  admin.isActive === true ||
+                  userObj.isActive === true ||
+                  String(admin.status || "").toLowerCase() === "online" ||
+                  String(admin.status || "").toLowerCase() === "active" ||
+                  String(userObj.status || "").toLowerCase() === "online" ||
+                  String(userObj.status || "").toLowerCase() === "active" ||
+                  // If team member is loaded and not explicitly offline, default to active
+                  (admin.role || userObj.role || admin.email || userObj.email)
+                );
 
                 // Dynamically determine true latest message between active messages, map, and API
                 const isCurrentSelected = selectedAdmin && allKeys.some(k => k === currentAdminId);
@@ -364,14 +431,21 @@ export function AdminChatWidget() {
                       <AvatarImage src={displayImage} className="object-cover" />
                       <AvatarFallback className="bg-primary/10 font-bold text-primary flex items-center justify-center">{displayName.charAt(0).toUpperCase()}</AvatarFallback>
                     </Avatar>
-                    {isOnline && (
-                      <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-emerald-500 border-2 border-white" />
+                    {isOnline ? (
+                      <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-[#10B981] border-2 border-white shadow-sm ring-1 ring-emerald-500/20" title="Online" />
+                    ) : (
+                      <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-slate-300 border-2 border-white" title="Offline" />
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-center">
-                      <span className="font-bold text-sm text-dark truncate leading-none">{displayName}</span>
-                      <span className="text-[9px] text-slate/40 font-bold">{displayTime}</span>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="font-bold text-sm text-dark truncate leading-none">{displayName}</span>
+                        {isOnline && (
+                          <span className="h-2 w-2 rounded-full bg-[#10B981] shrink-0" title="Online" />
+                        )}
+                      </div>
+                      <span className="text-[9px] text-slate/40 font-bold shrink-0">{displayTime}</span>
                     </div>
                     <div className="flex justify-between items-center mt-1.5">
                       <span className={`text-[11px] truncate max-w-[140px] leading-none ${unreadCount > 0 ? "font-bold text-dark" : "text-slate/50"}`}>
@@ -408,9 +482,9 @@ export function AdminChatWidget() {
                 </Avatar>
                 <div className="flex-1 min-w-0">
                   <h4 className="text-[13px] font-bold text-dark leading-tight truncate">{selectedAdmin.displayName}</h4>
-                  <span className="text-[10px] text-emerald-600 font-bold flex items-center gap-1">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
-                    Online
+                  <span className={`text-[10px] font-bold flex items-center gap-1 ${selectedAdmin.isOnline ? "text-emerald-600" : "text-slate/40"}`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${selectedAdmin.isOnline ? "bg-emerald-500" : "bg-slate-300"}`}></span>
+                    {selectedAdmin.isOnline ? "Online" : "Offline"}
                   </span>
                 </div>
               </div>
@@ -435,7 +509,17 @@ export function AdminChatWidget() {
                       </div>
                       <div className="flex items-center gap-1 mt-1 px-1">
                         <span className="text-[9px] font-bold text-slate/40 uppercase">{msg.time}</span>
-                        {msg.isMe && <CheckCheck className="h-3 w-3 text-[#155D5F] opacity-60" />}
+                        {msg.isMe && (
+                          <span title={msg.isRead ? "Read" : "Sent"}>
+                            {String(msg.id).startsWith("temp_") ? (
+                              <Check className="h-3 w-3 text-slate-400" />
+                            ) : msg.isRead ? (
+                              <CheckCheck className="h-3 w-3 text-[#3B82F6]" />
+                            ) : (
+                              <CheckCheck className="h-3 w-3 text-slate-400" />
+                            )}
+                          </span>
+                        )}
                       </div>
                     </div>
                   ))
