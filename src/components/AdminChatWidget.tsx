@@ -126,7 +126,24 @@ export function AdminChatWidget() {
     });
   }, [rawTeam]);
 
-  // Listen to WebSocket events: internal:new_message, messages_read & user:status_change
+  // Announce presence and request current online users on mount / socket connect
+  useEffect(() => {
+    if (!socket || !isConnected) return;
+
+    const payload = {
+      userId: currentUserId,
+      adminId: currentUserId,
+      status: "online",
+    };
+
+    socket.emit("presence:join", payload);
+    socket.emit("user:join", payload);
+    socket.emit("admin:join", payload);
+    socket.emit("presence:get_online");
+    socket.emit("get_online_users");
+  }, [socket, isConnected, currentUserId]);
+
+  // Listen to WebSocket events: internal:new_message, messages_read & presence events
   useEffect(() => {
     if (!socket) return;
 
@@ -181,8 +198,11 @@ export function AdminChatWidget() {
     };
 
     const handleStatusChange = (event: any) => {
-      const targetId = event.userId || event.adminId || event.id;
-      const status = (event.status || "").toLowerCase();
+      console.log("[WebSocket] user:status_change:", event);
+      const targetId = typeof event === "string" ? event : (event.userId || event.adminId || event.id || event._id);
+      const status = typeof event === "string" 
+        ? "online" 
+        : (event.status || (event.isOnline === false ? "offline" : "online")).toLowerCase();
       if (targetId) {
         setLiveOnlineStatus((prev) => ({
           ...prev,
@@ -191,11 +211,48 @@ export function AdminChatWidget() {
       }
     };
 
+    const handlePresenceList = (data: any) => {
+      console.log("[WebSocket] presence list received:", data);
+      const list = Array.isArray(data) ? data : (data?.users || data?.onlineUsers || data?.data || []);
+      if (Array.isArray(list)) {
+        setLiveOnlineStatus((prev) => {
+          const next = { ...prev };
+          list.forEach((item: any) => {
+            const id = typeof item === "string" ? item : (item.userId || item.adminId || item.id || item._id);
+            if (id) next[id] = "online";
+          });
+          return next;
+        });
+      }
+    };
+
+    const handleUserOnline = (data: any) => {
+      const targetId = typeof data === "string" ? data : (data?.userId || data?.adminId || data?.id);
+      if (targetId) {
+        setLiveOnlineStatus((prev) => ({ ...prev, [targetId]: "online" }));
+      }
+    };
+
+    const handleUserOffline = (data: any) => {
+      const targetId = typeof data === "string" ? data : (data?.userId || data?.adminId || data?.id);
+      if (targetId) {
+        setLiveOnlineStatus((prev) => ({ ...prev, [targetId]: "offline" }));
+      }
+    };
+
     socket.on("internal:new_message", handleNewMessage);
     socket.on("chat:new_message", handleNewMessage);
     socket.on("internal:messages_read", handleMessagesRead);
     socket.on("chat:messages_read", handleMessagesRead);
     socket.on("user:status_change", handleStatusChange);
+    socket.on("admin:status_change", handleStatusChange);
+    socket.on("presence:status_change", handleStatusChange);
+    socket.on("presence:list", handlePresenceList);
+    socket.on("online_users", handlePresenceList);
+    socket.on("user:online", handleUserOnline);
+    socket.on("user:offline", handleUserOffline);
+    socket.on("admin:online", handleUserOnline);
+    socket.on("admin:offline", handleUserOffline);
 
     return () => {
       socket.off("internal:new_message", handleNewMessage);
@@ -203,6 +260,14 @@ export function AdminChatWidget() {
       socket.off("internal:messages_read", handleMessagesRead);
       socket.off("chat:messages_read", handleMessagesRead);
       socket.off("user:status_change", handleStatusChange);
+      socket.off("admin:status_change", handleStatusChange);
+      socket.off("presence:status_change", handleStatusChange);
+      socket.off("presence:list", handlePresenceList);
+      socket.off("online_users", handlePresenceList);
+      socket.off("user:online", handleUserOnline);
+      socket.off("user:offline", handleUserOffline);
+      socket.off("admin:online", handleUserOnline);
+      socket.off("admin:offline", handleUserOffline);
     };
   }, [socket, currentAdminId, currentUserId, markInternalRead, refetchTeam, refetchSummary]);
 
@@ -343,31 +408,14 @@ export function AdminChatWidget() {
                 const displayRole = admin.role || (admin.customRole ? admin.customRole.name : "Admin");
                 const unreadCount = admin.unreadCount ?? 0;
 
-                const isExplicitlyOffline = 
-                  allKeys.some(k => liveOnlineStatus[k] === "offline") ||
-                  admin.isOnline === false ||
-                  admin.is_online === false ||
-                  userObj.isOnline === false ||
-                  userObj.is_online === false ||
-                  String(admin.status || "").toLowerCase() === "offline" ||
-                  String(userObj.status || "").toLowerCase() === "offline";
+                const isCurrentLoggedInUser = currentUserId !== "default" && allKeys.some(k => k === currentUserId);
 
-                const isOnline = !isExplicitlyOffline && Boolean(
-                  allKeys.some(k => liveOnlineStatus[k] === "online" || liveOnlineStatus[k] === "active") ||
+                const isOnline = isCurrentLoggedInUser || Boolean(
+                  allKeys.some(k => liveOnlineStatus[k] === "online") ||
                   admin.isOnline === true ||
                   admin.is_online === true ||
-                  admin.online === true ||
                   userObj.isOnline === true ||
-                  userObj.is_online === true ||
-                  userObj.online === true ||
-                  admin.isActive === true ||
-                  userObj.isActive === true ||
-                  String(admin.status || "").toLowerCase() === "online" ||
-                  String(admin.status || "").toLowerCase() === "active" ||
-                  String(userObj.status || "").toLowerCase() === "online" ||
-                  String(userObj.status || "").toLowerCase() === "active" ||
-                  // If team member is loaded and not explicitly offline, default to active
-                  (admin.role || userObj.role || admin.email || userObj.email)
+                  userObj.is_online === true
                 );
 
                 // Dynamically determine true latest message between active messages, map, and API

@@ -65,6 +65,12 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     socketInstance.on("connect", () => {
       console.log("[WebSocket] Connected to server. Socket ID:", socketInstance.id);
       setIsConnected(true);
+      
+      // Handshake presence on connect
+      socketInstance.emit("presence:join", { token });
+      socketInstance.emit("user:join", { token });
+      socketInstance.emit("presence:get_online");
+      socketInstance.emit("get_online_users");
     });
 
     socketInstance.on("disconnect", (reason) => {
