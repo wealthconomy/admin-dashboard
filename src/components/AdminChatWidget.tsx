@@ -412,6 +412,8 @@ export function AdminChatWidget() {
 
                 const isOnline = isCurrentLoggedInUser || Boolean(
                   allKeys.some(k => liveOnlineStatus[k] === "online") ||
+                  String(admin.status || "").toLowerCase() === "online" ||
+                  String(userObj.status || "").toLowerCase() === "online" ||
                   admin.isOnline === true ||
                   admin.is_online === true ||
                   userObj.isOnline === true ||
