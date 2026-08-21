@@ -29,29 +29,6 @@ const baseQueryWithReauth: BaseQueryFn<
   FetchBaseQueryError
 > = async (args, api, extraOptions) => {
   const result = await baseQuery(args, api, extraOptions);
-
-  if (result.error && result.error.status === 403) {
-    const errorData = result.error.data as any;
-    const errorString = String(errorData?.message || errorData?.error || '').toLowerCase();
-    
-    // Check if the backend explicitly indicates insufficient permissions
-    if (
-      errorString.includes('permission') || 
-      errorString.includes('unauthorized') || 
-      errorString.includes('access denied') ||
-      errorString.includes('insufficient') ||
-      errorString.includes('forbidden')
-    ) {
-      if (typeof window !== 'undefined') {
-        const deniedPaths = JSON.parse(localStorage.getItem('deniedPaths') || '[]');
-        if (!deniedPaths.includes(window.location.pathname)) {
-          deniedPaths.push(window.location.pathname);
-          localStorage.setItem('deniedPaths', JSON.stringify(deniedPaths));
-        }
-      }
-      api.dispatch({ type: 'auth/setAccessDenied', payload: true });
-    }
-  }
   return result;
 };
 

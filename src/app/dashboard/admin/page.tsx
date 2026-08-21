@@ -48,6 +48,12 @@ import {
   useDeleteRoleMutation
 } from "@/lib/redux/features/adminApi";
 
+import {
+  DASHBOARD_PAGES,
+  deriveSemanticPermissions,
+  getPagePathsFromPermissions,
+} from "@/lib/permissions";
+
 // Helper to extract the safe array from backend response wrapper
 const getSafeArray = (data: any) => {
   if (!data) return [];
@@ -56,70 +62,6 @@ const getSafeArray = (data: any) => {
   if (Array.isArray(data.data?.items)) return data.data.items;
   if (Array.isArray(data.data)) return data.data;
   return [];
-};
-
-// Standard Dashboard Pages List for Permissions Mapping
-const DASHBOARD_PAGES = [
-  { path: "/dashboard", label: "Overview" },
-  { path: "/dashboard/users", label: "User Management" },
-  { path: "/dashboard/users/activities", label: "Activities Management" },
-  { path: "/dashboard/users/transactions", label: "Transaction Management" },
-  { path: "/dashboard/blog", label: "Blog Management" },
-  { path: "/dashboard/library", label: "Library Management" },
-  { path: "/dashboard/reports", label: "Reports & Analytics" },
-  { path: "/dashboard/admin", label: "Admin Management" },
-  { path: "/dashboard/audit-logs", label: "System Audit Logs" },
-  { path: "/dashboard/referrals", label: "Users Referrals" },
-  { path: "/dashboard/settings", label: "Account Settings" },
-  { path: "/dashboard/system-config", label: "System Configuration" },
-  { path: "/dashboard/support", label: "Support Centre" },
-  { path: "/dashboard/push-notifications", label: "Push Notifications" },
-];
-
-// Maps each UI page path to its backend semantic permission strings
-const PAGE_PERMISSIONS: Record<string, string[]> = {
-  "/dashboard":                      ["dashboard:view"],
-  "/dashboard/users":                ["users:view", "users:edit"],
-  "/dashboard/users/activities":     ["activities:view"],
-  "/dashboard/users/transactions":   ["transactions:view", "transactions:edit"],
-  "/dashboard/blog":                 ["blogs:view", "blogs:edit"],
-  "/dashboard/library":              ["library:view", "library:edit"],
-  "/dashboard/reports":              ["dashboard:view"],
-  "/dashboard/admin":                ["dashboard:view"],
-  "/dashboard/audit-logs":           ["audit:view"],
-  "/dashboard/referrals":            ["users:view"],
-  "/dashboard/settings":             ["settings:view", "settings:edit"],
-  "/dashboard/system-config":        ["settings:view", "settings:edit"],
-  "/dashboard/support":              ["users:view"],
-  "/dashboard/push-notifications":   ["notifications:view", "notifications:edit"],
-};
-
-// Derives deduplicated semantic backend permissions from a list of UI page paths
-const deriveSemanticPermissions = (pages: string[]): string[] => {
-  if (pages.includes("*")) return ["*"];
-  return [...new Set(pages.flatMap(p => PAGE_PERMISSIONS[p] ?? []))];
-};
-
-// Reverse: given backend semantic permission strings, return the matching UI page paths.
-// Also handles the case where the backend still returns UI paths (built-in roles).
-const getPagePathsFromPermissions = (permissions: string[]): string[] => {
-  if (!permissions || permissions.length === 0) return [];
-  if (permissions.includes("*")) return ["*"];
-
-  // Detect whether these are semantic strings (contain ":") or already UI paths
-  const hasSemanticStrings = permissions.some(p => p.includes(":"));
-
-  if (!hasSemanticStrings) {
-    // Already UI paths (e.g. built-in ADMIN role returns paths directly)
-    return permissions.filter(p => DASHBOARD_PAGES.some(dp => dp.path === p));
-  }
-
-  // Convert semantic strings → UI paths via reverse lookup
-  return DASHBOARD_PAGES
-    .filter(page =>
-      (PAGE_PERMISSIONS[page.path] ?? []).some(perm => permissions.includes(perm))
-    )
-    .map(page => page.path);
 };
 
 
@@ -332,8 +274,10 @@ export default function AdminManagementPage() {
 
       toast.success(`Role '${roleFormData.name}' added!`);
       setIsCreateRoleOpen(false);
-      setRoleFormData({ name: "", description: "", allowedPages: ["/dashboard/settings"] });
+      setRoleFormData({ name: "", description: "", allowedPages: [] });
+      if (typeof window !== "undefined") localStorage.removeItem("deniedPaths");
       refetchRoles();
+      refetchTeam();
     } catch (err: any) {
       toast.error(err?.data?.message || "Failed to create role");
     } finally {
@@ -359,7 +303,9 @@ export default function AdminManagementPage() {
 
       toast.success("Role permissions updated successfully!");
       setEditRole(null);
+      if (typeof window !== "undefined") localStorage.removeItem("deniedPaths");
       refetchRoles();
+      refetchTeam();
     } catch (err: any) {
       toast.error(err?.data?.message || "Failed to update role");
     } finally {

@@ -105,7 +105,7 @@ const sidebarItems: SidebarItem[] = [
   { name: "Account Settings", icon: Settings, href: "/dashboard/settings" },
 ];
 
-import { checkRoutePermission, getFirstAllowedRoute } from "@/lib/permissions";
+import { checkRoutePermission, getFirstAllowedRoute, syncUserPermissionsCache } from "@/lib/permissions";
 
 function DashboardHeader({ 
   setIsSidebarOpen, 
@@ -117,12 +117,21 @@ function DashboardHeader({
 }) {
   const router = useRouter();
   const { unreadCount, notifications } = useNotifications();
-  // Read the real logged-in user from Redux state first
   const { data: meData } = useGetMeQuery(undefined);
   const loggedInUser = useSelector((state: any) => state.auth.user);
   const user = meData?.data || loggedInUser;
-  
-  const adminName = user ? `${user.firstName} ${user.lastName}` : (typeof window !== "undefined" ? localStorage.getItem("adminName") || "Admin" : "Admin");
+
+  // Compute adminName safely — only read localStorage on the client to avoid hydration mismatch
+  const [adminName, setAdminName] = useState("Admin");
+  useEffect(() => {
+    if (user?.firstName) {
+      setAdminName(`${user.firstName} ${user.lastName || ""}`.trim());
+    } else {
+      const stored = localStorage.getItem("adminName");
+      if (stored) setAdminName(stored);
+    }
+  }, [user]);
+
   const adminAvatar = user?.imageUrl || user?.image || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=256&auto=format&fit=crop";
 
   return (
@@ -259,13 +268,36 @@ function DashboardLayoutContent({
   const { totalSupportUnread } = useUnreadCounts();
   const pathname = usePathname();
   const router = useRouter();
+  const dispatch = useDispatch();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [expandedItems, setExpandedItems] = useState<string[]>([]);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
-  const { data: meData } = useGetMeQuery(undefined);
+  const [mounted, setMounted] = useState(false);
+
+  const { data: meData, isLoading: isMeLoading } = useGetMeQuery(undefined);
   const loggedInUser = useSelector((state: any) => state.auth.user);
-  const userMe = meData?.data || loggedInUser || {};
+  const userMe = meData?.data || loggedInUser;
+
+  // Mount effect to eliminate SSR hydration mismatch
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // /user/me now returns role/adminRole/allowedPages directly, so we only
+  // need to wait for this one request to resolve before evaluating access.
+  const isCheckingAccess = isMeLoading;
+
+  // Route permission evaluation
+  const isAllowed = checkRoutePermission(pathname, userMe);
+  const isBlocked = mounted && !isCheckingAccess && !isAllowed;
+
+  // Sync cache whenever the full user profile from API has allowedPages/permissions
+  useEffect(() => {
+    if (meData?.data && (meData.data.allowedPages?.length > 0 || meData.data.permissions?.length > 0 || meData.data.customRoleId)) {
+      syncUserPermissionsCache(meData.data);
+    }
+  }, [meData]);
 
   const toggleExpand = (itemName: string) => {
     setExpandedItems((prev) =>
@@ -280,35 +312,27 @@ function DashboardLayoutContent({
     localStorage.removeItem("token");
     localStorage.removeItem("adminRole");
     localStorage.removeItem("adminName");
+    localStorage.removeItem("adminAllowedPages");
+    localStorage.removeItem("adminPermissions");
     localStorage.removeItem("deniedPaths");
     window.location.href = "/login";
   };
 
-  const dispatch = useDispatch();
-  const isAccessDenied = useSelector(selectIsAccessDenied);
-
-  // Reset access denied on navigation
-  const prevPathname = useRef(pathname);
+  // Immediate landing redirect if user opens /dashboard without Overview permission
   useEffect(() => {
-    if (prevPathname.current !== pathname) {
-      dispatch(setAccessDenied(false));
-      prevPathname.current = pathname;
-    }
-  }, [pathname, dispatch]);
-
-  // Pre-emptive route checking
-  const isAllowed = checkRoutePermission(pathname, userMe);
-  const isBlocked = isAccessDenied || !isAllowed;
-
-  // If user opens /dashboard and does not have permission for Overview, auto-redirect to first allowed page
-  useEffect(() => {
-    if (pathname === "/dashboard" && userMe && Object.keys(userMe).length > 0) {
-      if (!checkRoutePermission("/dashboard", userMe)) {
-        const target = getFirstAllowedRoute(userMe);
+    if (
+      mounted &&
+      !isCheckingAccess &&
+      pathname === "/dashboard" &&
+      !checkRoutePermission("/dashboard", userMe)
+    ) {
+      const target = getFirstAllowedRoute(userMe);
+      if (target && target !== "/dashboard") {
         router.replace(target);
       }
     }
-  }, [pathname, userMe, router]);
+  }, [mounted, isCheckingAccess, pathname, userMe, router]);
+
 
   return (
     <>
@@ -539,7 +563,15 @@ function DashboardLayoutContent({
             setShowLogoutModal={setShowLogoutModal}
           />
           <main className="flex-1 overflow-y-auto p-4 md:p-8 bg-surface flex flex-col">
-            {isBlocked ? (
+            {/* Show smooth loading spinner on initial mount or during route transition */}
+            {!mounted || isCheckingAccess ? (
+              <div className="flex-1 flex items-center justify-center min-h-[500px]">
+                <div className="flex flex-col items-center gap-3 text-slate/40">
+                  <div className="h-8 w-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                  <span className="text-xs font-medium">Checking access...</span>
+                </div>
+              </div>
+            ) : isBlocked ? (
               <div className="flex-1 flex items-center justify-center min-h-[500px] p-6 animate-in fade-in duration-300">
                 <div className="relative bg-white rounded-[28px] p-8 sm:p-12 w-full max-w-[480px] shadow-2xl border border-border/50 text-center space-y-6 animate-in zoom-in-95 duration-300">
                   <div className="h-20 w-20 rounded-full bg-red-50 text-red-500 flex items-center justify-center mx-auto shadow-inner">

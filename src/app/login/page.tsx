@@ -11,8 +11,7 @@ import { Mail, Lock, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { useLoginMutation } from "@/lib/redux/features/authApi";
 import { setCredentials } from "@/lib/redux/features/authSlice";
-
-import { getFirstAllowedRoute } from "@/lib/permissions";
+import { getFirstAllowedRoute, syncUserPermissionsCache } from "@/lib/permissions";
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
@@ -27,14 +26,35 @@ export default function LoginPage() {
 
     try {
       const result = await login({ email: username, password }).unwrap();
-      const loggedUser = result.data?.user || result.user || result.data;
+      const rawUser = result.data?.user || result.user || result.data || {};
+      const loggedUser = { ...rawUser };
+      
+      const accessToken = result.data?.accessToken || result.accessToken;
+      const refreshToken = result.data?.refreshToken || result.refreshToken;
+
+      // Extract allowedPages and customRole from top level of response if present
+      if (result.data?.allowedPages && !loggedUser.allowedPages) {
+        loggedUser.allowedPages = result.data.allowedPages;
+      }
+      if (result.data?.customRole && !loggedUser.customRole) {
+        loggedUser.customRole = result.data.customRole;
+      }
+      if (result.data?.permissions && !loggedUser.permissions) {
+        loggedUser.permissions = result.data.permissions;
+      }
+
+      // Store user and tokens
       dispatch(
         setCredentials({
           user: loggedUser,
-          accessToken: result.data.accessToken,
-          refreshToken: result.data.refreshToken,
+          accessToken,
+          refreshToken,
         })
       );
+
+      // Instantly sync user permissions cache for synchronous guards (including JWT decoding)
+      syncUserPermissionsCache(loggedUser, accessToken);
+
       toast.success(result.message || "Login successful!");
       
       const targetRoute = getFirstAllowedRoute(loggedUser);

@@ -78,6 +78,40 @@ export function AdminChatWidget() {
     });
   };
 
+  // Pre-seed and sync lastMessagesMap from REST team list
+  useEffect(() => {
+    if (!rawTeam || !Array.isArray(rawTeam)) return;
+
+    rawTeam.forEach((member: any) => {
+      const u = member.user || member;
+      const keys = [member.userId, u.userId, u.id, u._id, member.adminId, member.id, member._id].filter(Boolean);
+      const rawMsg = member.lastMessage || member.latestMessage || member.last_message || member.recentMessage || u.lastMessage || u.latestMessage;
+
+      if (rawMsg) {
+        let text = "";
+        let time = "";
+        let timestamp = 0;
+
+        if (typeof rawMsg === "string") {
+          text = rawMsg;
+        } else if (typeof rawMsg === "object") {
+          text = rawMsg.text || rawMsg.content || rawMsg.message || rawMsg.body || "";
+          const createdAt = rawMsg.createdAt || rawMsg.created_at || rawMsg.timestamp || rawMsg.time;
+          if (createdAt) {
+            timestamp = new Date(createdAt).getTime();
+            try {
+              time = new Date(createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+            } catch (e) {}
+          }
+        }
+
+        if (text) {
+          updateLastMessageForAdmin(keys, text, time, timestamp ? new Date(timestamp).toISOString() : undefined);
+        }
+      }
+    });
+  }, [rawTeam]);
+
   // Listen to WebSocket events: internal:new_message & user:status_change
   useEffect(() => {
     if (!socket) return;
@@ -86,10 +120,12 @@ export function AdminChatWidget() {
       console.log("[WebSocket] internal:new_message received:", data);
 
       const msg = data.message || data;
-      const sender = data.senderId || msg.senderId || msg.sender;
-      const receiver = data.receiverId || msg.receiverId;
+      const sender = data.senderId || msg.senderId || msg.sender || msg.sender_id;
+      const receiver = data.receiverId || msg.receiverId || msg.receiver || msg.receiver_id;
+      const text = msg.text || msg.content || msg.message || msg.body || (typeof msg === "string" ? msg : "");
+      const createdAt = msg.createdAt || msg.created_at || msg.timestamp;
 
-      updateLastMessageForAdmin([sender, receiver], msg.text || msg.content || "", undefined, msg.createdAt);
+      updateLastMessageForAdmin([sender, receiver], text, undefined, createdAt);
 
       // Refresh team list & unread count badge in real time
       refetchTeam();
@@ -292,11 +328,25 @@ export function AdminChatWidget() {
                 });
 
                 // 3. API provided lastMessage
-                if (admin.lastMessage) {
-                  const apiTimestamp = admin.lastMessage.createdAt ? new Date(admin.lastMessage.createdAt).getTime() : 0;
-                  if (apiTimestamp >= latestTimestamp || !latestMsgText) {
-                    latestMsgText = admin.lastMessage.text || admin.lastMessage.content || latestMsgText;
-                    latestMsgTime = admin.lastMessage.createdAt ? new Date(admin.lastMessage.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : latestMsgTime;
+                const rawLastMsg = admin.lastMessage || admin.latestMessage || admin.last_message || admin.recentMessage || userObj.lastMessage || userObj.latestMessage;
+
+                if (rawLastMsg) {
+                  if (typeof rawLastMsg === "string") {
+                    if (!latestMsgText) {
+                      latestMsgText = rawLastMsg;
+                    }
+                  } else if (typeof rawLastMsg === "object") {
+                    const extractedText = rawLastMsg.text || rawLastMsg.content || rawLastMsg.message || rawLastMsg.body || "";
+                    const extractedTime = rawLastMsg.createdAt || rawLastMsg.created_at || rawLastMsg.timestamp || rawLastMsg.time;
+                    const apiTimestamp = extractedTime ? new Date(extractedTime).getTime() : 0;
+                    if (apiTimestamp >= latestTimestamp || !latestMsgText) {
+                      if (extractedText) latestMsgText = extractedText;
+                      if (extractedTime) {
+                        try {
+                          latestMsgTime = new Date(extractedTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                        } catch (e) {}
+                      }
+                    }
                   }
                 }
 
