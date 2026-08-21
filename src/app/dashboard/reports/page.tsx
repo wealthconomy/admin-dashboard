@@ -73,7 +73,7 @@ export default function ReportsPage() {
   };
 
   return (
-    <div className="w-full max-w-[1137px] mx-auto min-h-[1370px] bg-white rounded-[20px] py-10 px-6 flex flex-col gap-8 shadow-sm">
+    <div className="w-full max-w-[1140px] mx-auto bg-white rounded-[20px] p-6 lg:p-10 border border-border/50 shadow-sm flex flex-col gap-8 mb-10 animate-in fade-in duration-500">
       {/* Header Section */}
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
         <div>
@@ -244,7 +244,7 @@ export default function ReportsPage() {
         </Card>
 
         {/* Retention Rate Trend */}
-        <Card className="rounded-[20px] shadow-sm border border-border/50 bg-white">
+        <Card className="rounded-[20px] shadow-sm border border-border/50 bg-white lg:col-span-2">
           <CardContent className="p-6">
             <div className="mb-4">
               <h3 className="text-[18px] font-bold text-dark font-outfit mb-2">Retention Rate Trend</h3>

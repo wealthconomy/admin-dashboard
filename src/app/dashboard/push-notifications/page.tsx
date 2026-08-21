@@ -119,7 +119,7 @@ export default function PushNotificationsPage() {
   };
 
   return (
-    <div className="bg-white rounded-[20px] p-6 md:p-10 border border-border/50 shadow-sm w-full max-w-[1137px] mx-auto min-h-[calc(100vh-120px)] flex flex-col">
+    <div className="bg-white rounded-[20px] p-6 lg:p-10 border border-border/50 shadow-sm w-full max-w-[1140px] min-h-[1000px] mx-auto flex flex-col animate-in fade-in duration-500">
       <div className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-border/40 pb-6">
         <div>
           <h1 className="text-xl md:text-2xl font-bold font-outfit text-dark">
@@ -149,7 +149,7 @@ export default function PushNotificationsPage() {
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col max-w-4xl w-full">
+      <div className="flex-1 flex flex-col w-full">
         {activeTab === "send" && (
           isSuccess ? (
             <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-8 flex flex-col items-center justify-center text-center my-auto">

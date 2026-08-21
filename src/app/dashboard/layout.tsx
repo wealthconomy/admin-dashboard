@@ -562,7 +562,7 @@ function DashboardLayoutContent({
             setIsSidebarOpen={setIsSidebarOpen}
             setShowLogoutModal={setShowLogoutModal}
           />
-          <main className="flex-1 overflow-y-auto p-4 md:p-8 bg-surface flex flex-col">
+          <main id="main-scroll-container" className="flex-1 overflow-y-auto p-4 md:p-8 bg-surface flex flex-col">
             {/* Show smooth loading spinner on initial mount or during route transition */}
             {!mounted || isCheckingAccess ? (
               <div className="flex-1 flex items-center justify-center min-h-[500px]">

@@ -48,11 +48,15 @@ const getSafeArray = (data: any) => {
   if (Array.isArray(data)) return data;
   if (Array.isArray(data.items)) return data.items;
   if (Array.isArray(data.data?.items)) return data.data.items;
+  if (Array.isArray(data.data?.logs)) return data.data.logs;
+  if (Array.isArray(data.data?.auditLogs)) return data.data.auditLogs;
+  if (Array.isArray(data.data?.results)) return data.data.results;
   if (Array.isArray(data.data)) return data.data;
+  if (Array.isArray(data.logs)) return data.logs;
+  if (Array.isArray(data.auditLogs)) return data.auditLogs;
+  if (Array.isArray(data.results)) return data.results;
   return [];
 };
-
-
 
 const CATEGORIES = ["All Categories", "Authentication", "User Management", "Team Management", "Content Engine", "Support Operations", "Settings Update", "System Activity"];
 
@@ -86,9 +90,10 @@ export default function AuditLogsPage() {
   const me = meData?.data || meData;
   const usersList = getSafeArray(usersData?.data?.items || usersData?.data || usersData);
 
-  const logs = getSafeArray(auditLogsData).map((log: any) => {
+  const rawLogsArray = getSafeArray(auditLogsData);
+  const logs = rawLogsArray.map((log: any) => {
     // Find admin details from team, me, or users
-    const adminId = log.actorId || log.adminId || log.userId;
+    const adminId = log.actorId || log.adminId || log.userId || log.actor?.id || log.user?.id;
     let matchingAdmin = team.find((member: any) => 
       member.userId === adminId || 
       member.user?.id === adminId || 
@@ -100,17 +105,22 @@ export default function AuditLogsPage() {
       matchingAdmin = me;
     }
 
-    // If still not found, check the regular users list (since sometimes regular users trigger audit logs, or it was a deleted admin that is still in the users table)
+    // If still not found, check the regular users list
     if (!matchingAdmin) {
       matchingAdmin = usersList.find((u: any) => u.id === adminId);
     }
 
     const userObj = matchingAdmin?.user || matchingAdmin;
-    const adminName = matchingAdmin ? `${userObj?.firstName || ""} ${userObj?.lastName || ""}`.trim() : (log.admin?.name || log.adminName || log.user?.firstName || log.user?.name || "Unknown Admin");
-    const resolvedRole = matchingAdmin ? (matchingAdmin.role === "CUSTOM" && matchingAdmin.customRole ? matchingAdmin.customRole.name : matchingAdmin.role) : (log.adminRole || "Admin");
+    const actorObj = log.actor || log.admin || log.user || {};
+    const adminName = matchingAdmin 
+      ? `${userObj?.firstName || ""} ${userObj?.lastName || ""}`.trim() 
+      : (actorObj.name || `${actorObj.firstName || ""} ${actorObj.lastName || ""}`.trim() || log.adminName || log.actorName || log.performedBy || "Admin");
+    const resolvedRole = matchingAdmin 
+      ? (matchingAdmin.role === "CUSTOM" && matchingAdmin.customRole ? matchingAdmin.customRole.name : matchingAdmin.role) 
+      : (actorObj.role || log.adminRole || log.role || "Admin");
     const adminRole = resolvedRole || "Admin";
-    const adminEmail = matchingAdmin ? userObj?.email : (log.admin?.email || log.adminEmail || log.user?.email || "Admin");
-    const adminAvatar = userObj?.imageUrl || log.admin?.imageUrl || log.adminImageUrl || log.user?.imageUrl || "";
+    const adminEmail = matchingAdmin ? userObj?.email : (actorObj.email || log.admin?.email || log.adminEmail || log.user?.email || "Admin");
+    const adminAvatar = userObj?.imageUrl || actorObj.imageUrl || actorObj.avatarUrl || log.admin?.imageUrl || log.adminImageUrl || log.user?.imageUrl || "";
 
     // Resolve Target Name
     let targetName = "";
@@ -123,10 +133,13 @@ export default function AuditLogsPage() {
       }
     }
 
+    const rawDate = log.createdAt || log.created_at || log.timestamp || log.date;
+    const formattedTimestamp = rawDate ? new Date(rawDate).toLocaleString() : (log.timestamp || "N/A");
+
     return {
       ...log,
       id: log.id || log._id,
-      timestamp: log.createdAt ? new Date(log.createdAt).toLocaleString() : log.timestamp,
+      timestamp: formattedTimestamp,
       admin: {
         id: adminId || "1",
         name: adminName || "Unknown Admin",
@@ -149,7 +162,7 @@ export default function AuditLogsPage() {
       log.admin.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       log.admin.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
       log.action.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      log.id.toLowerCase().includes(searchQuery.toLowerCase());
+      String(log.id).toLowerCase().includes(searchQuery.toLowerCase());
 
     const matchesCategory =
       selectedCategory === "All Categories" || log.category === selectedCategory;
@@ -157,9 +170,10 @@ export default function AuditLogsPage() {
     return matchesSearch && matchesCategory;
   });
 
-  const paginationData = auditLogsData?.data || {};
-  const totalEvents = paginationData.total || logs.length;
-  const totalPages = paginationData.pages || Math.ceil(totalEvents / 20);
+  const paginationData = auditLogsData?.data || auditLogsData?.meta || auditLogsData?.pagination || auditLogsData || {};
+  const totalEvents = paginationData.total || paginationData.totalItems || paginationData.totalCount || paginationData.count || logs.length;
+  const limit = paginationData.limit || 20;
+  const totalPages = paginationData.pages || paginationData.totalPages || Math.ceil(totalEvents / limit) || 1;
 
   // Freeze the stats on first load so they don't fluctuate during pagination
   const [frozenStats, setFrozenStats] = useState<{flagged: number, permissions: number} | null>(null);
@@ -212,7 +226,7 @@ export default function AuditLogsPage() {
   };
 
   return (
-    <div className="bg-white rounded-[20px] p-4 sm:p-6 md:p-8 border border-border/50 shadow-sm w-full max-w-[1140px] min-h-[850px] mx-auto flex flex-col gap-6 sm:gap-8 animate-in fade-in duration-500 overflow-hidden">
+    <div className="bg-white rounded-[20px] p-6 lg:p-10 border border-border/50 shadow-sm w-full max-w-[1140px] mx-auto flex flex-col gap-6 sm:gap-8 mb-10 animate-in fade-in duration-500">
       
       {/* Header and Controls */}
       <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6">
@@ -443,7 +457,7 @@ export default function AuditLogsPage() {
 
       {/* Pagination indicators */}
       <div className="flex justify-between items-center text-xs font-bold text-slate/40 pt-2 px-1">
-        <span>Showing {totalEvents === 0 ? 0 : Math.min(page * (paginationData?.limit || 20), totalEvents)} of {totalEvents} records (Page {page} of {totalPages || 1})</span>
+        <span>Showing {totalEvents === 0 ? 0 : (page - 1) * limit + 1} - {Math.min(page * limit, totalEvents)} of {totalEvents} records (Page {page} of {totalPages || 1})</span>
         <div className="flex items-center gap-1.5">
           <Button 
             variant="outline" 

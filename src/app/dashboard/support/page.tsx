@@ -48,6 +48,8 @@ export default function SupportCentrePage() {
   const { data: usersData, isLoading: isUsersLoading, refetch: refetchUsers } = useGetSupportChatsQuery({ 
     stage: stageParam, 
     search: searchTerm 
+  }, {
+    pollingInterval: 4000,
   });
   
   const users = Array.isArray(usersData) ? usersData : (usersData?.data || []);
@@ -61,6 +63,58 @@ export default function SupportCentrePage() {
   const [claimChat] = useClaimSupportChatMutation();
   const [resolveChat] = useResolveSupportChatMutation();
   const [reopenChat] = useReopenSupportChatMutation();
+
+  const [lastMessagesMap, setLastMessagesMap] = useState<Record<string, { text: string; time: string; timestamp: number }>>({});
+
+  const updateLastMessageForChat = (chatIds: (string | undefined)[], text: string, timeStr?: string, createdAt?: string) => {
+    const timestamp = createdAt ? new Date(createdAt).getTime() : Date.now();
+    const time = timeStr || new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    setLastMessagesMap((prev) => {
+      const next = { ...prev };
+      chatIds.forEach((id) => {
+        if (id) {
+          const existing = next[id];
+          if (!existing || existing.timestamp <= timestamp) {
+            next[id] = { text, time, timestamp };
+          }
+        }
+      });
+      return next;
+    });
+  };
+
+  // Pre-seed and sync lastMessagesMap from REST support chats
+  useEffect(() => {
+    if (!users || !Array.isArray(users)) return;
+
+    users.forEach((item: any) => {
+      const keys = [item.id, item._id, item.chatId, item.userId].filter(Boolean);
+      const rawMsg = item.lastMessage || item.latestMessage || item.last_message || item.recentMessage || item.messages?.[item.messages.length - 1];
+
+      if (rawMsg) {
+        let text = "";
+        let time = "";
+        let timestamp = 0;
+
+        if (typeof rawMsg === "string") {
+          text = rawMsg;
+        } else if (typeof rawMsg === "object") {
+          text = rawMsg.text || rawMsg.content || rawMsg.message || rawMsg.body || "";
+          const createdAt = rawMsg.createdAt || rawMsg.created_at || rawMsg.timestamp || rawMsg.time;
+          if (createdAt) {
+            timestamp = new Date(createdAt).getTime();
+            try {
+              time = new Date(createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+            } catch (e) {}
+          }
+        }
+
+        if (text) {
+          updateLastMessageForChat(keys, text, time, timestamp ? new Date(timestamp).toISOString() : undefined);
+        }
+      }
+    });
+  }, [users]);
 
   // Sync REST messages when switching chats or fetching
   useEffect(() => {
@@ -79,21 +133,15 @@ export default function SupportCentrePage() {
   useEffect(() => {
     if (!socket) return;
 
-    const handleSupportNewMessage = (data: {
-      message: {
-        id: string;
-        chatId: string;
-        sender: "client" | "admin";
-        senderId: string;
-        text: string;
-        createdAt?: string;
-      };
-      chatId: string;
-    }) => {
+    const handleSupportNewMessage = (data: any) => {
       console.log("[WebSocket] support:new_message received:", data);
 
       const msg = data.message || data;
-      const targetChatId = data.chatId || msg.chatId;
+      const targetChatId = data.chatId || msg.chatId || msg.userId;
+      const text = msg.text || msg.content || msg.message || msg.body || (typeof msg === "string" ? msg : "");
+      const createdAt = msg.createdAt || msg.created_at || msg.timestamp;
+
+      updateLastMessageForChat([targetChatId], text, undefined, createdAt);
 
       // If active ticket is open, append message immediately
       if (currentChatId && targetChatId === currentChatId) {
@@ -119,9 +167,11 @@ export default function SupportCentrePage() {
     };
 
     socket.on("support:new_message", handleSupportNewMessage);
+    socket.on("chat:new_message", handleSupportNewMessage);
 
     return () => {
       socket.off("support:new_message", handleSupportNewMessage);
+      socket.off("chat:new_message", handleSupportNewMessage);
     };
   }, [socket, currentChatId, markSupportRead, refetchUsers]);
 
@@ -196,6 +246,8 @@ export default function SupportCentrePage() {
     };
     setLiveMessages((prev) => [...prev, optimisticMsg]);
 
+    updateLastMessageForChat([activeId, selectedChat.id, selectedChat._id], textToSend, undefined, new Date().toISOString());
+
     // 1. Emit real-time WebSocket event
     if (socket && isConnected) {
       socket.emit("support:send_message", {
@@ -240,7 +292,7 @@ export default function SupportCentrePage() {
   };
 
   return (
-    <div className="bg-white rounded-[20px] border border-border/50 shadow-sm w-full max-w-[1137px] h-[850px] mx-auto flex overflow-hidden animate-in fade-in duration-500">
+    <div className="bg-white rounded-[20px] border border-border/50 shadow-sm w-full max-w-[1140px] h-[850px] mx-auto flex overflow-hidden animate-in fade-in duration-500">
       {/* Sidebar */}
       <aside className="w-[380px] border-r border-border/50 flex flex-col bg-white shrink-0">
         <div className="p-6 space-y-6 flex flex-col h-full min-h-0">
@@ -308,8 +360,55 @@ export default function SupportCentrePage() {
               {filteredUsers.length > 0 ? (
                 filteredUsers.map((user: any) => {
                   const currentId = user.id || user._id;
+                  const allKeys = [user.id, user._id, user.chatId, user.userId].filter(Boolean);
                   const selectedId = selectedChat?.id || selectedChat?._id;
+                  const isCurrentSelected = selectedChat && allKeys.some(k => k === selectedId);
                   const unread = user.unreadCount ?? 0;
+
+                  let latestMsgText = "";
+                  let latestMsgTime = "";
+                  let latestTimestamp = 0;
+
+                  // 1. Direct active chat messages in current view
+                  if (isCurrentSelected && liveMessages.length > 0) {
+                    const lastLive = liveMessages[liveMessages.length - 1];
+                    latestMsgText = lastLive.text || lastLive.content || lastLive.message || "";
+                    latestMsgTime = lastLive.createdAt ? new Date(lastLive.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "";
+                    latestTimestamp = lastLive.createdAt ? new Date(lastLive.createdAt).getTime() : Date.now();
+                  }
+
+                  // 2. Real-time message map
+                  allKeys.forEach((k) => {
+                    const m = lastMessagesMap[k];
+                    if (m && m.timestamp >= latestTimestamp) {
+                      latestMsgText = m.text;
+                      latestMsgTime = m.time;
+                      latestTimestamp = m.timestamp;
+                    }
+                  });
+
+                  // 3. API provided lastMessage
+                  const rawLastMsg = user.lastMessage || user.latestMessage || user.last_message || user.recentMessage || user.messages?.[user.messages.length - 1];
+                  if (rawLastMsg) {
+                    if (typeof rawLastMsg === "string") {
+                      if (!latestMsgText) latestMsgText = rawLastMsg;
+                    } else if (typeof rawLastMsg === "object") {
+                      const extractedText = rawLastMsg.text || rawLastMsg.content || rawLastMsg.message || rawLastMsg.body || "";
+                      const extractedTime = rawLastMsg.createdAt || rawLastMsg.created_at || rawLastMsg.timestamp || rawLastMsg.time;
+                      const apiTimestamp = extractedTime ? new Date(extractedTime).getTime() : 0;
+                      if (apiTimestamp >= latestTimestamp || !latestMsgText) {
+                        if (extractedText) latestMsgText = extractedText;
+                        if (extractedTime) {
+                          try {
+                            latestMsgTime = new Date(extractedTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                          } catch (e) {}
+                        }
+                      }
+                    }
+                  }
+
+                  const displayLastMsg = latestMsgText || "No messages yet";
+                  const displayTime = latestMsgTime;
 
                   return (
                   <div
@@ -333,13 +432,18 @@ export default function SupportCentrePage() {
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p
-                        className={`text-sm font-bold truncate ${selectedId === currentId ? "text-dark" : "text-dark/80 group-hover:text-dark"}`}
-                      >
-                        {user.name || `User ${currentId.slice(0, 6)}`}
-                      </p>
-                      <p className="text-[11px] font-medium text-slate/50 truncate">
-                        {user.lastMessage || "No messages yet"}
+                      <div className="flex items-center justify-between">
+                        <p
+                          className={`text-sm font-bold truncate ${selectedId === currentId ? "text-dark" : "text-dark/80 group-hover:text-dark"}`}
+                        >
+                          {user.name || `User ${String(currentId).slice(0, 6)}`}
+                        </p>
+                        {displayTime && (
+                          <span className="text-[9px] font-bold text-slate/40">{displayTime}</span>
+                        )}
+                      </div>
+                      <p className="text-[11px] font-medium text-slate/50 truncate mt-0.5">
+                        {displayLastMsg}
                       </p>
                     </div>
                     {unread > 0 && (
