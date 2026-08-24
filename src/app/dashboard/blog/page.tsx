@@ -37,6 +37,15 @@ const CATEGORY_COLORS: Record<string, string> = {
 
 
 
+const getInitials = (name: string): string => {
+  if (!name || typeof name !== "string") return "A";
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+  }
+  return name.slice(0, 2).toUpperCase();
+};
+
 function ArticleCard({
   article,
   onPublish,
@@ -51,110 +60,121 @@ function ArticleCard({
   onViewEngagement: (article: Article) => void;
 }) {
   const router = useRouter();
-  const catColor = CATEGORY_COLORS[article.categoryColor] ?? "bg-slate-100 text-slate-600";
 
   return (
-    <div className="flex items-start gap-3 py-3 px-3 group border border-border/80 hover:border-primary/30 rounded-xl transition-all hover:shadow-sm bg-white">
-      {/* Thumbnail */}
-      <div className="relative h-[80px] w-[100px] rounded-lg overflow-hidden shrink-0">
+    <div className="rounded-2xl border border-border/40 overflow-hidden bg-white hover:shadow-md hover:scale-[1.01] transition-all duration-300 group flex flex-col h-full">
+      {/* Image Thumbnail */}
+      <div className="relative h-44 w-full bg-surface shrink-0">
         <img
           src={article.image}
           alt={article.title}
           className="object-cover h-full w-full group-hover:scale-105 transition-transform duration-500"
           onError={(e) => { e.currentTarget.src = "https://images.unsplash.com/photo-1554224155-6726b3ff858f?q=80&w=400&h=200&auto=format&fit=crop" }}
         />
-      </div>
-
-      {/* Details */}
-      <div className="flex-1 min-w-0 flex flex-col gap-1 pt-0.5">
+        
         {/* Category & platform badges */}
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full self-start leading-none ${catColor}`}>
+        <div className="absolute top-3 left-3 flex items-center gap-1.5 flex-wrap max-w-[80%]">
+          <span className="text-[10px] font-extrabold uppercase bg-white/90 backdrop-blur-sm px-2.5 py-1 rounded-full text-primary shadow-sm border border-border/20">
             {article.category}
           </span>
           {article.publishToApp !== false && (
-            <span className="inline-flex items-center gap-0.5 text-[8px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-100 rounded px-1 py-0.2 uppercase leading-none" title="Visible on Mobile App">
-              <Smartphone className="h-2 w-2" /> App
+            <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-emerald-700 bg-white/90 backdrop-blur-sm border border-emerald-100 rounded-full px-2 py-0.5 shadow-sm uppercase leading-none" title="Visible on Mobile App">
+              <Smartphone className="h-2.5 w-2.5" /> App
             </span>
           )}
           {article.publishToWeb !== false && (
-            <span className="inline-flex items-center gap-0.5 text-[8px] font-bold text-blue-600 bg-blue-50 border border-blue-100 rounded px-1 py-0.2 uppercase leading-none" title="Visible on Web Portal">
-              <Globe className="h-2 w-2" /> Web
+            <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-blue-700 bg-white/90 backdrop-blur-sm border border-blue-100 rounded-full px-2 py-0.5 shadow-sm uppercase leading-none" title="Visible on Web Portal">
+              <Globe className="h-2.5 w-2.5" /> Web
             </span>
           )}
         </div>
 
-        {/* Title */}
-        <h3 className="text-[12px] font-bold text-dark leading-snug line-clamp-2 group-hover:text-primary transition-colors">
-          {article.title}
-        </h3>
-
-        {/* Author + meta row */}
-        <div className="flex items-start gap-2 mt-1">
-          <Avatar className="h-6 w-6 shrink-0 border border-white shadow-sm mt-0.5">
-            <AvatarImage src={article.authorAvatar} />
-            <AvatarFallback className="text-[8px] bg-primary/10 text-primary font-bold">AO</AvatarFallback>
-          </Avatar>
-          <div className="flex flex-col min-w-0">
-            <span className="text-[11px] text-dark font-bold leading-tight truncate">{article.author}</span>
-            <div className="flex items-center gap-1 mt-0.5 flex-wrap">
-              {article.status === "published" && (
-                <span className="text-[9px] text-slate/50 font-medium">{article.bookmarks} Bookmarks</span>
+        {/* Action menu */}
+        <div className="absolute top-3 right-3">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="h-7 w-7 rounded-full bg-white/90 backdrop-blur-sm text-slate flex items-center justify-center hover:bg-white transition-colors shadow-sm border border-border/20 cursor-pointer">
+                <MoreVertical className="h-4 w-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-44 rounded-[14px] border-border/50 shadow-xl p-1 bg-white">
+              {/* Edit Article — not shown for scheduled (Reschedule covers it) */}
+              {article.status !== "scheduled" && (
+                <DropdownMenuItem onClick={() => router.push(`/dashboard/blog/edit/${article.id}`)} className="py-2 px-3 text-xs font-bold focus:bg-surface text-dark cursor-pointer rounded-xl gap-2">
+                  <FileEdit className="h-3.5 w-3.5 text-primary" /> Edit Article
+                </DropdownMenuItem>
+              )}
+              {article.status === "scheduled" && (
+                <DropdownMenuItem onClick={() => router.push(`/dashboard/blog/edit/${article.id}`)} className="py-2 px-3 text-xs font-bold focus:bg-surface text-orange-500 cursor-pointer rounded-xl gap-2">
+                  <Calendar className="h-3.5 w-3.5" /> Reschedule
+                </DropdownMenuItem>
               )}
               {article.status === "published" && (
-                <><span className="text-[9px] text-slate/30">•</span>
-                <span className="text-[9px] text-slate/50 font-medium">{article.views} Views</span></>
+                <DropdownMenuItem onClick={() => onViewEngagement(article)} className="py-2 px-3 text-xs font-bold focus:bg-surface text-emerald-600 cursor-pointer rounded-xl gap-2">
+                  <MessageSquare className="h-3.5 w-3.5" /> View Engagement
+                </DropdownMenuItem>
               )}
               {article.status === "draft" && (
-                <span className="text-[9px] text-slate/50 font-medium">{article.timeAgo}</span>
+                <DropdownMenuItem onClick={() => onPublish(article.id)} className="py-2 px-3 text-xs font-bold focus:bg-surface text-emerald-600 cursor-pointer rounded-xl gap-2">
+                  <Send className="h-3.5 w-3.5" /> Publish Now
+                </DropdownMenuItem>
               )}
-              {article.status === "scheduled" && article.scheduledFor && (
-                <span className="text-[9px] text-orange-500 font-bold leading-tight">Scheduled for {article.scheduledFor}</span>
+              {article.status === "published" && (
+                <DropdownMenuItem onClick={() => onUnpublish(article.id)} className="py-2 px-3 text-xs font-bold focus:bg-surface text-slate cursor-pointer rounded-xl gap-2">
+                  <X className="h-3.5 w-3.5 text-slate/50" /> Unpublish
+                </DropdownMenuItem>
               )}
-            </div>
-          </div>
+              <DropdownMenuItem onClick={() => onDelete(article.id)} className="py-2 px-3 text-xs font-bold focus:bg-red-50 text-red-600 cursor-pointer rounded-xl gap-2 mt-0.5">
+                <Trash2 className="h-3.5 w-3.5" /> Delete Article
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
-      {/* Action menu */}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button className="shrink-0 p-1.5 mt-1 rounded-lg hover:bg-surface transition-colors text-slate/60 hover:text-dark">
-            <MoreVertical className="h-4 w-4" />
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-44 rounded-[14px] border-border/50 shadow-xl p-1 bg-white">
-          {/* Edit Article — not shown for scheduled (Reschedule covers it) */}
-          {article.status !== "scheduled" && (
-            <DropdownMenuItem onClick={() => router.push(`/dashboard/blog/edit/${article.id}`)} className="py-2 px-3 text-xs font-bold focus:bg-surface text-dark cursor-pointer rounded-xl gap-2">
-              <FileEdit className="h-3.5 w-3.5 text-primary" /> Edit Article
-            </DropdownMenuItem>
+      {/* Card Details */}
+      <div className="p-4 flex-1 flex flex-col justify-between space-y-4">
+        <div className="space-y-2">
+          <h3 className="text-sm font-bold text-dark leading-snug line-clamp-2 group-hover:text-primary transition-colors">
+            {article.title}
+          </h3>
+          {article.status === "scheduled" && article.scheduledFor && (
+            <p className="text-[11px] font-semibold text-orange-500 bg-orange-50/50 px-2 py-1 rounded-lg border border-orange-100/50 inline-block">
+              ⏰ {article.scheduledFor}
+            </p>
           )}
+        </div>
+
+        {/* Author profile and meta */}
+        <div className="flex items-center justify-between border-t border-border/20 pt-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <Avatar className="h-6 w-6 shrink-0">
+              <AvatarImage src={article.authorAvatar} />
+              <AvatarFallback className="text-[9px] bg-primary/10 text-primary font-bold">
+                {getInitials(article.author)}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
+              <span className="text-[10px] font-bold text-dark truncate max-w-[90px]">{article.author}</span>
+              {article.status !== "scheduled" && (
+                <><span className="text-[9px] text-slate/30">•</span>
+                <span className="text-[9px] text-slate/40">{article.timeAgo}</span></>
+              )}
+            </div>
+          </div>
+
           {article.status === "published" && (
-            <DropdownMenuItem onClick={() => onViewEngagement(article)} className="py-2 px-3 text-xs font-bold focus:bg-surface text-emerald-600 cursor-pointer rounded-xl gap-2">
-              <MessageSquare className="h-3.5 w-3.5" /> View Engagement
-            </DropdownMenuItem>
+            <div className="flex items-center gap-2 text-slate/40 text-[10px] font-bold shrink-0">
+              <span className="flex items-center gap-0.5">
+                <Heart className="h-3.5 w-3.5 text-red-500 fill-red-500" />
+                {article.bookmarks}
+              </span>
+              <span>·</span>
+              <span>{article.views} views</span>
+            </div>
           )}
-          {article.status === "draft" && (
-            <DropdownMenuItem onClick={() => onPublish(article.id)} className="py-2 px-3 text-xs font-bold focus:bg-surface text-emerald-600 cursor-pointer rounded-xl gap-2">
-              <Send className="h-3.5 w-3.5" /> Publish Now
-            </DropdownMenuItem>
-          )}
-          {article.status === "published" && (
-            <DropdownMenuItem onClick={() => onUnpublish(article.id)} className="py-2 px-3 text-xs font-bold focus:bg-surface text-slate cursor-pointer rounded-xl gap-2">
-              <X className="h-3.5 w-3.5 text-slate/50" /> Unpublish
-            </DropdownMenuItem>
-          )}
-          {article.status === "scheduled" && (
-            <DropdownMenuItem onClick={() => router.push(`/dashboard/blog/edit/${article.id}`)} className="py-2 px-3 text-xs font-bold focus:bg-surface text-orange-500 cursor-pointer rounded-xl gap-2">
-              <Calendar className="h-3.5 w-3.5" /> Reschedule
-            </DropdownMenuItem>
-          )}
-          <DropdownMenuItem onClick={() => onDelete(article.id)} className="py-2 px-3 text-xs font-bold focus:bg-red-50 text-red-600 cursor-pointer rounded-xl gap-2 mt-0.5">
-            <Trash2 className="h-3.5 w-3.5" /> Delete Article
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+        </div>
+      </div>
     </div>
   );
 }
@@ -326,7 +346,7 @@ export default function BlogOverviewPage() {
         />
       )}
 
-      <div className="bg-white rounded-[20px] p-8 border border-border/50 shadow-sm w-full max-w-[1137px] min-h-[1000px] mx-auto space-y-8 animate-in fade-in duration-500">
+      <div className="bg-white rounded-[20px] p-8 border border-border/50 shadow-sm w-full max-w-[1140px] mx-auto space-y-8 mb-10 animate-in fade-in duration-500">
 
       {/* Header */}
       <div className="flex items-center justify-between">
@@ -390,7 +410,7 @@ export default function BlogOverviewPage() {
           <Link href="/dashboard/blog/view-all?status=published" className="text-primary text-xs font-bold hover:underline shrink-0">View all</Link>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-1">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {filteredPublished.slice(0, 8).map((article) => (
             <ArticleCard
               key={article.id}
@@ -418,7 +438,7 @@ export default function BlogOverviewPage() {
           </h2>
           <Link href="/dashboard/blog/view-all?status=scheduled" className="text-primary text-xs font-bold hover:underline">View all</Link>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-1">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {scheduled.slice(0, 4).map((article) => (
             <ArticleCard
               key={article.id}
@@ -446,7 +466,7 @@ export default function BlogOverviewPage() {
           </h2>
           <Link href="/dashboard/blog/view-all?status=draft" className="text-primary text-xs font-bold hover:underline">View all</Link>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-1">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {drafts.slice(0, 4).map((article) => (
             <ArticleCard
               key={article.id}

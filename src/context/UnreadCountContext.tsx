@@ -32,7 +32,7 @@ export function UnreadCountProvider({ children }: { children: React.ReactNode })
   const [totalSupportUnread, setTotalSupportUnread] = useState(0);
 
   const { data: summaryData, refetch: refetchSummary } = useGetUnreadSummaryQuery(undefined, {
-    pollingInterval: 4000,
+    pollingInterval: 10000,
   });
 
   const [markInternalMutation] = useMarkInternalAsReadMutation();

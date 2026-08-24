@@ -17,6 +17,15 @@ import { ArticleStatus, Article, BlogCommentsModal, ConfirmActionModal } from ".
 import { useGetBlogsQuery, useUpdateBlogMutation, useDeleteBlogMutation } from "@/lib/redux/features/blogApi";
 import { Loader2 } from "lucide-react";
 
+const getInitials = (name: string): string => {
+  if (!name || typeof name !== "string") return "A";
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+  }
+  return name.slice(0, 2).toUpperCase();
+};
+
 function BlogViewAllContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -215,7 +224,7 @@ function BlogViewAllContent() {
         />
       )}
 
-      <div className="bg-white rounded-[20px] p-8 border border-border/50 shadow-sm w-full max-w-[1137px] min-h-[900px] mx-auto space-y-8 animate-in fade-in duration-500">
+      <div className="bg-white rounded-[20px] p-8 border border-border/50 shadow-sm w-full max-w-[1140px] mx-auto space-y-8 mb-10 animate-in fade-in duration-500">
       {/* Header */}
       <div className="flex items-center justify-between pb-5 border-b border-border/40">
         <div className="flex items-center gap-4">
@@ -333,7 +342,9 @@ function BlogViewAllContent() {
                   <div className="flex items-center gap-2">
                     <Avatar className="h-6 w-6">
                       <AvatarImage src={article.authorAvatar} />
-                      <AvatarFallback className="text-[9px] bg-primary/10 text-primary font-bold">AO</AvatarFallback>
+                      <AvatarFallback className="text-[9px] bg-primary/10 text-primary font-bold">
+                        {getInitials(article.author)}
+                      </AvatarFallback>
                     </Avatar>
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="text-[10px] font-bold text-dark">{article.author}</span>

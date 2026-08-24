@@ -22,7 +22,7 @@ export function AdminChatWidget() {
   const { totalInternalUnread, markInternalRead, refetchSummary } = useUnreadCounts();
 
   const { data: teamData, isLoading: isTeamLoading, refetch: refetchTeam } = useGetInternalTeamQuery(undefined, {
-    pollingInterval: 4000,
+    pollingInterval: 10000,
   });
   const rawTeam = Array.isArray(teamData) ? teamData : (teamData?.data || []);
 
@@ -40,7 +40,7 @@ export function AdminChatWidget() {
   const currentAdminId = selectedAdmin?.userId || selectedAdmin?.adminId || selectedAdmin?.id || selectedAdmin?._id;
   const { data: messagesData, isFetching, refetch: refetchMessages } = useGetInternalMessagesQuery(currentAdminId, {
     skip: !selectedAdmin,
-    pollingInterval: selectedAdmin ? 3000 : 0,
+    pollingInterval: selectedAdmin ? 5000 : 0,
   });
 
   const [sendMessage] = useSendInternalMessageMutation();
@@ -92,37 +92,54 @@ export function AdminChatWidget() {
     });
   };
 
-  // Pre-seed and sync lastMessagesMap from REST team list
+  // Pre-seed and sync lastMessagesMap from REST team list in a single batch
   useEffect(() => {
     if (!rawTeam || !Array.isArray(rawTeam)) return;
 
-    rawTeam.forEach((member: any) => {
-      const u = member.user || member;
-      const keys = [member.userId, u.userId, u.id, u._id, member.adminId, member.id, member._id].filter(Boolean);
-      const rawMsg = member.lastMessage || member.latestMessage || member.last_message || member.recentMessage || u.lastMessage || u.latestMessage;
+    setLastMessagesMap((prev) => {
+      const next = { ...prev };
+      let changed = false;
 
-      if (rawMsg) {
-        let text = "";
-        let time = "";
-        let timestamp = 0;
+      rawTeam.forEach((member: any) => {
+        const u = member.user || member;
+        const keys = [member.userId, u.userId, u.id, u._id, member.adminId, member.id, member._id].filter(Boolean);
+        const rawMsg = member.lastMessage || member.latestMessage || member.last_message || member.recentMessage || u.lastMessage || u.latestMessage;
 
-        if (typeof rawMsg === "string") {
-          text = rawMsg;
-        } else if (typeof rawMsg === "object") {
-          text = rawMsg.text || rawMsg.content || rawMsg.message || rawMsg.body || "";
-          const createdAt = rawMsg.createdAt || rawMsg.created_at || rawMsg.timestamp || rawMsg.time;
-          if (createdAt) {
-            timestamp = new Date(createdAt).getTime();
-            try {
-              time = new Date(createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-            } catch (e) {}
+        if (rawMsg) {
+          let text = "";
+          let time = "";
+          let timestamp = 0;
+
+          if (typeof rawMsg === "string") {
+            text = rawMsg;
+          } else if (typeof rawMsg === "object") {
+            text = rawMsg.text || rawMsg.content || rawMsg.message || rawMsg.body || "";
+            const createdAt = rawMsg.createdAt || rawMsg.created_at || rawMsg.timestamp || rawMsg.time;
+            if (createdAt) {
+              timestamp = new Date(createdAt).getTime();
+              try {
+                time = new Date(createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+              } catch (e) {}
+            }
+          }
+
+          if (text) {
+            const finalTimestamp = timestamp || Date.now();
+            const finalTime = time || new Date(finalTimestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+            keys.forEach((id) => {
+              if (id) {
+                const existing = next[id];
+                if (!existing || existing.timestamp <= finalTimestamp) {
+                  next[id] = { text, time: finalTime, timestamp: finalTimestamp };
+                  changed = true;
+                }
+              }
+            });
           }
         }
+      });
 
-        if (text) {
-          updateLastMessageForAdmin(keys, text, time, timestamp ? new Date(timestamp).toISOString() : undefined);
-        }
-      }
+      return changed ? next : prev;
     });
   }, [rawTeam]);
 

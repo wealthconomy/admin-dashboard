@@ -68,7 +68,7 @@ const renderPreviewContent = (text: any) => {
       return (
         <h2
           key={i}
-          className="text-lg font-bold text-dark mt-4 mb-2 first:mt-0"
+          className="text-lg font-bold text-dark mt-4 mb-2 first:mt-0 break-words"
         >
           {line.slice(2)}
         </h2>
@@ -78,7 +78,7 @@ const renderPreviewContent = (text: any) => {
       return (
         <h3
           key={i}
-          className="text-base font-bold text-dark mt-3 mb-1 first:mt-0"
+          className="text-base font-bold text-dark mt-3 mb-1 first:mt-0 break-words"
         >
           {line.slice(3)}
         </h3>
@@ -88,7 +88,7 @@ const renderPreviewContent = (text: any) => {
     const formattedLine = line.split(/(\*\*.*?\*\*)/g).map((part, j) => {
       if (part.startsWith("**") && part.endsWith("**")) {
         return (
-          <strong key={j} className="font-bold text-dark">
+          <strong key={j} className="font-bold text-dark break-words">
             {part.slice(2, -2)}
           </strong>
         );
@@ -99,7 +99,7 @@ const renderPreviewContent = (text: any) => {
     return (
       <p
         key={i}
-        className="min-h-[1.5em] text-slate/70 text-xs leading-relaxed font-medium"
+        className="min-h-[1.5em] text-slate/70 text-xs leading-relaxed font-medium break-words"
       >
         {formattedLine}
       </p>
@@ -169,11 +169,8 @@ export default function NewBlogPage() {
         uploadAuthorData.append("file", authorImageFile);
         const resAuthor = await uploadFileMutation(uploadAuthorData).unwrap();
         finalAuthorAvatarUrl = resAuthor.data?.url || resAuthor.url || finalAuthorAvatarUrl;
-      }
-      
-      // Fallback to UI avatar if no author image was uploaded
-      if (!finalAuthorAvatarUrl) {
-        finalAuthorAvatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.author)}&background=155D5F&color=fff`;
+      } else if (!finalAuthorAvatarUrl || finalAuthorAvatarUrl.includes("ui-avatars.com")) {
+        finalAuthorAvatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(formData.author || "Author")}&background=155D5F&color=fff`;
       }
 
       const payload = {
@@ -242,7 +239,7 @@ export default function NewBlogPage() {
   };
 
   return (
-    <div className="bg-white rounded-[20px] p-10 border border-border/50 shadow-sm w-full max-w-[1137px] min-h-[1000px] mx-auto space-y-10 animate-in fade-in duration-500">
+    <div className="bg-white rounded-[20px] p-8 md:p-10 border border-border/50 shadow-sm w-full max-w-[1140px] mx-auto space-y-10 mb-10 animate-in fade-in duration-500">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -309,9 +306,18 @@ export default function NewBlogPage() {
                   placeholder="Enter author name"
                   className="h-12 bg-surface/50 border-border/30 rounded-xl px-5 text-sm font-medium focus-visible:ring-primary/20 transition-all border shadow-none flex-1"
                   value={formData.author}
-                  onChange={(e) =>
-                    setFormData({ ...formData, author: e.target.value })
-                  }
+                  onChange={(e) => {
+                    const newAuthor = e.target.value;
+                    setFormData((prev) => ({
+                      ...prev,
+                      author: newAuthor,
+                      authorAvatar: authorImageFile
+                        ? prev.authorAvatar
+                        : (prev.authorAvatar && !prev.authorAvatar.includes("ui-avatars.com")
+                            ? prev.authorAvatar
+                            : `https://ui-avatars.com/api/?name=${encodeURIComponent(newAuthor || "Author")}&background=155D5F&color=fff`)
+                    }));
+                  }}
                 />
               </div>
             </div>
@@ -571,20 +577,20 @@ export default function NewBlogPage() {
                     )}
                   </div>
 
-                  <h1 className="text-xl font-bold font-outfit text-dark leading-tight tracking-tight">
+                  <h1 className="text-xl font-bold font-outfit text-dark leading-tight tracking-tight break-words">
                     {previewData.title || "Untitled Blog Post"}
                   </h1>
 
                   <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-full bg-primary/5 border border-primary/10 flex items-center justify-center text-[10px] font-bold text-primary shadow-sm">
+                    <div className="h-10 w-10 rounded-full bg-primary/5 border border-primary/10 flex items-center justify-center text-[10px] font-bold text-primary shadow-sm shrink-0 overflow-hidden">
                       {previewData.authorAvatar ? (
                         <img src={previewData.authorAvatar} alt="Author" className="w-full h-full object-cover rounded-full" />
                       ) : (
                         previewData.author ? previewData.author[0]?.toUpperCase() : "A"
                       )}
                     </div>
-                    <div>
-                      <p className="text-xs font-bold text-dark">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-bold text-dark truncate">
                         {previewData.author || "Unknown Author"}
                       </p>
                       <p className="text-[9px] font-semibold text-slate/40 flex items-center gap-1">
