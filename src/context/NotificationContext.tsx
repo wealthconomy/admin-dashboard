@@ -126,28 +126,59 @@ export function NotificationProvider({
       const mapped: Notification[] = rawData.map((n: any) => {
         let description = n.description || n.message || "You have a new notification";
 
-        // Step 1: Replace "User [cuid]" pattern with just the resolved name (drops "User " prefix)
-        const userCuidRegex = /\bUser\s+(c[a-z0-9]{24})\b/gi;
-        description = description.replace(userCuidRegex, (_match: string, cuid: string) => {
-          return userMap.get(cuid) || _match;
+        // Step 1: Format kobo amounts into clean Naira (e.g. "100000000 kobo" -> "₦1,000,000.00", "250000 kobo" -> "₦2,500.00")
+        description = description.replace(/(\d+)\s*kobo/gi, (_match: string, koboStr: string) => {
+          const naira = Number(koboStr) / 100;
+          return `₦${naira.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
         });
 
-        // Step 2: Strip leading "User " prefix before a name that was already resolved
+        // Convert standalone large integer kobo amounts like "deposit of 500000 was"
+        description = description.replace(/\bof\s+(\d{5,})\s+(was|for|to)\b/gi, (_match: string, numStr: string, follow: string) => {
+          const naira = Number(numStr) / 100;
+          return `of ₦${naira.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${follow}`;
+        });
+
+        // Step 2: Clean up "for wallet [cuid]" or "wallet [cuid]"
+        const walletCuidRegex = /\b(?:for\s+)?wallet\s+(c[a-z0-9]{20,})\b\.?/gi;
+        description = description.replace(walletCuidRegex, (_match: string, cuid: string) => {
+          const ownerName = userMap.get(cuid);
+          return ownerName ? `for ${ownerName}'s wallet` : "for user's primary wallet";
+        });
+
+        // Step 3: Clean up "Withdrawal request [cuid] was initiated"
+        const withdrawalCuidRegex = /\bWithdrawal request\s+(c[a-z0-9]{20,})\b/gi;
+        description = description.replace(withdrawalCuidRegex, (_match: string, cuid: string) => {
+          return `Withdrawal request (#${cuid.slice(-6)})`;
+        });
+
+        // Step 4: Replace "User [cuid]" pattern with just the resolved name (drops "User " prefix)
+        const userCuidRegex = /\bUser\s+(c[a-z0-9]{20,})\b/gi;
+        description = description.replace(userCuidRegex, (_match: string, cuid: string) => {
+          return userMap.get(cuid) || "A user";
+        });
+
+        const toUserCuidRegex = /\bto user\s+(c[a-z0-9]{20,})\b\.?/gi;
+        description = description.replace(toUserCuidRegex, (_match: string, cuid: string) => {
+          const name = userMap.get(cuid);
+          return name ? `to ${name}` : "to user";
+        });
+
+        // Step 5: Strip duplicate leading "User " prefix before a name that was already resolved
         // e.g. "User Favour Efemiaya" → "Favour Efemiaya"
         description = description.replace(/\bUser\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*)/g, '$1');
 
-        // Step 3: Replace blog post CUIDs with their titles
+        // Step 6: Replace blog post CUIDs with their titles
         // e.g. "blog post cmr6nbfkh0002h23tdbd8yrt0" → "blog post titled My Post Title"
         const blogCuidRegex = /\bblog post\s+(c[a-z0-9]{20,})\b\.?/gi;
         description = description.replace(blogCuidRegex, (_match: string, cuid: string) => {
           const title = blogMap.get(cuid);
-          return title ? `blog post titled "${title}"` : `blog post titled "${cuid}"`;
+          return title ? `blog post "${title}"` : "the blog post";
         });
 
-        // Step 4: Fallback — replace any remaining bare CUIDs (user IDs not yet resolved)
+        // Step 7: Fallback — replace any remaining bare CUIDs (user IDs not yet resolved)
         const cuidRegex = /\bc[a-z0-9]{24}\b/g;
         description = description.replace(cuidRegex, (match: string) => {
-          return userMap.get(match) || match;
+          return userMap.get(match) || match.slice(0, 8);
         });
 
         return {

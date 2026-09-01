@@ -102,9 +102,9 @@ export function DashboardStats({ timeFilter, setTimeFilter }: DashboardStatsProp
       subtextStyle: "text-[#65D36A]"
     },
     {
-      title: "Overall revenue across all wallets and savers",
+      title: "Total transaction volume",
       value: formatValue(data?.totalTransactionVolume, "₦0", true), // Mapped to total transaction volume
-      subtext: formatSubtext(data?.totalTransactionVolume, "Pending API"),
+      subtext: formatSubtext(data?.totalTransactionVolume, "Across wallets & savers"),
       icon: Wallet,
       color: "bg-[#E6F9F9] text-[#155D5F]",
       subtextStyle: "text-[#65D36A]"
@@ -147,45 +147,61 @@ export function DashboardStats({ timeFilter, setTimeFilter }: DashboardStatsProp
           {isExpanded ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
         </button>
 
-        <div className="flex flex-wrap gap-[10px] justify-between">
-          {visibleStats.map((stat, i) => (
-            <div
-              key={i}
-              className="w-[350px] h-[124px] rounded-[20px] bg-[#F2FFFF] border border-[#155D5F1F] shadow-[0px_4px_10px_0px_rgba(0,0,0,0.07)] p-5 flex flex-col justify-between gap-[10px]"
-            >
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="text-[28px] font-semibold text-[#155D5F] leading-none mb-1">
-                    {isLoading ? (
-                      <div className="h-7 flex items-center">
-                        <Loader2 className="h-6 w-6 text-[#155D5F] animate-spin" />
-                      </div>
-                    ) : (
-                      stat.value
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          {isLoading ? (
+            Array.from({ length: 3 }).map((_, i) => (
+              <div
+                key={i}
+                className="w-full h-[124px] rounded-[20px] bg-[#F2FFFF] border border-[#155D5F1F] shadow-[0px_4px_10px_0px_rgba(0,0,0,0.07)] p-5 flex flex-col justify-between gap-[10px] animate-pulse"
+              >
+                <div className="flex items-start justify-between">
+                  <div className="space-y-2">
+                    <div className="h-7 w-28 bg-[#155D5F]/15 rounded-lg" />
+                    <div className="h-4 w-20 bg-[#155D5F]/10 rounded-md" />
+                  </div>
+                  <div className="w-8 h-8 rounded-full bg-[#155D5F]/15 shrink-0" />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <div className="h-[1px] bg-[#155D5F]/15 w-full"></div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-1.5 h-1.5 rounded-full bg-[#155D5F]/25 shrink-0"></div>
+                    <div className="h-3.5 w-24 bg-[#155D5F]/15 rounded"></div>
+                  </div>
+                </div>
+              </div>
+            ))
+          ) : (
+            visibleStats.map((stat, i) => (
+              <div
+                key={i}
+                className="w-full h-[124px] rounded-[20px] bg-[#F2FFFF] border border-[#155D5F1F] shadow-[0px_4px_10px_0px_rgba(0,0,0,0.07)] p-5 flex flex-col justify-between gap-[10px]"
+              >
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="text-[28px] font-semibold text-[#155D5F] leading-none mb-1">
+                      {stat.value}
+                    </div>
+                    <div className="text-[13px] font-semibold text-[#155D5F]">
+                      {stat.title}
+                    </div>
+                  </div>
+                  <div className={`p-2 rounded-full ${stat.color} shrink-0`}>
+                    <stat.icon className="w-4 h-4" />
+                  </div>
+                </div>
+                
+                <div className="flex flex-col gap-2">
+                  <div className="h-[1px] bg-[#155D5F]/20 w-full"></div>
+                  <div className={`flex items-center gap-1.5 text-xs font-medium ${stat.subtextStyle || 'text-slate'}`}>
+                    {stat.dotColor && (
+                      <div className={`w-1.5 h-1.5 rounded-full ${stat.dotColor}`}></div>
                     )}
-                  </div>
-                  <div className="text-[13px] font-semibold text-[#155D5F]">
-                    {stat.title}
+                    <span className="leading-none">{stat.subtext}</span>
                   </div>
                 </div>
-                <div
-                  className={`p-2 rounded-full ${stat.color} shrink-0`}
-                >
-                  <stat.icon className="w-4 h-4" />
-                </div>
               </div>
-              
-              <div className="flex flex-col gap-2">
-                <div className="h-[1px] bg-[#155D5F]/20 w-full"></div>
-                <div className={`flex items-center gap-1.5 text-xs font-medium ${stat.subtextStyle || 'text-slate'}`}>
-                  {stat.dotColor && (
-                    <div className={`w-1.5 h-1.5 rounded-full ${stat.dotColor}`}></div>
-                  )}
-                  <span className="leading-none">{stat.subtext}</span>
-                </div>
-              </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </div>
     </div>

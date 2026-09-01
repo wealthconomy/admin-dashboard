@@ -11,7 +11,7 @@ export default function OverviewPage() {
   const [timeFilter, setTimeFilter] = useState("Today");
 
   return (
-    <div className="w-full max-w-[1237px] mx-auto min-h-[1370px] bg-white rounded-[20px] py-10 px-6 flex flex-col gap-8 shadow-sm">
+    <div className="w-full max-w-[1237px] mx-auto bg-white rounded-[20px] py-10 px-6 flex flex-col gap-8 shadow-sm">
       {/* Header Section */}
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
         <div>

@@ -1,15 +1,30 @@
-"use client";
-
 import Link from "next/link";
 import { useGetPortfolioStatsQuery } from "@/lib/redux/features/dashboardApi";
+import { useGetTribesQuery } from "@/lib/redux/features/portfolioApi";
 import { Wallet, Target, Crosshair, Users, Activity, Briefcase, Loader2 } from "lucide-react";
 
 interface PortfolioStatsProps {
   timeFilter: string;
 }
 
+const mapFilterToPeriod = (filter: string) => {
+  switch (filter) {
+    case "Today": return "today";
+    case "Last Week": return "last_week";
+    case "Last Month": return "month";
+    case "6 Months": return "last_6_months";
+    case "A Year": return "year";
+    case "All Time": return "all_time";
+    default: return "today";
+  }
+};
+
 export function PortfolioStats({ timeFilter }: PortfolioStatsProps) {
-  const { data, isLoading } = useGetPortfolioStatsQuery();
+  const period = mapFilterToPeriod(timeFilter);
+  const { data, isLoading: isLoadingStats } = useGetPortfolioStatsQuery(period);
+  const { data: tribesRes, isLoading: isLoadingTribes } = useGetTribesQuery({ period });
+
+  const isLoading = isLoadingStats || isLoadingTribes;
 
   const getPortfolios = () => {
     const baseCards = [
@@ -21,23 +36,73 @@ export function PortfolioStats({ timeFilter }: PortfolioStatsProps) {
       { name: "WealthGroup", icon: Briefcase, color: "text-gray-500 bg-gray-100" },
     ];
 
+    const tribesData = tribesRes?.data || tribesRes || {};
+
     return baseCards.map((card) => {
-      // Safely handle if backend wraps response in { success: true, data: [...] }
-      const dataArray = Array.isArray(data) ? data : Array.isArray((data as any)?.data) ? (data as any).data : [];
-      
-      const normalize = (str: string) => str.replace(/_/g, "").toLowerCase();
-      const apiData = dataArray.find(
-        (d: any) => normalize(d.category || "") === normalize(card.name)
+      // Safely handle if backend wraps response in { success: true, data: [...] } or { data: { items: [...] } }
+      const dataArray = Array.isArray(data)
+        ? data
+        : Array.isArray((data as any)?.data)
+          ? (data as any).data
+          : Array.isArray((data as any)?.data?.items)
+            ? (data as any).data.items
+            : Array.isArray((data as any)?.data?.portfolios)
+              ? (data as any).data.portfolios
+              : Array.isArray((data as any)?.items)
+                ? (data as any).items
+                : [];
+
+      const normalize = (str: string) => (str || "").replace(/_/g, "").toLowerCase();
+      const cardNorm = normalize(card.name);
+
+      const apiData = dataArray.find((d: any) => {
+        const cat = normalize(d.category || d.plan || d.type || d.planType || d.name || "");
+        return (
+          cat === cardNorm ||
+          cat.includes(cardNorm) ||
+          cardNorm.includes(cat) ||
+          (cardNorm === "wealthgroup" && (cat.includes("tribe") || cat.includes("group") || cat.includes("coop")))
+        );
+      });
+
+      const isGroupCard = cardNorm === "wealthgroup";
+
+      const rawAmt = Number(
+        apiData?.amount ??
+        apiData?.totalBalance ??
+        apiData?.balance ??
+        apiData?.totalAmount ??
+        apiData?.totalSavings ??
+        (isGroupCard ? (tribesData?.totalSavings ?? tribesData?.totalBalance ?? 0) : 0)
+      );
+      const nairaAmt = rawAmt / 100;
+
+      const activeCount = Number(
+        apiData?.active ??
+        apiData?.activeMembers ??
+        apiData?.totalMembers ??
+        apiData?.membersCount ??
+        apiData?.totalUsers ??
+        apiData?.count ??
+        apiData?.members ??
+        (isGroupCard ? (tribesData?.totalMembers ?? tribesData?.totalGroups ?? tribesData?.totalCount ?? 0) : 0)
       );
 
-      const rawAmt = Number(apiData?.amount || 0);
-      const amtInNaira = rawAmt >= 100 ? rawAmt / 100 : rawAmt;
+      const completedCount = Number(
+        apiData?.completed ??
+        apiData?.completedCount ??
+        apiData?.completedPortfolios ??
+        apiData?.completedMembers ??
+        0
+      );
 
       return {
         ...card,
-        value: isLoading ? "—" : apiData?.amount ? `₦${amtInNaira.toLocaleString(undefined, { minimumFractionDigits: 0 })}` : "₦0",
-        active: isLoading ? "—" : (apiData?.active ?? 0).toLocaleString(),
-        completed: isLoading ? "—" : (apiData?.completed ?? 0).toLocaleString(),
+        value: isLoading
+          ? "—"
+          : `₦${nairaAmt.toLocaleString("en-NG", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`,
+        active: isLoading ? "—" : activeCount.toLocaleString(),
+        completed: isLoading ? "—" : completedCount.toLocaleString(),
       };
     });
   };

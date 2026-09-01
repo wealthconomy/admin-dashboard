@@ -65,21 +65,34 @@ export default function ActivitiesPage() {
   const [selectedType, setSelectedType] = useState("");
   const [selectedPeriod, setSelectedPeriod] = useState("all_time");
   const [selectedLog, setSelectedLog] = useState<any | null>(null);
+  const [page, setPage] = useState(1);
+  const limit = 20;
 
-  const { data: activitiesResponse, isLoading, isError, refetch } = useGetActivitiesQuery({
+  const { data: activitiesResponse, isLoading, isFetching, isError, refetch } = useGetActivitiesQuery({
     q: searchQuery.trim() || undefined,
     type: selectedType || undefined,
     period: selectedPeriod !== "all_time" ? selectedPeriod : undefined,
-    limit: 50,
+    page,
+    limit,
   });
 
   // Extract items array from the standardized API structure: { data: { items: [...] } }
   const rawData = activitiesResponse?.data || activitiesResponse;
   const activitiesList: any[] = Array.isArray(rawData?.items)
     ? rawData.items
+    : Array.isArray(rawData?.activities)
+    ? rawData.activities
     : Array.isArray(rawData)
     ? rawData
     : [];
+
+  const paginationMeta = activitiesResponse?.data?.meta || activitiesResponse?.meta || activitiesResponse?.pagination || rawData?.meta || rawData?.pagination || {};
+  const totalRecords = Number(paginationMeta.total ?? paginationMeta.totalItems ?? paginationMeta.totalCount ?? paginationMeta.count ?? activitiesList.length);
+  const totalPages = Number(paginationMeta.pages ?? paginationMeta.totalPages ?? paginationMeta.pageCount ?? Math.max(1, Math.ceil(totalRecords / limit)));
+
+  const displayedActivities = (activitiesList.length > limit && totalRecords === activitiesList.length)
+    ? activitiesList.slice((page - 1) * limit, page * limit)
+    : activitiesList;
 
   const renderTypeBadge = (type: string) => {
     const normalized = (type || "").toUpperCase();
@@ -142,7 +155,7 @@ export default function ActivitiesPage() {
   };
 
   return (
-    <div className="bg-white rounded-[20px] p-6 md:p-10 border border-border/50 shadow-sm w-full max-w-[1140px] min-h-[900px] mx-auto flex flex-col animate-in fade-in duration-500">
+    <div className="bg-white rounded-[20px] p-6 md:p-10 border border-border/50 shadow-sm w-full max-w-[1140px] mx-auto flex flex-col animate-in fade-in duration-500">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
@@ -166,7 +179,10 @@ export default function ActivitiesPage() {
               type="text"
               placeholder="Search user, action, title..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setPage(1);
+              }}
               className="w-full pl-10 pr-4 h-11 bg-surface border-border/30 rounded-xl text-xs font-medium focus-visible:ring-primary/20 shadow-none"
             />
           </div>
@@ -184,7 +200,10 @@ export default function ActivitiesPage() {
               {ACTIVITY_TYPES.map((t) => (
                 <DropdownMenuItem
                   key={t.value}
-                  onClick={() => setSelectedType(t.value)}
+                  onClick={() => {
+                    setSelectedType(t.value);
+                    setPage(1);
+                  }}
                   className={`rounded-xl py-2 px-3 text-xs font-medium cursor-pointer ${
                     selectedType === t.value ? "bg-primary/10 text-primary font-bold" : "text-dark"
                   }`}
@@ -208,7 +227,10 @@ export default function ActivitiesPage() {
               {PERIODS.map((p) => (
                 <DropdownMenuItem
                   key={p.value}
-                  onClick={() => setSelectedPeriod(p.value)}
+                  onClick={() => {
+                    setSelectedPeriod(p.value);
+                    setPage(1);
+                  }}
                   className={`rounded-xl py-2 px-3 text-xs font-medium cursor-pointer ${
                     selectedPeriod === p.value ? "bg-primary/10 text-primary font-bold" : "text-dark"
                   }`}
@@ -258,8 +280,8 @@ export default function ActivitiesPage() {
                     </div>
                   </TableCell>
                 </TableRow>
-              ) : activitiesList.length > 0 ? (
-                activitiesList.map((act: any) => {
+              ) : displayedActivities.length > 0 ? (
+                displayedActivities.map((act: any) => {
                   const userObj = act.user || {};
                   const displayName = `${userObj.firstName || ""} ${userObj.lastName || ""}`.trim() || userObj.email || act.userName || `User ${act.userId?.slice(0, 6) || ""}`;
                   const displayEmail = userObj.email || act.email || "";
@@ -354,11 +376,87 @@ export default function ActivitiesPage() {
         </div>
       </div>
 
+      {/* Pagination indicators */}
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-3 text-xs font-bold text-slate/50 pt-6 px-1">
+        <span>
+          Showing {totalRecords === 0 ? 0 : (page - 1) * limit + 1} - {Math.min(page * limit, totalRecords)} of {totalRecords} records (Page {page} of {totalPages || 1})
+        </span>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => {
+              setPage(p => Math.max(1, p - 1));
+              setTimeout(() => {
+                window.scrollTo({ top: 0, behavior: "smooth" });
+                const main = document.getElementById('main-scroll-container');
+                if (main) main.scrollTo({ top: 0, behavior: "smooth" });
+              }, 50);
+            }}
+            disabled={page === 1 || isFetching}
+            className={`h-8 px-3 text-[11px] font-bold rounded-lg ${page === 1 ? 'text-slate/40 border-slate-200 cursor-not-allowed opacity-50' : 'text-dark border-slate-200 hover:bg-[#E8F3F3] hover:text-[#155D5F]'}`}
+          >
+            Prev
+          </Button>
+
+          {Array.from({ length: totalPages || 1 }).map((_, idx) => {
+            const p = idx + 1;
+            // Show first page, last page, current page, and +/- 1 from current
+            if (p === 1 || p === totalPages || (p >= page - 1 && p <= page + 1)) {
+              return (
+                <Button
+                  key={p}
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setPage(p);
+                    setTimeout(() => {
+                      window.scrollTo({ top: 0, behavior: "smooth" });
+                      const main = document.getElementById('main-scroll-container');
+                      if (main) main.scrollTo({ top: 0, behavior: "smooth" });
+                    }, 50);
+                  }}
+                  disabled={isFetching}
+                  className={`h-8 min-w-[32px] px-2.5 text-[11px] font-bold rounded-lg ${
+                    page === p
+                      ? 'bg-[#155D5F]/10 text-[#155D5F] border-[#155D5F] hover:bg-[#155D5F]/20'
+                      : 'text-dark border-slate-200 hover:bg-[#E8F3F3] hover:text-[#155D5F]'
+                  }`}
+                >
+                  {p}
+                </Button>
+              );
+            }
+            if (p === page - 2 || p === page + 2) {
+              return <span key={p} className="px-1 text-slate/40 text-xs">...</span>;
+            }
+            return null;
+          })}
+
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => {
+              setPage(p => Math.min(totalPages, p + 1));
+              setTimeout(() => {
+                window.scrollTo({ top: 0, behavior: "smooth" });
+                const main = document.getElementById('main-scroll-container');
+                if (main) main.scrollTo({ top: 0, behavior: "smooth" });
+              }, 50);
+            }}
+            disabled={page >= totalPages || isFetching}
+            className={`h-8 px-3 text-[11px] font-bold rounded-lg ${page >= totalPages ? 'text-slate/40 border-slate-200 cursor-not-allowed opacity-50' : 'text-dark border-slate-200 hover:bg-[#E8F3F3] hover:text-[#155D5F]'}`}
+          >
+            Next
+          </Button>
+        </div>
+      </div>
+
       {/* Activity Details Modal */}
       {selectedLog && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-6 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="absolute inset-0" onClick={() => setSelectedLog(null)} />
-          <div className="relative bg-white rounded-[24px] w-full max-w-[640px] max-h-[85vh] shadow-2xl border border-border/50 animate-in zoom-in-95 duration-300 flex flex-col overflow-hidden">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 md:p-6 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200 overflow-y-auto">
+          <div className="fixed inset-0" onClick={() => setSelectedLog(null)} />
+          <div className="relative bg-white rounded-[24px] w-full max-w-[640px] max-h-[90vh] shadow-2xl border border-border/50 animate-in zoom-in-95 duration-300 flex flex-col overflow-hidden my-auto">
 
             {/* Header */}
             <div className="p-6 pb-4 border-b border-border/30 flex items-center justify-between bg-surface/30">

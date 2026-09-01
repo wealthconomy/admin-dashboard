@@ -92,13 +92,18 @@ export function DashboardAnalytics() {
   const pieData = donutData?.data?.distribution ?? [];
   const pieTotal = donutData?.data?.totalTransactionsProcessed ?? 0;
 
+  const formatKoboCurrency = (amount: number | string) => {
+    const naira = Number(amount || 0) / 100;
+    return `₦${naira.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  };
+
   const legends = [
-    { icon: RefreshCcw,   color: "text-teal-600 bg-teal-100",     value: donutData?.data?.totalTransactionsProcessed ?? 0, label: "Total number of transactions processed" },
-    { icon: Clock,        color: "text-orange-500 bg-orange-100",  value: donutData?.data?.pendingWithdrawals ?? 0,         label: "Pending withdrawals" },
-    { icon: CheckCircle2, color: "text-purple-600 bg-purple-100",  value: donutData?.data?.totalInterestDisbursed ?? 0,     label: "Total interest disbursed" },
-    { icon: BarChart2,    color: "text-blue-600 bg-blue-100",      value: donutData?.data?.activePortfolios ?? 0,           label: "Active portfolios" },
-    { icon: TrendingUp,   color: "text-yellow-600 bg-yellow-100",  value: donutData?.data?.platformAdministrators ?? 0,     label: "Platform administrators" },
-    { icon: Activity,     color: "text-green-600 bg-green-100",    value: pieData.length,                             label: "Distribution segments" },
+    { icon: RefreshCcw,   color: "text-teal-600 bg-teal-100",     value: (donutData?.data?.totalTransactionsProcessed ?? 0).toLocaleString(), label: "Total number of transactions processed" },
+    { icon: Clock,        color: "text-orange-500 bg-orange-100",  value: (donutData?.data?.pendingWithdrawals ?? 0).toLocaleString(),         label: "Pending withdrawals" },
+    { icon: CheckCircle2, color: "text-purple-600 bg-purple-100",  value: formatKoboCurrency(donutData?.data?.totalInterestDisbursed ?? 0),     label: "Total interest disbursed" },
+    { icon: BarChart2,    color: "text-blue-600 bg-blue-100",      value: (donutData?.data?.activePortfolios ?? 0).toLocaleString(),           label: "Active portfolios" },
+    { icon: TrendingUp,   color: "text-yellow-600 bg-yellow-100",  value: (donutData?.data?.platformAdministrators ?? 0).toLocaleString(),     label: "Platform administrators" },
+    { icon: Activity,     color: "text-green-600 bg-green-100",    value: pieData.length.toLocaleString(),                             label: "Distribution segments" },
   ];
 
   return (
@@ -106,11 +111,11 @@ export function DashboardAnalytics() {
       <div className="h-[1px] bg-[#155D5F]/10 w-full mb-4 mt-2"></div>
       <h2 className="text-lg font-bold font-outfit text-dark">Analytics</h2>
 
-      <div className="flex flex-col lg:flex-row gap-[24px]">
+      <div className="flex flex-col xl:flex-row gap-6 w-full">
         {/* Left Column */}
-        <div className="flex flex-col gap-[20px]">
+        <div className="flex-1 flex flex-col gap-5 min-w-0">
           {/* User Growth Chart */}
-          <div className="w-full lg:w-[512px] h-[337px] rounded-[12px] p-[20px] bg-white border border-[#CCCCCC80] shadow-[0px_4px_5px_0px_rgba(0,0,0,0.07)] flex flex-col justify-between">
+          <div className="w-full min-h-[337px] rounded-[12px] p-[20px] bg-white border border-[#CCCCCC80] shadow-[0px_4px_5px_0px_rgba(0,0,0,0.07)] flex flex-col justify-between min-w-0">
             <div>
               <ChartHeader title="User Growth Chart" filter={userFilter} setFilter={setUserFilter} />
               <div className="flex justify-between items-center text-xs font-bold text-dark mb-4">
@@ -154,7 +159,7 @@ export function DashboardAnalytics() {
           </div>
 
           {/* Wealth Growth Chart */}
-          <div className="w-full lg:w-[512px] h-[331px] rounded-[12px] p-[20px] bg-white border border-[#CCCCCC80] shadow-[0px_4px_5px_0px_rgba(0,0,0,0.07)] flex flex-col justify-between">
+          <div className="w-full min-h-[331px] rounded-[12px] p-[20px] bg-white border border-[#CCCCCC80] shadow-[0px_4px_5px_0px_rgba(0,0,0,0.07)] flex flex-col justify-between min-w-0">
             <div>
               <ChartHeader title="Wealth Growth Trend" filter={wealthFilter} setFilter={setWealthFilter} />
               <div className="flex justify-between items-center text-xs font-bold text-dark mb-4">
@@ -192,7 +197,7 @@ export function DashboardAnalytics() {
         </div>
 
         {/* Right Column - Donut Chart */}
-        <div className="w-full lg:w-[570px] min-h-[688px] rounded-[14px] bg-white border border-[#CCCCCC8A] pt-[20px] pb-[32px] px-[24px] lg:px-[36px] flex flex-col justify-between gap-[24px]">
+        <div className="flex-1 w-full min-h-[688px] rounded-[14px] bg-white border border-[#CCCCCC8A] pt-[20px] pb-[32px] px-[24px] lg:px-[36px] flex flex-col justify-between gap-[24px] min-w-0">
           <ChartHeader title="Transactions" filter={transactionFilter} setFilter={setTransactionFilter} />
 
           <div className="flex-1 flex flex-col items-center justify-between">

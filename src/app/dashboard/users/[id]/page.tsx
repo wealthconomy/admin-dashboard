@@ -48,9 +48,8 @@ const normalizePlan = (str: string) => (str || "").replace(/[^a-zA-Z0-9]/g, "").
 
 const formatCurrencyNaira = (val: any) => {
   if (val === null || val === undefined || isNaN(Number(val))) return "₦0.00";
-  const num = Number(val);
-  const naira = num >= 100 ? num / 100 : num;
-  return `₦${naira.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const num = Number(val) / 100;
+  return `₦${num.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
 const BASE_PORTFOLIO_PLANS = [
@@ -70,7 +69,7 @@ const BASE_PORTFOLIO_PLANS = [
     icon: Target,
     color: "text-pink-500",
     bgColor: "bg-pink-50",
-    defaultSub: "Active WealthGoals",
+    defaultSub: "Active WealthGoal",
   },
   {
     name: "WealthFix",
@@ -132,37 +131,48 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
         ? user.portfolios
         : {};
 
-    return BASE_PORTFOLIO_PLANS.map((plan) => {
+    const items = BASE_PORTFOLIO_PLANS.map((plan) => {
       // 1. Look in array by type or name
       const foundInArray = portfoliosArray.find((p: any) => {
         const typeStr = normalizePlan(p.type || p.category || p.name || p.planType || "");
         return typeStr === plan.key || typeStr === normalizePlan(plan.backendType);
       });
 
-      // 2. Look in object or directly on user object
-      const foundInObj =
-        portfoliosObj[plan.key] ||
-        portfoliosObj[plan.backendType] ||
-        user?.[plan.key] ||
-        user?.[plan.backendType];
+      // 2. Look in object case-insensitively or directly on user object
+      let foundInObj: any = null;
+      for (const [k, v] of Object.entries(portfoliosObj)) {
+        if (normalizePlan(k) === plan.key || normalizePlan(k) === normalizePlan(plan.backendType)) {
+          foundInObj = v;
+          break;
+        }
+      }
+
+      if (!foundInObj) {
+        foundInObj = user?.[plan.key] || user?.[plan.backendType];
+      }
 
       const match = foundInArray || foundInObj || {};
 
-      const balance = match.balance ?? match.amount ?? match.totalSavings ?? match.totalBalance ?? 0;
-      const interest = match.interest ?? match.interestAmount ?? match.totalInterest ?? match.accruedInterest ?? 0;
-      const activeCount = match.activeCount ?? match.active ?? match.count ?? 0;
-      const completedCount = match.completedCount ?? match.completed ?? 0;
+      const rawBalance = Number(match.balance ?? match.amount ?? match.totalSavings ?? match.totalBalance ?? 0);
+      const rawInterest = Number(match.interest ?? match.interestAmount ?? match.totalInterest ?? match.accruedInterest ?? 0);
+      const rawImpact = Number(match.impact ?? match.impactAmount ?? match.totalImpact ?? 0);
 
-      const numBalance = Number(balance) || 0;
-      const displayBalance = numBalance >= 100 ? numBalance / 100 : numBalance;
+      const numBalance = rawBalance / 100;
+      const numInterest = rawInterest / 100;
+      const numImpact = rawImpact / 100;
 
-      const numInterest = Number(interest) || 0;
-      const displayInterest = numInterest >= 100 ? numInterest / 100 : numInterest;
+      const activeCount = Number(match.activeCount ?? match.active ?? match.count ?? (numBalance > 0 ? 1 : 0));
+      const completedCount = Number(match.completedCount ?? match.completed ?? 0);
+
+      // A plan is considered active if user has a balance, active count, or completed count
+      const isActive = numBalance > 0 || activeCount > 0 || completedCount > 0 || numInterest > 0;
 
       return {
         name: plan.name,
-        amount: `₦${displayBalance.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-        interest: `${displayInterest.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        isActive,
+        amount: `₦${numBalance.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        interest: `${numInterest.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        impact: `${numImpact.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
         icon: plan.icon,
         color: plan.color,
         bgColor: plan.bgColor,
@@ -170,6 +180,9 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
         completed: `${completedCount} Completed`,
       };
     });
+
+    // Return only active portfolio plans
+    return items.filter((item) => item.isActive);
   }, [user]);
 
   const [suspendUserMutation] = useSuspendUserMutation();
@@ -412,49 +425,69 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
       </button>
 
       {/* Portfolio Overview */}
-      <div className="space-y-6">
-        <h2 className="text-lg font-bold font-outfit text-dark">
-          Portfolio Overview
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-          {portfolioItems.map((item, i) => (
-            <Card
-              key={i}
-              className="rounded-2xl border-border shadow-none overflow-hidden h-full"
-            >
-              <div className="p-4 space-y-4">
-                <div className="flex items-center gap-3">
-                  <div
-                    className={`p-2.5 rounded-xl ${item.bgColor} ${item.color}`}
-                  >
-                    <item.icon className="h-5 w-5" />
-                  </div>
-                  <div className="font-bold text-[11px] text-dark">
-                    {item.name}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-sm font-bold text-dark">
-                    {item.amount}
-                  </div>
-                  <div className="text-[11px] font-bold text-emerald-600 mt-1">
-                    +{item.interest} Interest
-                  </div>
-                  {item.sub && (
-                    <div className="text-[10px] text-slate/60 mt-2">
-                      {item.sub}
-                    </div>
-                  )}
-                  {item.completed && (
-                    <div className="text-[10px] text-green-500 font-medium">
-                      {item.completed}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </Card>
-          ))}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold font-outfit text-dark">
+            Portfolio Overview
+          </h2>
+          {portfolioItems.length > 0 && (
+            <span className="text-xs font-bold text-slate/50">
+              {portfolioItems.length} Active {portfolioItems.length === 1 ? "Plan" : "Plans"}
+            </span>
+          )}
         </div>
+
+        {portfolioItems.length === 0 ? (
+          <div className="p-8 rounded-2xl border border-dashed border-border/60 bg-surface/30 flex flex-col items-center justify-center text-center">
+            <div className="h-10 w-10 rounded-full bg-slate/10 flex items-center justify-center mb-3">
+              <Wallet className="h-5 w-5 text-slate/40" />
+            </div>
+            <p className="text-sm font-bold text-dark">No Active Portfolios</p>
+            <p className="text-xs text-slate/50 mt-1 max-w-sm">
+              This user has not started or funded any savings plans yet. Once they create a plan, it will appear here.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+            {portfolioItems.map((item, i) => (
+              <Card
+                key={i}
+                className="rounded-2xl border-border/60 shadow-none overflow-hidden h-full hover:border-primary/20 transition-all bg-white"
+              >
+                <div className="p-5 space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`p-2.5 rounded-xl ${item.bgColor} ${item.color}`}
+                    >
+                      <item.icon className="h-5 w-5" />
+                    </div>
+                    <div className="font-bold text-xs text-dark">
+                      {item.name}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-base font-bold text-dark font-outfit">
+                      {item.amount}
+                    </div>
+                    <div className="text-[11px] font-bold text-emerald-600 mt-1">
+                      +{item.interest} Interest
+                    </div>
+                    {item.sub && (
+                      <div className="text-[10px] text-slate/60 mt-2 font-medium">
+                        {item.sub}
+                      </div>
+                    )}
+                    {item.completed && (
+                      <div className="text-[10px] text-green-500 font-medium">
+                        {item.completed}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Profile Information */}
@@ -487,7 +520,15 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
             <div className="space-y-6">
               <InfoItem label="Status" value={userStatus} isStatus />
               <InfoItem label="Date Created" value={user?.createdAt ? new Date(user.createdAt).toLocaleString() : "N/A"} />
-              <InfoItem label="Last Login" value={user?.lastLoginDate ? new Date(user.lastLoginDate).toLocaleString() : "N/A"} />
+              <InfoItem 
+                label="Last Login" 
+                value={
+                  (() => {
+                    const raw = user?.lastLoginDate || user?.lastLogin || user?.lastLoginAt || user?.last_login || user?.last_login_at;
+                    return raw ? new Date(raw).toLocaleString() : "N/A";
+                  })()
+                } 
+              />
               <InfoItem label="Email Verification" value={user?.isVerified ? "Verified" : "Unverified"} />
               <InfoItem label="Biometric" value={user?.biometricsEnabled ? "Enabled" : "Disabled"} />
               <InfoItem label="KYC Level" value={`Level ${user?.kycLevel || "N/A"}`} />

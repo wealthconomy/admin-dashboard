@@ -60,12 +60,15 @@ export default function TransactionsPage() {
   const [typeFilter, setTypeFilter] = useState("All Types");
   const [logModal, setLogModal] = useState<any | null>(null);
   const [receiptModal, setReceiptModal] = useState<any | null>(null);
+  const [page, setPage] = useState(1);
+  const limit = 20;
 
-  const { data: transactionsData, isLoading, isError } = useGetTransactionsQuery({
+  const { data: transactionsData, isLoading, isFetching, isError } = useGetTransactionsQuery({
     search: searchQuery || undefined,
     status: statusFilter !== "All Status" ? statusFilter : undefined,
     type: typeFilter !== "All Types" ? typeFilter : undefined,
-    limit: 50
+    page,
+    limit,
   });
   const transactionList = getSafeArray(transactionsData);
 
@@ -96,6 +99,14 @@ export default function TransactionsPage() {
     return matchStatus && matchType;
   });
 
+  const paginationMeta = transactionsData?.data?.meta || transactionsData?.meta || transactionsData?.pagination || transactionsData?.data?.pagination || {};
+  const totalRecords = Number(paginationMeta.total ?? paginationMeta.totalItems ?? paginationMeta.totalCount ?? paginationMeta.count ?? filtered.length);
+  const totalPages = Number(paginationMeta.pages ?? paginationMeta.totalPages ?? paginationMeta.pageCount ?? Math.max(1, Math.ceil(totalRecords / limit)));
+
+  const displayedTransactions = (filtered.length > limit && totalRecords === filtered.length)
+    ? filtered.slice((page - 1) * limit, page * limit)
+    : filtered;
+
   const statusBadge = (s: string) => {
     const map: Record<string, string> = {
       Successful: "bg-emerald-50 text-emerald-600 border-emerald-100",
@@ -116,18 +127,26 @@ export default function TransactionsPage() {
   };
 
   return (
-    <div className="bg-white rounded-[20px] p-6 md:p-10 border border-border/50 shadow-sm w-full max-w-[1140px] min-h-[1000px] mx-auto flex flex-col animate-in fade-in duration-500">
+    <div className="bg-white rounded-[20px] p-6 md:p-10 border border-border/50 shadow-sm w-full max-w-[1140px] mx-auto flex flex-col animate-in fade-in duration-500">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-        <h1 className="text-2xl font-bold font-outfit text-dark tracking-tight">Transactions Management</h1>
-        <div className="flex items-center gap-3 w-full md:w-auto">
-          <div className="relative flex-1 md:w-[300px]">
+        <div>
+          <h1 className="text-2xl font-bold font-outfit text-dark tracking-tight">Transaction Activities</h1>
+          <p className="text-slate/60 text-xs font-semibold mt-1">Audit log of all platform financial movements and payment records.</p>
+        </div>
+
+        {/* Controls */}
+        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+          <div className="relative flex-1 md:w-[260px]">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate/40" />
             <Input
               type="text"
-              placeholder="Search Name, TxID, UserID..."
+              placeholder="Search user, ref, id..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setPage(1);
+              }}
               className="w-full pl-10 pr-4 h-11 bg-surface border-border/30 rounded-xl text-sm font-medium focus-visible:ring-primary/20 shadow-none"
             />
           </div>
@@ -139,9 +158,9 @@ export default function TransactionsPage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-40 rounded-2xl border-border/50 p-2 shadow-xl bg-white">
-                <DropdownMenuItem onClick={() => setStatusFilter("All Status")} className="rounded-xl py-2 px-4 text-sm font-medium cursor-pointer">All Status</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => { setStatusFilter("All Status"); setPage(1); }} className="rounded-xl py-2 px-4 text-sm font-medium cursor-pointer">All Status</DropdownMenuItem>
                 {STATUSES.map((s) => (
-                  <DropdownMenuItem key={s} onClick={() => setStatusFilter(s)} className="rounded-xl py-2 px-4 text-sm font-medium cursor-pointer">{s}</DropdownMenuItem>
+                  <DropdownMenuItem key={s} onClick={() => { setStatusFilter(s); setPage(1); }} className="rounded-xl py-2 px-4 text-sm font-medium cursor-pointer">{s}</DropdownMenuItem>
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
@@ -153,9 +172,9 @@ export default function TransactionsPage() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-44 rounded-2xl border-border/50 p-2 shadow-xl bg-white">
-                <DropdownMenuItem onClick={() => setTypeFilter("All Types")} className="rounded-xl py-2 px-4 text-sm font-medium cursor-pointer">All Types</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => { setTypeFilter("All Types"); setPage(1); }} className="rounded-xl py-2 px-4 text-sm font-medium cursor-pointer">All Types</DropdownMenuItem>
                 {TYPES.map((t) => (
-                  <DropdownMenuItem key={t} onClick={() => setTypeFilter(t)} className="rounded-xl py-2 px-4 text-sm font-medium cursor-pointer">{t}</DropdownMenuItem>
+                  <DropdownMenuItem key={t} onClick={() => { setTypeFilter(t); setPage(1); }} className="rounded-xl py-2 px-4 text-sm font-medium cursor-pointer">{t}</DropdownMenuItem>
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
@@ -190,45 +209,44 @@ export default function TransactionsPage() {
                     Failed to load transactions.
                   </TableCell>
                 </TableRow>
-              ) : filtered.length > 0 ? filtered.map((tx: any, i: number) => {
+              ) : displayedTransactions.length > 0 ? displayedTransactions.map((tx: any, i: number) => {
                 const formattedDate = tx.timestamp ? format(new Date(tx.timestamp), "HH:mm, MMMM dd, yyyy") : "-";
                 return (
-                <TableRow key={i} className="group border-border/50 hover:bg-surface/30 transition-all duration-200">
-                  <TableCell className="py-5 px-4">
-                    <span className="text-[11px] font-semibold text-slate/60 block">{formattedDate}</span>
-                    <span className="text-[10px] text-slate/40 font-bold uppercase">{tx.id || "-"}</span>
-                  </TableCell>
-                  <TableCell className="py-5 px-4">
-                    <span className="font-semibold text-[12px] text-dark">{tx.userName || tx.email || "-"}</span>
-                  </TableCell>
-                  <TableCell className="py-5 px-4 text-[13px] font-bold text-dark">
-                    ₦{(Number(tx.amount || 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                  </TableCell>
-                  <TableCell className="py-5 px-4 text-[11px] font-bold text-slate/60">#{tx.reference || tx.id || "-"}</TableCell>
-                  <TableCell className="py-5 px-4 text-[12px] font-medium text-dark/70">{tx.actionType || tx.type || "-"}</TableCell>
-                  <TableCell className="py-5 px-4">{statusBadge(tx.status || "Pending")}</TableCell>
-                  <TableCell className="py-5 px-4 text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="h-8 w-8 p-0 hover:bg-surface rounded-full">
-                          <MoreVertical className="h-4 w-4 text-slate/40" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-44 rounded-[14px] border-border/50 shadow-xl p-1 bg-white">
-                        <DropdownMenuItem onClick={() => navigateToUser(tx)} className="py-2.5 px-4 text-xs font-bold focus:bg-surface text-dark cursor-pointer rounded-xl gap-2">
-                          <User className="h-3.5 w-3.5 text-primary" /> View Profile
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setLogModal(tx)} className="py-2.5 px-4 text-xs font-bold focus:bg-surface text-dark cursor-pointer rounded-xl gap-2">
-                          <FileText className="h-3.5 w-3.5 text-slate/50" /> Log Overview
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setReceiptModal(tx)} className="py-2.5 px-4 text-xs font-bold focus:bg-surface text-dark cursor-pointer rounded-xl gap-2">
-                          <Receipt className="h-3.5 w-3.5 text-slate/50" /> View Receipt
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              );}) : (
+                  <TableRow key={i} className="border-border/50 hover:bg-surface/30 transition-colors">
+                    <TableCell className="py-5 px-4 text-[11px] font-semibold text-slate/60 whitespace-nowrap">
+                      {formattedDate}
+                    </TableCell>
+                    <TableCell className="py-5 px-4">
+                      <span className="font-semibold text-[12px] text-dark">{tx.userName || tx.email || "-"}</span>
+                    </TableCell>
+                    <TableCell className="py-5 px-4 text-[13px] font-bold text-dark">
+                      ₦{(Number(tx.amount || 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </TableCell>
+                    <TableCell className="py-5 px-4 text-[11px] font-bold text-slate/60">#{tx.reference || tx.id || "-"}</TableCell>
+                    <TableCell className="py-5 px-4 text-[12px] font-medium text-dark/70">{tx.actionType || tx.type || "-"}</TableCell>
+                    <TableCell className="py-5 px-4">{statusBadge(tx.status || "Pending")}</TableCell>
+                    <TableCell className="py-5 px-4 text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" className="h-8 w-8 p-0 hover:bg-surface rounded-full">
+                            <MoreVertical className="h-4 w-4 text-slate/40" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-44 rounded-[14px] border-border/50 shadow-xl p-1 bg-white">
+                          <DropdownMenuItem onClick={() => navigateToUser(tx)} className="py-2.5 px-4 text-xs font-bold focus:bg-surface text-dark cursor-pointer rounded-xl gap-2">
+                            <User className="h-3.5 w-3.5 text-primary" /> View Profile
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => setLogModal(tx)} className="py-2.5 px-4 text-xs font-bold focus:bg-surface text-dark cursor-pointer rounded-xl gap-2">
+                            <FileText className="h-3.5 w-3.5 text-slate/50" /> Log Overview
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => setReceiptModal(tx)} className="py-2.5 px-4 text-xs font-bold focus:bg-surface text-dark cursor-pointer rounded-xl gap-2">
+                            <Receipt className="h-3.5 w-3.5 text-slate/50" /> View Receipt
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                );}) : (
                 <TableRow>
                   <TableCell colSpan={7} className="py-20 text-center">
                     <div className="flex flex-col items-center gap-2">
@@ -243,11 +261,87 @@ export default function TransactionsPage() {
         </div>
       </div>
 
+      {/* Pagination indicators */}
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-3 text-xs font-bold text-slate/50 pt-6 px-1">
+        <span>
+          Showing {totalRecords === 0 ? 0 : (page - 1) * limit + 1} - {Math.min(page * limit, totalRecords)} of {totalRecords} records (Page {page} of {totalPages || 1})
+        </span>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => {
+              setPage(p => Math.max(1, p - 1));
+              setTimeout(() => {
+                window.scrollTo({ top: 0, behavior: "smooth" });
+                const main = document.getElementById('main-scroll-container');
+                if (main) main.scrollTo({ top: 0, behavior: "smooth" });
+              }, 50);
+            }}
+            disabled={page === 1 || isFetching}
+            className={`h-8 px-3 text-[11px] font-bold rounded-lg ${page === 1 ? 'text-slate/40 border-slate-200 cursor-not-allowed opacity-50' : 'text-dark border-slate-200 hover:bg-[#E8F3F3] hover:text-[#155D5F]'}`}
+          >
+            Prev
+          </Button>
+
+          {Array.from({ length: totalPages || 1 }).map((_, idx) => {
+            const p = idx + 1;
+            // Show first page, last page, current page, and +/- 1 from current
+            if (p === 1 || p === totalPages || (p >= page - 1 && p <= page + 1)) {
+              return (
+                <Button
+                  key={p}
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setPage(p);
+                    setTimeout(() => {
+                      window.scrollTo({ top: 0, behavior: "smooth" });
+                      const main = document.getElementById('main-scroll-container');
+                      if (main) main.scrollTo({ top: 0, behavior: "smooth" });
+                    }, 50);
+                  }}
+                  disabled={isFetching}
+                  className={`h-8 min-w-[32px] px-2.5 text-[11px] font-bold rounded-lg ${
+                    page === p
+                      ? 'bg-[#155D5F]/10 text-[#155D5F] border-[#155D5F] hover:bg-[#155D5F]/20'
+                      : 'text-dark border-slate-200 hover:bg-[#E8F3F3] hover:text-[#155D5F]'
+                  }`}
+                >
+                  {p}
+                </Button>
+              );
+            }
+            if (p === page - 2 || p === page + 2) {
+              return <span key={p} className="px-1 text-slate/40 text-xs">...</span>;
+            }
+            return null;
+          })}
+
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => {
+              setPage(p => Math.min(totalPages, p + 1));
+              setTimeout(() => {
+                window.scrollTo({ top: 0, behavior: "smooth" });
+                const main = document.getElementById('main-scroll-container');
+                if (main) main.scrollTo({ top: 0, behavior: "smooth" });
+              }, 50);
+            }}
+            disabled={page >= totalPages || isFetching}
+            className={`h-8 px-3 text-[11px] font-bold rounded-lg ${page >= totalPages ? 'text-slate/40 border-slate-200 cursor-not-allowed opacity-50' : 'text-dark border-slate-200 hover:bg-[#E8F3F3] hover:text-[#155D5F]'}`}
+          >
+            Next
+          </Button>
+        </div>
+      </div>
+
       {/* Transaction Info / Log Overview Modal */}
       {logModal && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/30 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="absolute inset-0" onClick={() => setLogModal(null)} />
-          <div className="relative bg-white rounded-[20px] w-full max-w-[680px] max-h-[85vh] shadow-2xl animate-in zoom-in-95 duration-300 flex flex-col overflow-hidden">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/30 backdrop-blur-sm animate-in fade-in duration-200 overflow-y-auto">
+          <div className="fixed inset-0" onClick={() => setLogModal(null)} />
+          <div className="relative bg-white rounded-[20px] w-full max-w-[680px] max-h-[90vh] shadow-2xl animate-in zoom-in-95 duration-300 flex flex-col overflow-hidden my-auto">
 
             {/* Top-right controls */}
             <div className="absolute top-4 right-4 flex flex-col items-end gap-2 z-10">

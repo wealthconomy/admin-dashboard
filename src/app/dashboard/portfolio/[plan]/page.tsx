@@ -8,13 +8,24 @@ import {
   AlertCircle
 } from "lucide-react";
 import { useState, useMemo } from "react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { 
   useGetPortfoliosByTypeQuery, 
   useGetTribesQuery,
   useLazyExportTribesQuery,
   useLazyExportPortfoliosByTypeQuery,
 } from "@/lib/redux/features/portfolioApi";
+import { useGetUsersQuery } from "@/lib/redux/features/usersApi";
 import { toast } from "sonner";
+
+const getInitials = (name: string): string => {
+  if (!name || typeof name !== "string") return "U";
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+  }
+  return name.slice(0, 2).toUpperCase();
+};
 
 // ─── Plan meta ────────────────────────────────────────────────────────────────
 
@@ -52,6 +63,8 @@ type PlanUser = {
   goalTarget?: number;
   goalDeadline?: string;
   goalStartDate?: string;
+  planName?: string;
+  createdAt?: string;
 };
 
 type GroupMember = {
@@ -75,6 +88,8 @@ type WealthGroupData = {
   groupTarget: number;
   startDate: string;
   endDate: string;
+  totalSaved?: number;
+  interestEarned?: number;
   members: GroupMember[];
 };
 
@@ -217,8 +232,12 @@ async function downloadPDF(plan: string, users: PlanUser[], groups: WealthGroupD
 
 function GroupCard({ group }: { group: WealthGroupData }) {
   const [expanded, setExpanded] = useState(true);
-  const total = group.members.reduce((s, m) => s + (Number(m.contribution) || 0), 0);
-  const totalInterest = group.members.reduce((s, m) => s + (Number(m.interestAmount) || 0), 0);
+  const membersSaved = group.members.reduce((s, m) => s + (Number(m.contribution) || 0), 0);
+  const total = group.totalSaved != null && group.totalSaved > 0 ? group.totalSaved : membersSaved;
+
+  const membersInterest = group.members.reduce((s, m) => s + (Number(m.interestAmount) || 0), 0);
+  const totalInterest = group.interestEarned != null && group.interestEarned > 0 ? group.interestEarned : membersInterest;
+
   const totalWealthpact = group.members.reduce((s, m) => s + (Number(m.wealthPactAmount) || 0), 0);
   const admin = group.members.find((m) => m.isAdmin);
 
@@ -298,12 +317,12 @@ function GroupCard({ group }: { group: WealthGroupData }) {
                   <tr key={member.id} className={`transition-colors ${member.isAdmin ? "bg-gray-50/80" : "hover:bg-surface/30"}`}>
                     <td className="py-3.5 px-5">
                       <div className="flex items-center gap-3">
-                        <div className="relative h-8 w-8 shrink-0">
-                          <img src={member.avatar} alt={member.name}
-                            className={`w-full h-full rounded-full object-cover border-2 ${member.isAdmin ? "border-gray-400" : "border-border/30"}`}
-                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                          />
-                        </div>
+                        <Avatar className="h-8 w-8 border-2 border-white shadow-sm ring-1 ring-border/5 shrink-0">
+                          <AvatarImage src={member.avatar} />
+                          <AvatarFallback className="bg-primary/10 text-primary font-bold text-xs uppercase">
+                            {getInitials(member.name)}
+                          </AvatarFallback>
+                        </Avatar>
                         <span className="text-[12px] font-bold text-dark whitespace-nowrap">{member.name}</span>
                       </div>
                     </td>
@@ -380,55 +399,238 @@ export default function PlanUsersPage() {
     { skip: !isWealthGroup }
   );
 
+  const { data: allUsersData } = useGetUsersQuery({ limit: 500 });
+
   const [exportTribes] = useLazyExportTribesQuery();
   const [exportPortfolios] = useLazyExportPortfoliosByTypeQuery();
 
+  const isLoading = isLoadingPortfolios || isLoadingTribes;
+
+  // Build a lookup map of all platform users by ID and email
+  const userMap = useMemo(() => {
+    const map = new Map<string, any>();
+    const rawList = Array.isArray(allUsersData)
+      ? allUsersData
+      : Array.isArray(allUsersData?.data)
+        ? allUsersData.data
+        : Array.isArray(allUsersData?.data?.items)
+          ? allUsersData.data.items
+          : Array.isArray(allUsersData?.items)
+            ? allUsersData.items
+            : [];
+
+    rawList.forEach((u: any) => {
+      if (u.id) map.set(String(u.id), u);
+      if (u._id) map.set(String(u._id), u);
+      if (u.userId) map.set(String(u.userId), u);
+      if (u.email) map.set(String(u.email).toLowerCase(), u);
+    });
+    return map;
+  }, [allUsersData]);
+
+  // Helper to convert kobo (lowest currency unit) to naira
+  const fromKobo = (val: any): number => {
+    const num = Number(val);
+    if (isNaN(num) || num === 0) return 0;
+    return num / 100;
+  };
+
   // Mappers
   const users = useMemo<PlanUser[]>(() => {
-    if (isWealthGroup || !portfoliosRes?.items) return [];
-    return portfoliosRes.items.map((u: any) => ({
-      id: u.id || u._id || Math.random().toString(),
-      name: u.name || u.user?.name || u.customer?.name || "Unknown User",
-      email: u.email || u.user?.email || u.customer?.email || "No email",
-      phone: u.phone || u.user?.phone || u.customer?.phone || "No phone",
-      avatar: u.avatar || u.user?.avatar || u.customer?.avatar || "",
-      balance: Number(u.balance || u.amount || 0),
-      savingType: (u.savingType || u.type || "interest").toLowerCase() as SavingType,
-      hasInterest: (u.savingType || "interest").toLowerCase() !== "impact",
-      interestRate: Number(u.interestRate || u.rate || 0),
-      interestAmount: Number(u.interestAmount || u.interestEarned || u.accruedInterest || 0),
-      wealthPactAmount: Number(u.wealthPactAmount || u.impactAmount || u.wealthpact || 0),
-      maturityDate: u.maturityDate || u.endDate,
-      fixStartDate: u.fixStartDate || u.startDate,
-      goalName: u.goalName || u.targetName,
-      goalTarget: Number(u.goalTarget || u.targetAmount || 0),
-      goalDeadline: u.goalDeadline || u.endDate,
-      goalStartDate: u.goalStartDate || u.startDate,
-    }));
-  }, [portfoliosRes, isWealthGroup]);
+    if (isWealthGroup || !portfoliosRes) return [];
+    const items = Array.isArray(portfoliosRes)
+      ? portfoliosRes
+      : Array.isArray(portfoliosRes?.data)
+        ? portfoliosRes.data
+        : Array.isArray(portfoliosRes?.data?.items)
+          ? portfoliosRes.data.items
+          : Array.isArray(portfoliosRes?.data?.portfolios)
+            ? portfoliosRes.data.portfolios
+            : Array.isArray(portfoliosRes?.items)
+              ? portfoliosRes.items
+              : Array.isArray(portfoliosRes?.portfolios)
+                ? portfoliosRes.portfolios
+                : [];
+
+    const mapped: PlanUser[] = items.map((u: any): PlanUser => {
+      const memberObj = (typeof u.member === "object" && u.member !== null ? u.member : null) || {};
+      const userObj =
+        (typeof u.user === "object" && u.user !== null ? u.user : null) ||
+        (typeof u.customer === "object" && u.customer !== null ? u.customer : null) ||
+        (typeof u.owner === "object" && u.owner !== null ? u.owner : null) ||
+        (typeof u.account === "object" && u.account !== null ? u.account : null) ||
+        {};
+
+      const uIdKey = u.userId || u.customerId || u.user_id || u.ownerId || memberObj.id || memberObj.userId || (typeof u.user === "string" ? u.user : "") || "";
+      const lookedUpUser = uIdKey ? userMap.get(String(uIdKey)) : (memberObj.email ? userMap.get(String(memberObj.email).toLowerCase()) : (u.email ? userMap.get(String(u.email).toLowerCase()) : null));
+
+      const firstName = memberObj.firstName || userObj.firstName || userObj.first_name || u.userFirstName || u.firstName || lookedUpUser?.firstName || "";
+      const lastName = memberObj.lastName || userObj.lastName || userObj.last_name || userObj.otherNames || u.userLastName || u.lastName || lookedUpUser?.lastName || "";
+      const fullName = `${firstName} ${lastName}`.trim();
+
+      const memberName =
+        memberObj.name ||
+        fullName ||
+        userObj.name ||
+        userObj.fullName ||
+        lookedUpUser?.name ||
+        memberObj.username ||
+        userObj.username ||
+        lookedUpUser?.username ||
+        u.userName ||
+        u.customerName ||
+        "Member";
+
+      const email = memberObj.email || userObj.email || lookedUpUser?.email || u.userEmail || u.customerEmail || u.email || "—";
+      const phone = memberObj.phone || memberObj.phoneNumber || userObj.phone || userObj.phoneNumber || userObj.phone_number || lookedUpUser?.phone || lookedUpUser?.phoneNumber || u.userPhone || u.phone || u.phoneNumber || "—";
+      const avatar = memberObj.avatarUrl || memberObj.avatar || userObj.avatar || userObj.avatarUrl || userObj.imageUrl || userObj.image || lookedUpUser?.imageUrl || lookedUpUser?.avatar || u.avatar || u.avatarUrl || "";
+
+      const rawBalance = Number(
+        u.balance ??
+        u.amount ??
+        u.totalSavings ??
+        u.currentBalance ??
+        memberObj.balance ??
+        userObj.balance ??
+        0
+      );
+
+      const rawSavingType = String(
+        memberObj.savingType ||
+        u.savingType ||
+        u.type ||
+        u.planType ||
+        "interest"
+      ).toLowerCase();
+
+      const savingType: SavingType = rawSavingType.includes("impact")
+        ? "impact"
+        : rawSavingType.includes("mixed")
+          ? "mixed"
+          : "interest";
+
+      const hasInterest = savingType !== "impact";
+      const interestRate = Number(u.interestRate ?? u.rate ?? u.annualPercentageYield ?? 0);
+      const interestAmount = fromKobo(u.interestAccrued ?? u.interestAmount ?? u.interestEarned ?? u.accruedInterest ?? u.interest ?? 0);
+      const wealthPactAmount = fromKobo(u.impactAccrued ?? u.wealthPactAmount ?? u.impactAmount ?? u.wealthpact ?? u.impactValue ?? 0);
+      const goalTarget = fromKobo(u.goalTarget ?? u.targetAmount ?? u.target ?? 0);
+      const balance = fromKobo(rawBalance);
+
+      const goalDeadline =
+        u.deadlineDate ||
+        u.goalDeadline ||
+        u.deadline ||
+        u.targetDate ||
+        u.maturityDate ||
+        u.endDate ||
+        u.matureAt ||
+        u.durationDate ||
+        u.expectedEndDate ||
+        u.duration;
+
+      const goalStartDate =
+        u.startedDate ||
+        u.goalStartDate ||
+        u.fixStartDate ||
+        u.startDate ||
+        u.createdAt ||
+        u.created_at ||
+        u.openedAt;
+
+      const planName = u.name || u.savingFor || u.goalName || u.targetName || u.title || u.goalTitle || "—";
+
+      return {
+        id: String(u.id || u._id || memberObj.id || userObj.id || userObj._id || Math.random()),
+        name: memberName,
+        email,
+        phone,
+        avatar,
+        balance,
+        savingType,
+        hasInterest,
+        interestRate,
+        interestAmount,
+        wealthPactAmount,
+        maturityDate: goalDeadline,
+        fixStartDate: goalStartDate,
+        goalName: planName,
+        goalTarget,
+        goalDeadline,
+        goalStartDate,
+        planName,
+        createdAt: goalStartDate,
+      };
+    });
+
+    // Remove zero-balance / terminated / withdrawn plans so only active/funded portfolios show
+    return mapped.filter((u: PlanUser) => u.balance > 0 || (u.interestAmount != null && u.interestAmount > 0));
+  }, [portfoliosRes, isWealthGroup, userMap]);
 
   const groups = useMemo<WealthGroupData[]>(() => {
-    if (!isWealthGroup || !tribesRes?.items) return [];
-    return tribesRes.items.map((g: any) => ({
-      id: g.id || g._id || Math.random().toString(),
-      groupName: g.groupName || g.name || "Unknown Group",
+    if (!isWealthGroup || !tribesRes) return [];
+    const items = Array.isArray(tribesRes)
+      ? tribesRes
+      : Array.isArray(tribesRes?.data)
+        ? tribesRes.data
+        : Array.isArray(tribesRes?.data?.items)
+          ? tribesRes.data.items
+          : Array.isArray(tribesRes?.data?.tribes)
+            ? tribesRes.data.tribes
+            : Array.isArray(tribesRes?.data?.groups)
+              ? tribesRes.data.groups
+              : Array.isArray(tribesRes?.items)
+                ? tribesRes.items
+                : Array.isArray(tribesRes?.tribes)
+                  ? tribesRes.tribes
+                  : [];
+
+    return items.map((g: any) => ({
+      id: String(g.id || g._id || Math.random()),
+      groupName: g.groupName || g.name || g.title || "Group",
       image: g.image || g.icon || g.avatar || null,
-      groupTarget: Number(g.groupTarget || g.targetAmount || g.target || 0),
+      groupTarget: fromKobo(g.groupTarget ?? g.targetAmount ?? g.target ?? 0),
+      totalSaved: fromKobo(g.totalSaved ?? g.totalSavings ?? g.totalBalance ?? 0),
+      interestEarned: fromKobo(g.interestEarned ?? g.totalInterest ?? g.interestAmount ?? 0),
       startDate: g.startDate || g.createdAt || new Date().toISOString(),
       endDate: g.endDate || g.deadline || new Date().toISOString(),
-      members: (g.members || []).map((m: any) => ({
-        id: m.id || m._id || Math.random().toString(),
-        name: m.name || m.user?.name || "Unknown",
-        email: m.email || m.user?.email || "No email",
-        phone: m.phone || m.user?.phone || "No phone",
-        avatar: m.avatar || m.user?.avatar || "",
-        contribution: Number(m.contribution || m.amount || m.balance || 0),
-        savingType: (m.savingType || m.type || "interest").toLowerCase() as SavingType,
-        interestRate: Number(m.interestRate || m.rate || 0),
-        interestAmount: Number(m.interestAmount || m.interestEarned || 0),
-        wealthPactAmount: Number(m.wealthPactAmount || m.impactAmount || 0),
-        isAdmin: Boolean(m.isAdmin || m.role === "admin" || m.role === "leader"),
-      }))
+      members: (g.members || g.users || []).map((m: any) => {
+        const u = (typeof m.user === "object" && m.user !== null ? m.user : null) || (typeof m.customer === "object" && m.customer !== null ? m.customer : null) || m;
+        const firstName = u.firstName || u.first_name || m.firstName || "";
+        const lastName = u.lastName || u.last_name || m.lastName || "";
+        const fullName = `${firstName} ${lastName}`.trim();
+        const memberName = fullName || u.name || u.fullName || u.username || m.name || "Member";
+        const email = u.email || m.email || "—";
+        const phone = u.phone || u.phoneNumber || m.phone || "—";
+        const avatar = u.avatar || u.avatarUrl || u.imageUrl || m.avatar || "";
+
+        const rawRole = String(m.role || u.role || "").toLowerCase();
+        const isAdmin = Boolean(m.isAdmin || rawRole === "admin" || rawRole === "leader" || rawRole === "creator" || m.isLeader);
+
+        const rawInterest = m.interestOrImpact ?? m.interestAmount ?? m.interestEarned ?? m.interest ?? 0;
+        const rawType = String(m.savingType || m.type || "interest").toLowerCase();
+        const savingType: SavingType = rawType.includes("impact")
+          ? "impact"
+          : rawType.includes("mixed")
+            ? "mixed"
+            : "interest";
+
+        const interestAmount = savingType !== "impact" ? fromKobo(rawInterest) : 0;
+        const wealthPactAmount = savingType === "impact" ? fromKobo(rawInterest) : 0;
+
+        return {
+          id: String(m.id || m._id || u.id || u._id || Math.random()),
+          name: memberName,
+          email,
+          phone,
+          avatar,
+          contribution: fromKobo(m.contribution ?? m.amount ?? m.balance ?? u.balance ?? 0),
+          savingType,
+          interestRate: Number(m.interestRate ?? m.rate ?? 0),
+          interestAmount,
+          wealthPactAmount,
+          isAdmin,
+        };
+      })
     }));
   }, [tribesRes, isWealthGroup]);
 
@@ -443,12 +645,28 @@ export default function PlanUsersPage() {
   }
 
   // Dashboard calculations based on API response fields or computed from mapper
-  const totalBalance = isWealthGroup ? Number(tribesRes?.totalSavings || 0) : Number(portfoliosRes?.totalBalance || 0);
-  const totalInterest = isWealthGroup ? Number(tribesRes?.totalInterest || 0) : Number(portfoliosRes?.totalInterest || 0);
-  const totalWealthPact = isWealthGroup ? Number(tribesRes?.totalWealthpact || 0) : Number(portfoliosRes?.totalWealthpact || 0);
-  const totalMembers = isWealthGroup ? groups.reduce((s, g) => s + g.members.length, 0) : Number(portfoliosRes?.totalMembers || 0);
+  const resData = portfoliosRes?.data || portfoliosRes || {};
+  const tribesData = tribesRes?.data || tribesRes || {};
 
-  const avgBalance = portfoliosRes?.avgBalanceOrTarget ? Number(portfoliosRes.avgBalanceOrTarget) : (totalMembers > 0 ? totalBalance / totalMembers : 0);
+  const totalMembers = isWealthGroup
+    ? Number(tribesData?.totalMembers ?? tribesData?.totalCount ?? groups.reduce((s, g) => s + g.members.length, 0))
+    : Number(resData?.totalMembers ?? resData?.totalUsers ?? resData?.totalCount ?? resData?.total ?? users.length);
+
+  const totalBalance = isWealthGroup
+    ? (tribesData?.totalSavings != null ? fromKobo(tribesData.totalSavings) : (tribesData?.totalBalance != null ? fromKobo(tribesData.totalBalance) : groups.reduce((s, g) => s + g.members.reduce((sm, m) => sm + m.contribution, 0), 0)))
+    : (resData?.totalBalance != null ? fromKobo(resData.totalBalance) : (resData?.totalAmount != null ? fromKobo(resData.totalAmount) : (resData?.totalSavings != null ? fromKobo(resData.totalSavings) : users.reduce((s, u) => s + u.balance, 0))));
+
+  const totalInterest = isWealthGroup
+    ? (tribesData?.totalInterest != null ? fromKobo(tribesData.totalInterest) : groups.reduce((s, g) => s + g.members.reduce((sm, m) => sm + (m.interestAmount || 0), 0), 0))
+    : (resData?.totalInterest != null ? fromKobo(resData.totalInterest) : users.reduce((s, u) => s + (u.interestAmount || 0), 0));
+
+  const totalWealthPact = isWealthGroup
+    ? (tribesData?.totalWealthpact != null ? fromKobo(tribesData.totalWealthpact) : groups.reduce((s, g) => s + g.members.reduce((sm, m) => sm + (m.wealthPactAmount || 0), 0), 0))
+    : (resData?.totalWealthpact != null ? fromKobo(resData.totalWealthpact) : users.reduce((s, u) => s + (u.wealthPactAmount || 0), 0));
+
+  const avgBalance = portfoliosRes?.avgBalanceOrTarget || resData?.avgBalanceOrTarget
+    ? fromKobo(portfoliosRes?.avgBalanceOrTarget || resData?.avgBalanceOrTarget)
+    : (totalMembers > 0 ? totalBalance / totalMembers : 0);
 
   const interestUsers = isWealthGroup
     ? groups.reduce((s, g) => s + g.members.filter(m => m.savingType !== 'impact').length, 0)
@@ -459,7 +677,7 @@ export default function PlanUsersPage() {
     : users.filter(u => u.savingType === 'impact').length;
 
   const summaryCards = isWealthGroup ? [
-    { title: "Total Groups", value: Number(tribesRes?.totalGroups || 0).toLocaleString(), subtext: "All active groups", icon: Users, color: "bg-[#E6F9F9] text-[#155D5F]", dotColor: "bg-[#155D5F]" },
+    { title: "Total Groups", value: Number(tribesData?.totalGroups ?? tribesRes?.totalGroups ?? groups.length).toLocaleString(), subtext: "All active groups", icon: Users, color: "bg-[#E6F9F9] text-[#155D5F]", dotColor: "bg-[#155D5F]" },
     { title: "Total Savings", value: formatCurrency(totalBalance), subtext: "Combined deposits", icon: Wallet, color: "bg-[#E6F9F9] text-[#155D5F]", dotColor: "bg-[#65D36A]" },
     { title: "Total Interest", value: formatCurrency(totalInterest), subtext: `Earned across groups (${interestUsers}/${totalMembers} savers)`, icon: Activity, color: "bg-[#E6F9F9] text-[#155D5F]", dotColor: "bg-[#65D36A]" },
     { title: "Total Wealthpact", value: formatCurrency(totalWealthPact), subtext: `Impact plan accrued (${impactUsers}/${totalMembers} savers)`, icon: Leaf, color: "bg-[#E6F9F9] text-[#155D5F]", dotColor: "bg-[#65D36A]" },
@@ -477,86 +695,67 @@ export default function PlanUsersPage() {
   const handleExportCSV = async () => {
     try {
       toast.info("Preparing CSV export...");
-      
       let blob: Blob;
-      
       if (isWealthGroup) {
         blob = await exportTribes().unwrap();
       } else {
         blob = await exportPortfolios({ type: meta.backendType || "" }).unwrap();
       }
-
       const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
+      const a = document.createElement("a");
       a.href = url;
       a.download = `${meta.label.toLowerCase()}-export.csv`;
       document.body.appendChild(a);
       a.click();
       a.remove();
       toast.success("Export downloaded successfully!");
-    } catch (err) {
-      console.error("Export error:", err);
-      toast.error("Failed to download backend CSV export. Using fallback data export instead.");
+    } catch {
       downloadCSV(planKey as string, users, groups, meta.label, isWealthFix, isWealthGoal, isWealthGroup);
     }
   };
 
-  const isLoading = isLoadingPortfolios || isLoadingTribes;
-
   return (
-    <div className="w-full max-w-[1237px] mx-auto min-h-[800px] bg-white rounded-[20px] py-10 px-6 flex flex-col gap-8 shadow-sm">
-
-      {/* ── Header ── */}
-      <div className="flex flex-col gap-5">
-        <button
-          onClick={() => router.back()}
-          className="flex items-center gap-2 text-slate text-sm font-medium hover:text-primary transition-colors group w-fit"
-        >
-          <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
-          Back to Overview
-        </button>
-
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className={`p-3.5 rounded-2xl ${meta.accent} border`}>
-              <Icon className={`w-7 h-7 ${meta.color}`} />
+    <div className="bg-white rounded-[20px] p-6 lg:p-10 border border-border/50 shadow-sm w-full max-w-[1140px] mx-auto space-y-8 animate-in fade-in duration-500">
+      {/* Header */}
+      <div className="flex flex-col gap-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => router.back()}
+              className="p-2 rounded-xl hover:bg-surface border border-border/40 text-slate transition-colors cursor-pointer"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+            <div className={`p-2.5 rounded-2xl ${meta.accent} shrink-0`}>
+              <Icon className={`w-6 h-6 ${meta.color}`} />
             </div>
             <div>
-              <h1 className="text-2xl font-black font-outfit text-dark">{meta.label}</h1>
-              <p className="text-sm text-slate/60 font-medium">{meta.description}</p>
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl font-bold font-outfit text-dark">{meta.label}</h1>
+                <span className="text-xs font-semibold text-slate/50">Members</span>
+              </div>
+              <p className="text-xs text-slate font-medium">{meta.description}</p>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
-            <div className="relative">
-              <select
-                value={dateFilter}
-                onChange={(e) => setDateFilter(e.target.value)}
-                className="appearance-none h-10 pl-10 pr-8 rounded-xl bg-surface/50 hover:bg-surface border border-border/30 text-dark text-[12px] font-bold transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/20"
-              >
-                <option value="today">Today</option>
-                <option value="yesterday">Yesterday</option>
-                <option value="last_week">Last week</option>
-                <option value="month">Month</option>
-                <option value="last_6_months">6 months ago</option>
-                <option value="year">1 year ago</option>
-                <option value="all_time">All time</option>
-              </select>
-              <Calendar className="w-4 h-4 text-slate/50 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <ChevronDown className="w-3.5 h-3.5 text-slate/50 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-            </div>
+          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+            <select
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              className="h-10 px-3 rounded-xl border border-border/50 bg-white text-xs font-bold text-dark focus:outline-none focus:ring-1 focus:ring-primary/30"
+            >
+              <option value="all_time">All Time</option>
+              <option value="today">Today</option>
+              <option value="this_week">This Week</option>
+              <option value="this_month">This Month</option>
+              <option value="this_year">This Year</option>
+            </select>
 
             <button
               onClick={handleExportCSV}
-              className="flex items-center gap-2 h-10 px-4 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 text-[12px] font-bold transition-all active:scale-95 cursor-pointer"
+              className="flex items-center gap-2 h-10 px-4 rounded-xl bg-surface hover:bg-surface/80 border border-border/50 text-[12px] font-bold text-slate transition-all active:scale-95 cursor-pointer"
             >
-              <FileSpreadsheet className="w-4 h-4" />Export Excel
-            </button>
-            <button
-              onClick={() => downloadPDF(planKey as string, users, groups, meta.label, isWealthFix, isWealthGoal, isWealthGroup)}
-              className="flex items-center gap-2 h-10 px-4 rounded-xl bg-primary/5 hover:bg-primary/10 text-primary border border-primary/20 text-[12px] font-bold transition-all active:scale-95 cursor-pointer"
-            >
-              <FileText className="w-4 h-4" />Export PDF
+              <FileSpreadsheet className="w-4 h-4" />Export CSV
             </button>
           </div>
         </div>
@@ -572,37 +771,62 @@ export default function PlanUsersPage() {
             </button>
           )}
 
-          <div className="flex flex-wrap gap-[10px] justify-between lg:justify-start lg:gap-[24px]">
-            {visibleCards.map((stat, i) => (
-              <div
-                key={i}
-                className="w-[350px] h-[124px] rounded-[20px] bg-[#F2FFFF] border border-[#155D5F1F] shadow-[0px_4px_10px_0px_rgba(0,0,0,0.07)] p-5 flex flex-col justify-between gap-[10px]"
-              >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <div className="text-[28px] font-semibold text-[#155D5F] leading-none mb-1">
-                      {isLoading ? "—" : stat.value}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+            {isLoading ? (
+              Array.from({ length: 3 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="w-full h-[124px] rounded-[20px] bg-[#F2FFFF] border border-[#155D5F1F] shadow-[0px_4px_10px_0px_rgba(0,0,0,0.07)] p-5 flex flex-col justify-between gap-[10px] animate-pulse"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="space-y-2">
+                      <div className="h-7 w-28 bg-[#155D5F]/15 rounded-lg" />
+                      <div className="h-4 w-20 bg-[#155D5F]/10 rounded-md" />
                     </div>
-                    <div className="text-[13px] font-semibold text-[#155D5F]">
-                      {stat.title}
-                    </div>
+                    <div className="w-8 h-8 rounded-full bg-[#155D5F]/15 shrink-0" />
                   </div>
-                  <div className={`p-2 rounded-full ${stat.color} shrink-0`}>
-                    <stat.icon className="w-4 h-4" />
-                  </div>
-                </div>
 
-                <div className="flex flex-col gap-2">
-                  <div className="h-[1px] bg-[#155D5F]/20 w-full"></div>
-                  <div className="flex items-center gap-2 text-[13px] font-bold text-[#155D5F]">
-                    {stat.dotColor && (
-                      <div className={`w-2 h-2 rounded-full ${stat.dotColor}`}></div>
-                    )}
-                    <span className="leading-tight">{stat.subtext}</span>
+                  <div className="flex flex-col gap-2">
+                    <div className="h-[1px] bg-[#155D5F]/15 w-full"></div>
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-[#155D5F]/25 shrink-0"></div>
+                      <div className="h-3.5 w-32 bg-[#155D5F]/15 rounded"></div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))
+            ) : (
+              visibleCards.map((stat, i) => (
+                <div
+                  key={i}
+                  className="w-full h-[124px] rounded-[20px] bg-[#F2FFFF] border border-[#155D5F1F] shadow-[0px_4px_10px_0px_rgba(0,0,0,0.07)] p-5 flex flex-col justify-between gap-[10px]"
+                >
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <div className="text-[28px] font-semibold text-[#155D5F] leading-none mb-1">
+                        {stat.value}
+                      </div>
+                      <div className="text-[13px] font-semibold text-[#155D5F]">
+                        {stat.title}
+                      </div>
+                    </div>
+                    <div className={`p-2 rounded-full ${stat.color} shrink-0`}>
+                      <stat.icon className="w-4 h-4" />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-2">
+                    <div className="h-[1px] bg-[#155D5F]/20 w-full"></div>
+                    <div className="flex items-center gap-2 text-[13px] font-bold text-[#155D5F]">
+                      {stat.dotColor && (
+                        <div className={`w-2 h-2 rounded-full ${stat.dotColor}`}></div>
+                      )}
+                      <span className="leading-tight">{stat.subtext}</span>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>
@@ -647,6 +871,14 @@ export default function PlanUsersPage() {
                   <th className="text-left py-3.5 px-4 text-[11px] font-bold text-slate/50 uppercase tracking-wider">Started</th>
                   <th className="text-left py-3.5 px-4 text-[11px] font-bold text-slate/50 uppercase tracking-wider">Deadline</th>
                 </>}
+
+                {!isWealthFix && !isWealthGoal && <>
+                  <th className="text-left py-3.5 px-4 text-[11px] font-bold text-slate/50 uppercase tracking-wider">
+                    {planKey === "wealthfam" ? "Family Member / Plan" : "Plan Name"}
+                  </th>
+                  <th className="text-center py-3.5 px-4 text-[11px] font-bold text-slate/50 uppercase tracking-wider">Rate</th>
+                  <th className="text-left py-3.5 px-4 text-[11px] font-bold text-slate/50 uppercase tracking-wider">Started</th>
+                </>}
               </tr>
             </thead>
 
@@ -658,12 +890,12 @@ export default function PlanUsersPage() {
                   <tr key={user.id} className="hover:bg-surface/40 transition-colors duration-150 group">
                     <td className="py-4 px-5">
                       <div className="flex items-center gap-3">
-                        <div className="relative h-9 w-9 shrink-0">
-                          <img src={user.avatar} alt={user.name}
-                            className="w-full h-full rounded-full object-cover border-2 border-border/30 group-hover:border-primary/20 transition-colors"
-                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                          />
-                        </div>
+                        <Avatar className="h-9 w-9 border-2 border-white shadow-sm ring-1 ring-border/5 shrink-0">
+                          <AvatarImage src={user.avatar} />
+                          <AvatarFallback className="bg-primary/10 text-primary font-bold text-xs uppercase">
+                            {getInitials(user.name)}
+                          </AvatarFallback>
+                        </Avatar>
                         <span className="text-[13px] font-bold text-dark whitespace-nowrap">{user.name}</span>
                       </div>
                     </td>
@@ -721,6 +953,18 @@ export default function PlanUsersPage() {
                         </span>
                       </td>
                     </>}
+
+                    {!isWealthFix && !isWealthGoal && <>
+                      <td className="py-4 px-4">
+                        <span className="text-[12px] font-bold text-dark whitespace-nowrap">{user.planName ?? "—"}</span>
+                      </td>
+                      <td className="py-4 px-4 text-center">
+                        <span className="text-[12px] font-bold text-dark">{user.interestRate ? `${user.interestRate}%` : "—"}</span>
+                      </td>
+                      <td className="py-4 px-4">
+                        <span className="text-[12px] font-semibold text-dark">{user.goalStartDate ? formatDate(user.goalStartDate) : "—"}</span>
+                      </td>
+                    </>}
                   </tr>
                 );
               })}
@@ -729,7 +973,7 @@ export default function PlanUsersPage() {
           {users.length === 0 && (
             <div className="py-20 text-center flex flex-col items-center gap-2 text-slate/40">
               <Users className="w-8 h-8" />
-              <p className="text-sm font-bold">No members found for this period.</p>
+              <p className="text-sm font-bold">No active plans found for this period.</p>
             </div>
           )}
         </div>
@@ -738,8 +982,87 @@ export default function PlanUsersPage() {
   );
 }
 
-function downloadCSV(arg0: string, users: PlanUser[], groups: WealthGroupData[], label: string, isWealthFix: boolean, isWealthGoal: boolean, isWealthGroup: boolean) {
-  throw new Error("Function not implemented.");
+function downloadCSV(plan: string, users: PlanUser[], groups: WealthGroupData[], label: string, isWealthFix: boolean, isWealthGoal: boolean, isWealthGroup: boolean) {
+  try {
+    let rows: string[][] = [];
+    if (isWealthGroup) {
+      rows.push(["Group Name", "Member Name", "Member Email", "Phone", "Role", "Saving Type", "Contribution", "Interest Amount", "Impact Amount"]);
+      groups.forEach((g) => {
+        g.members.forEach((m) => {
+          rows.push([
+            g.groupName,
+            m.name,
+            m.email,
+            m.phone,
+            m.isAdmin ? "Admin" : "Member",
+            m.savingType,
+            String(m.contribution),
+            String(m.interestAmount),
+            String(m.wealthPactAmount),
+          ]);
+        });
+      });
+    } else if (isWealthGoal) {
+      rows.push(["Member", "Email", "Phone", "Saving Type", "Balance", "Interest", "Impact", "Saving For", "Goal Target", "Started", "Deadline"]);
+      users.forEach((u) => {
+        rows.push([
+          u.name,
+          u.email,
+          u.phone,
+          u.savingType,
+          String(u.balance),
+          String(u.interestAmount),
+          String(u.wealthPactAmount),
+          u.goalName || "",
+          String(u.goalTarget || 0),
+          u.goalStartDate || "",
+          u.goalDeadline || "",
+        ]);
+      });
+    } else if (isWealthFix) {
+      rows.push(["Member", "Email", "Phone", "Saving Type", "Balance", "Interest", "Impact", "Fix Start", "Maturity Date"]);
+      users.forEach((u) => {
+        rows.push([
+          u.name,
+          u.email,
+          u.phone,
+          u.savingType,
+          String(u.balance),
+          String(u.interestAmount),
+          String(u.wealthPactAmount),
+          u.fixStartDate || "",
+          u.maturityDate || "",
+        ]);
+      });
+    } else {
+      rows.push(["Member", "Email", "Phone", "Saving Type", "Balance", "Interest", "Impact", "Plan Name", "Rate (%)", "Started"]);
+      users.forEach((u) => {
+        rows.push([
+          u.name,
+          u.email,
+          u.phone,
+          u.savingType,
+          String(u.balance),
+          String(u.interestAmount),
+          String(u.wealthPactAmount),
+          u.planName || "",
+          String(u.interestRate || ""),
+          u.goalStartDate || "",
+        ]);
+      });
+    }
+
+    const csvContent = "data:text/csv;charset=utf-8," + rows.map((e) => e.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `${label.toLowerCase().replace(/\s+/g, "-")}-export.csv`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  } catch (e) {
+    toast.error("Failed to export CSV");
+  }
 }
 
 
