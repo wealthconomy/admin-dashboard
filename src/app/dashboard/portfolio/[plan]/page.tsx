@@ -197,8 +197,8 @@ function InterestEarnedCell({ savingType, interestAmount, wealthPactAmount }: { 
 // ─── Download helpers ─────────────────────────────────────────────────────────
 
 function buildCsvRows(plan: string, users: PlanUser[], isWealthFix: boolean, isWealthGoal: boolean) {
-  const baseH = ["Name", "Email", "Phone", "Saving Type", "Balance (₦)", "Interest Rate (%)", "Interest Earned (₦)"];
-  const fixH = ["Fix Start Date", "Maturity Date", "Days to Maturity"];
+  const baseH = ["Name", "Email", "Phone", "Saving Type", "Status", "Balance (₦)", "Interest Rate (%)", "Interest Earned (₦)"];
+  const fixH = ["Fixed For", "Fix Start Date", "Maturity Date", "Days to Maturity"];
   const goalH = ["Saving For", "Goal Target (₦)", "Amount Saved (₦)", "Started", "Deadline"];
   const headers = [...baseH, ...(isWealthFix ? fixH : []), ...(isWealthGoal ? goalH : [])];
 
@@ -206,11 +206,12 @@ function buildCsvRows(plan: string, users: PlanUser[], isWealthFix: boolean, isW
     const base = [
       u.name, u.email, u.phone,
       u.savingType.charAt(0).toUpperCase() + u.savingType.slice(1),
+      u.status,
       (Number(u.balance) || 0).toFixed(2),
       u.hasInterest ? (Number(u.interestRate) || 0).toFixed(1) : "0",
       u.hasInterest ? (Number(u.interestAmount) || 0).toFixed(2) : "0",
     ];
-    const fix = isWealthFix ? [u.fixStartDate ? formatDate(u.fixStartDate) : "", u.maturityDate ? formatDate(u.maturityDate) : "", u.maturityDate ? String(getDaysRemaining(u.maturityDate)) : ""] : [];
+    const fix = isWealthFix ? [u.planName || u.goalName || "", u.fixStartDate ? formatDate(u.fixStartDate) : "", u.maturityDate ? formatDate(u.maturityDate) : "", u.maturityDate ? String(getDaysRemaining(u.maturityDate)) : ""] : [];
     const goal = isWealthGoal ? [u.goalName ?? "", (Number(u.goalTarget) || 0).toFixed(2) ?? "", (Number(u.balance) || 0).toFixed(2), u.goalStartDate ? formatDate(u.goalStartDate) : "", u.goalDeadline ? formatDate(u.goalDeadline) : ""] : [];
     return [...base, ...fix, ...goal];
   });
@@ -998,6 +999,7 @@ export default function PlanUsersPage() {
                 <th className="text-right py-3.5 px-4 text-[11px] font-bold text-slate/50 uppercase tracking-wider">Interest / Impact</th>
 
                 {isWealthFix && <>
+                  <th className="text-left py-3.5 px-4 text-[11px] font-bold text-slate/50 uppercase tracking-wider">Fixed For</th>
                   <th className="text-left py-3.5 px-4 text-[11px] font-bold text-slate/50 uppercase tracking-wider">Fix Start</th>
                   <th className="text-left py-3.5 px-4 text-[11px] font-bold text-slate/50 uppercase tracking-wider">Maturity Date</th>
                   <th className="text-left py-3.5 px-4 text-[11px] font-bold text-slate/50 uppercase tracking-wider">Days to Maturity</th>
@@ -1057,6 +1059,9 @@ export default function PlanUsersPage() {
                     </td>
 
                     {isWealthFix && <>
+                      <td className="py-4 px-4">
+                        <span className="text-[12px] font-bold text-dark whitespace-nowrap">{user.planName || user.goalName || "—"}</span>
+                      </td>
                       <td className="py-4 px-4">
                         <span className="text-[12px] font-semibold text-dark">{user.fixStartDate ? formatDate(user.fixStartDate) : "—"}</span>
                       </td>
