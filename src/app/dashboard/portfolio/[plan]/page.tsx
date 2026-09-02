@@ -65,6 +65,7 @@ type PlanUser = {
   goalStartDate?: string;
   planName?: string;
   createdAt?: string;
+  status: "ACTIVE" | "COMPLETED" | "MATURED" | "WITHDRAWN" | "CLOSED";
 };
 
 type GroupMember = {
@@ -94,6 +95,40 @@ type WealthGroupData = {
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function PlanStatusBadge({ status, balance }: { status?: string; balance?: number }) {
+  const s = String(status || "").toUpperCase();
+  if (s.includes("COMPLET") || (balance === 0 && !s.includes("ACTIVE"))) {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+        Completed
+      </span>
+    );
+  }
+  if (s.includes("WITHDRAW")) {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+        <span className="w-1.5 h-1.5 rounded-full bg-purple-500" />
+        Withdrawn
+      </span>
+    );
+  }
+  if (s.includes("MATUR")) {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+        <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+        Matured
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-[#155D5F]/10 text-[#155D5F] border border-[#155D5F]/20">
+      <span className="w-1.5 h-1.5 rounded-full bg-[#155D5F]" />
+      Active
+    </span>
+  );
+}
 
 function formatCurrency(n: number | string) {
   const num = Number(n) || 0;
@@ -380,6 +415,7 @@ export default function PlanUsersPage() {
   const router = useRouter();
   const [dateFilter, setDateFilter] = useState("all_time");
   const [isExpanded, setIsExpanded] = useState(false);
+  const [planTab, setPlanTab] = useState<"active" | "completed" | "all">("active");
 
   const planKey = plan?.toLowerCase();
   const meta = PLAN_META[planKey as string];
@@ -452,51 +488,82 @@ export default function PlanUsersPage() {
                 ? portfoliosRes.portfolios
                 : [];
 
-    const mapped: PlanUser[] = items.map((u: any): PlanUser => {
+    return items.map((u: any): PlanUser => {
+      const userObj = (typeof u.user === "object" && u.user !== null ? u.user : null) || (typeof u.customer === "object" && u.customer !== null ? u.customer : null) || {};
       const memberObj = (typeof u.member === "object" && u.member !== null ? u.member : null) || {};
-      const userObj =
-        (typeof u.user === "object" && u.user !== null ? u.user : null) ||
-        (typeof u.customer === "object" && u.customer !== null ? u.customer : null) ||
-        (typeof u.owner === "object" && u.owner !== null ? u.owner : null) ||
-        (typeof u.account === "object" && u.account !== null ? u.account : null) ||
-        {};
 
-      const uIdKey = u.userId || u.customerId || u.user_id || u.ownerId || memberObj.id || memberObj.userId || (typeof u.user === "string" ? u.user : "") || "";
-      const lookedUpUser = uIdKey ? userMap.get(String(uIdKey)) : (memberObj.email ? userMap.get(String(memberObj.email).toLowerCase()) : (u.email ? userMap.get(String(u.email).toLowerCase()) : null));
+      const userIdKey = String(u.userId || u.user_id || userObj.id || userObj._id || memberObj.id || u.id || "");
+      const userEmailKey = String(u.email || userObj.email || memberObj.email || "").toLowerCase();
+      const matchedUser = userMap.get(userIdKey) || userMap.get(userEmailKey) || {};
 
-      const firstName = memberObj.firstName || userObj.firstName || userObj.first_name || u.userFirstName || u.firstName || lookedUpUser?.firstName || "";
-      const lastName = memberObj.lastName || userObj.lastName || userObj.last_name || userObj.otherNames || u.userLastName || u.lastName || lookedUpUser?.lastName || "";
+      const firstName =
+        u.firstName ||
+        u.first_name ||
+        userObj.firstName ||
+        userObj.first_name ||
+        memberObj.firstName ||
+        matchedUser.firstName ||
+        "";
+
+      const lastName =
+        u.lastName ||
+        u.last_name ||
+        userObj.lastName ||
+        userObj.last_name ||
+        memberObj.lastName ||
+        matchedUser.lastName ||
+        "";
+
       const fullName = `${firstName} ${lastName}`.trim();
-
       const memberName =
-        memberObj.name ||
         fullName ||
+        u.name ||
+        u.fullName ||
+        u.memberName ||
         userObj.name ||
         userObj.fullName ||
-        lookedUpUser?.name ||
-        memberObj.username ||
-        userObj.username ||
-        lookedUpUser?.username ||
-        u.userName ||
-        u.customerName ||
+        memberObj.name ||
+        matchedUser.name ||
         "Member";
 
-      const email = memberObj.email || userObj.email || lookedUpUser?.email || u.userEmail || u.customerEmail || u.email || "—";
-      const phone = memberObj.phone || memberObj.phoneNumber || userObj.phone || userObj.phoneNumber || userObj.phone_number || lookedUpUser?.phone || lookedUpUser?.phoneNumber || u.userPhone || u.phone || u.phoneNumber || "—";
-      const avatar = memberObj.avatarUrl || memberObj.avatar || userObj.avatar || userObj.avatarUrl || userObj.imageUrl || userObj.image || lookedUpUser?.imageUrl || lookedUpUser?.avatar || u.avatar || u.avatarUrl || "";
+      const email =
+        u.email ||
+        userObj.email ||
+        memberObj.email ||
+        matchedUser.email ||
+        "—";
 
-      const rawBalance = Number(
+      const phone =
+        u.phone ||
+        u.phoneNumber ||
+        u.phone_number ||
+        userObj.phone ||
+        memberObj.phone ||
+        matchedUser.phone ||
+        "—";
+
+      const avatar =
+        u.avatar ||
+        u.avatarUrl ||
+        u.imageUrl ||
+        userObj.avatar ||
+        userObj.avatarUrl ||
+        userObj.imageUrl ||
+        memberObj.avatar ||
+        memberObj.avatarUrl ||
+        matchedUser.imageUrl ||
+        matchedUser.avatarUrl ||
+        "";
+
+      const rawBalance =
         u.balance ??
+        u.totalBalance ??
         u.amount ??
-        u.totalSavings ??
         u.currentBalance ??
-        memberObj.balance ??
-        userObj.balance ??
-        0
-      );
+        u.principal ??
+        0;
 
       const rawSavingType = String(
-        memberObj.savingType ||
         u.savingType ||
         u.type ||
         u.planType ||
@@ -539,6 +606,16 @@ export default function PlanUsersPage() {
 
       const planName = u.name || u.savingFor || u.goalName || u.targetName || u.title || u.goalTitle || "—";
 
+      const rawStatus = String(u.status || u.planStatus || u.state || "").toUpperCase();
+      let status: "ACTIVE" | "COMPLETED" | "MATURED" | "WITHDRAWN" | "CLOSED" = "ACTIVE";
+      if (rawStatus.includes("COMPLET") || rawStatus.includes("MATUR") || rawStatus.includes("WITHDRAW") || rawStatus.includes("CLOSE") || rawStatus.includes("PAID")) {
+        status = rawStatus.includes("MATUR") ? "MATURED" : rawStatus.includes("WITHDRAW") ? "WITHDRAWN" : "COMPLETED";
+      } else if (balance === 0) {
+        status = "COMPLETED";
+      } else {
+        status = "ACTIVE";
+      }
+
       return {
         id: String(u.id || u._id || memberObj.id || userObj.id || userObj._id || Math.random()),
         name: memberName,
@@ -559,11 +636,9 @@ export default function PlanUsersPage() {
         goalStartDate,
         planName,
         createdAt: goalStartDate,
+        status,
       };
     });
-
-    // Remove zero-balance / terminated / withdrawn plans so only active/funded portfolios show
-    return mapped.filter((u: PlanUser) => u.balance > 0 || (u.interestAmount != null && u.interestAmount > 0));
   }, [portfoliosRes, isWealthGroup, userMap]);
 
   const groups = useMemo<WealthGroupData[]>(() => {
@@ -634,6 +709,31 @@ export default function PlanUsersPage() {
     }));
   }, [tribesRes, isWealthGroup]);
 
+  // Tab filtering logic
+  const activeUsers = useMemo(() => users.filter((u) => u.status === "ACTIVE" && u.balance > 0), [users]);
+  const completedUsers = useMemo(() => users.filter((u) => u.status !== "ACTIVE" || u.balance === 0), [users]);
+  const displayedUsers = useMemo(() => {
+    if (planTab === "active") return activeUsers;
+    if (planTab === "completed") return completedUsers;
+    return users;
+  }, [planTab, activeUsers, completedUsers, users]);
+
+  const isGroupCompleted = (g: WealthGroupData) => {
+    const isEnded = g.endDate ? new Date(g.endDate).getTime() < Date.now() : false;
+    const isGoalMet = g.groupTarget > 0 && (g.totalSaved ?? 0) >= g.groupTarget;
+    return isEnded || isGoalMet || ((g.totalSaved ?? 0) === 0 && g.members.length > 0);
+  };
+  const activeGroups = useMemo(() => groups.filter((g) => !isGroupCompleted(g)), [groups]);
+  const completedGroups = useMemo(() => groups.filter((g) => isGroupCompleted(g)), [groups]);
+  const displayedGroups = useMemo(() => {
+    if (planTab === "active") return activeGroups;
+    if (planTab === "completed") return completedGroups;
+    return groups;
+  }, [planTab, activeGroups, completedGroups, groups]);
+
+  const activeCount = isWealthGroup ? activeGroups.length : activeUsers.length;
+  const completedCount = isWealthGroup ? completedGroups.length : completedUsers.length;
+  const allCount = isWealthGroup ? groups.length : users.length;
 
   if (!meta) {
     return (
@@ -726,15 +826,12 @@ export default function PlanUsersPage() {
             >
               <ArrowLeft className="w-5 h-5" />
             </button>
-            <div className={`p-2.5 rounded-2xl ${meta.accent} shrink-0`}>
+            <div className={`p-2.5 rounded-2xl ${meta.accent} flex items-center justify-center shrink-0`}>
               <Icon className={`w-6 h-6 ${meta.color}`} />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-xl font-bold font-outfit text-dark">{meta.label}</h1>
-                <span className="text-xs font-semibold text-slate/50">Members</span>
-              </div>
-              <p className="text-xs text-slate font-medium">{meta.description}</p>
+              <h1 className="text-2xl font-black font-outfit text-dark tracking-tight">{meta.label}</h1>
+              <p className="text-xs text-slate/60 font-semibold">{meta.description}</p>
             </div>
           </div>
 
@@ -831,7 +928,47 @@ export default function PlanUsersPage() {
         </div>
       </div>
 
-      <div className="h-[1px] bg-border/30" />
+      {/* Active vs Completed Tab Switcher */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/30 pb-3">
+        <div className="flex items-center gap-1.5 p-1 bg-surface/80 rounded-2xl border border-border/40 w-fit">
+          <button
+            onClick={() => setPlanTab("active")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              planTab === "active"
+                ? "bg-white text-[#155D5F] shadow-sm"
+                : "text-slate/60 hover:text-dark hover:bg-white/50"
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-emerald-500" />
+            Active Plans ({activeCount})
+          </button>
+          <button
+            onClick={() => setPlanTab("completed")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              planTab === "completed"
+                ? "bg-white text-[#155D5F] shadow-sm"
+                : "text-slate/60 hover:text-dark hover:bg-white/50"
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-slate-400" />
+            Completed Plans ({completedCount})
+          </button>
+          <button
+            onClick={() => setPlanTab("all")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              planTab === "all"
+                ? "bg-white text-[#155D5F] shadow-sm"
+                : "text-slate/60 hover:text-dark hover:bg-white/50"
+            }`}
+          >
+            All ({allCount})
+          </button>
+        </div>
+
+        <div className="text-xs font-semibold text-slate/50">
+          Showing {isWealthGroup ? displayedGroups.length : displayedUsers.length} {planTab === "active" ? "active" : planTab === "completed" ? "completed" : "total"} {isWealthGroup ? "group(s)" : "plan(s)"}
+        </div>
+      </div>
 
       {isLoading ? (
         <div className="flex flex-col items-center justify-center py-20 gap-4">
@@ -840,11 +977,11 @@ export default function PlanUsersPage() {
         </div>
       ) : isWealthGroup ? (
         <div className="flex flex-col gap-4">
-          {groups.map((group) => <GroupCard key={group.id} group={group} />)}
-          {groups.length === 0 && (
+          {displayedGroups.map((group) => <GroupCard key={group.id} group={group} />)}
+          {displayedGroups.length === 0 && (
             <div className="py-20 text-center flex flex-col items-center gap-2 text-slate/40">
               <Briefcase className="w-8 h-8" />
-              <p className="text-sm font-bold">No groups found for this period.</p>
+              <p className="text-sm font-bold">No {planTab === "active" ? "active" : planTab === "completed" ? "completed" : ""} groups found for this period.</p>
             </div>
           )}
         </div>
@@ -856,6 +993,7 @@ export default function PlanUsersPage() {
                 <th className="text-left py-3.5 px-5 text-[11px] font-bold text-slate/50 uppercase tracking-wider">Member</th>
                 <th className="text-left py-3.5 px-4 text-[11px] font-bold text-slate/50 uppercase tracking-wider">Contact</th>
                 <th className="text-left py-3.5 px-4 text-[11px] font-bold text-slate/50 uppercase tracking-wider">Saving Type</th>
+                <th className="text-left py-3.5 px-4 text-[11px] font-bold text-slate/50 uppercase tracking-wider">Status</th>
                 <th className="text-right py-3.5 px-4 text-[11px] font-bold text-slate/50 uppercase tracking-wider">Balance</th>
                 <th className="text-right py-3.5 px-4 text-[11px] font-bold text-slate/50 uppercase tracking-wider">Interest / Impact</th>
 
@@ -883,7 +1021,7 @@ export default function PlanUsersPage() {
             </thead>
 
             <tbody className="divide-y divide-border/15">
-              {users.map((user) => {
+              {displayedUsers.map((user) => {
                 const matDays = user.maturityDate ? getDaysRemaining(user.maturityDate) : null;
 
                 return (
@@ -907,6 +1045,9 @@ export default function PlanUsersPage() {
                     </td>
                     <td className="py-4 px-4">
                       <SavingTypeBadge type={user.savingType} />
+                    </td>
+                    <td className="py-4 px-4">
+                      <PlanStatusBadge status={user.status} balance={user.balance} />
                     </td>
                     <td className="py-4 px-4 text-right">
                       <span className="text-[13px] font-black text-dark font-outfit">{formatCurrency(user.balance)}</span>
@@ -970,10 +1111,10 @@ export default function PlanUsersPage() {
               })}
             </tbody>
           </table>
-          {users.length === 0 && (
+          {displayedUsers.length === 0 && (
             <div className="py-20 text-center flex flex-col items-center gap-2 text-slate/40">
               <Users className="w-8 h-8" />
-              <p className="text-sm font-bold">No active plans found for this period.</p>
+              <p className="text-sm font-bold">No {planTab === "active" ? "active" : planTab === "completed" ? "completed" : ""} plans found for this period.</p>
             </div>
           )}
         </div>

@@ -165,8 +165,8 @@ function ArticleCard({
 
           {article.status === "published" && (
             <div className="flex items-center gap-2 text-slate/40 text-[10px] font-bold shrink-0">
-              <span className="flex items-center gap-0.5">
-                <Heart className="h-3.5 w-3.5 text-red-500 fill-red-500" />
+              <span className="flex items-center gap-1">
+                <Bookmark className="h-3.5 w-3.5 text-primary fill-primary" />
                 {article.bookmarks}
               </span>
               <span>·</span>

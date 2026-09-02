@@ -142,10 +142,6 @@ export function BlogCommentsModal({
                       <p className="text-xs text-dark font-medium leading-relaxed">
                         {typeof comment.content === "string" ? comment.content : String(comment.content || "")}
                       </p>
-                      <div className="flex items-center gap-1 text-[10px] text-slate/40 font-bold pt-1">
-                        <Heart className="h-3 w-3 text-red-500 fill-red-500" />
-                        <span>{likesCount} likes</span>
-                      </div>
                     </div>
                   );
                 })}

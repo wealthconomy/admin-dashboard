@@ -3,7 +3,7 @@
 import { useState, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
-import { ArrowLeft, Search, Calendar, Heart, MessageSquare, MoreVertical, FileEdit, Send, X, Trash2 } from "lucide-react";
+import { ArrowLeft, Search, Calendar, Bookmark, Heart, MessageSquare, MoreVertical, FileEdit, Send, X, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -357,8 +357,8 @@ function BlogViewAllContent() {
 
                   {article.status === "published" && (
                     <div className="flex items-center gap-2 text-slate/40 text-[10px] font-bold">
-                      <span className="flex items-center gap-0.5">
-                        <Heart className="h-3.5 w-3.5 text-red-500 fill-red-500" />
+                      <span className="flex items-center gap-1">
+                        <Bookmark className="h-3.5 w-3.5 text-primary fill-primary" />
                         {article.bookmarks}
                       </span>
                       <span>·</span>

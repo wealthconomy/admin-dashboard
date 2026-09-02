@@ -154,10 +154,6 @@ function CommentsModal({
                     <p className="text-xs text-dark font-medium leading-relaxed">
                       {comment.content}
                     </p>
-                    <div className="flex items-center gap-1 text-[10px] text-slate/40 font-bold pt-1">
-                      <Heart className="h-3 w-3 text-red-500 fill-red-500" />
-                      <span>{comment.likes} likes</span>
-                    </div>
                   </div>
                 ))}
               </div>
