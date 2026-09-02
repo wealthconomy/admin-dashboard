@@ -988,37 +988,34 @@ export default function PlanUsersPage() {
         </div>
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-border/30">
-          <table className="w-full min-w-[800px]">
+          <table className="w-full">
             <thead>
               <tr className="bg-surface/70 border-b border-border/20">
                 <th className="text-left py-3.5 px-5 text-[11px] font-bold text-slate/50 uppercase tracking-wider">Member</th>
-                <th className="text-left py-3.5 px-4 text-[11px] font-bold text-slate/50 uppercase tracking-wider">Contact</th>
-                <th className="text-left py-3.5 px-4 text-[11px] font-bold text-slate/50 uppercase tracking-wider">Saving Type</th>
+                <th className="text-left py-3.5 px-4 text-[11px] font-bold text-slate/50 uppercase tracking-wider">Type</th>
                 <th className="text-left py-3.5 px-4 text-[11px] font-bold text-slate/50 uppercase tracking-wider">Status</th>
                 <th className="text-right py-3.5 px-4 text-[11px] font-bold text-slate/50 uppercase tracking-wider">Balance</th>
                 <th className="text-right py-3.5 px-4 text-[11px] font-bold text-slate/50 uppercase tracking-wider">Interest / Impact</th>
 
-                {isWealthFix && <>
-                  <th className="text-left py-3.5 px-4 text-[11px] font-bold text-slate/50 uppercase tracking-wider">Fixed For</th>
-                  <th className="text-left py-3.5 px-4 text-[11px] font-bold text-slate/50 uppercase tracking-wider">Fix Start</th>
-                  <th className="text-left py-3.5 px-4 text-[11px] font-bold text-slate/50 uppercase tracking-wider">Maturity Date</th>
-                  <th className="text-left py-3.5 px-4 text-[11px] font-bold text-slate/50 uppercase tracking-wider">Days to Maturity</th>
-                </>}
+                {isWealthFix && (
+                  <>
+                    <th className="text-left py-3.5 px-4 text-[11px] font-bold text-slate/50 uppercase tracking-wider">Fixed For</th>
+                    <th className="text-left py-3.5 px-4 text-[11px] font-bold text-slate/50 uppercase tracking-wider">Maturity & Timeline</th>
+                  </>
+                )}
 
-                {isWealthGoal && <>
-                  <th className="text-left py-3.5 px-4 text-[11px] font-bold text-slate/50 uppercase tracking-wider">Saving For</th>
-                  <th className="text-right py-3.5 px-4 text-[11px] font-bold text-slate/50 uppercase tracking-wider">Goal Target</th>
-                  <th className="text-left py-3.5 px-4 text-[11px] font-bold text-slate/50 uppercase tracking-wider">Started</th>
-                  <th className="text-left py-3.5 px-4 text-[11px] font-bold text-slate/50 uppercase tracking-wider">Deadline</th>
-                </>}
+                {isWealthGoal && (
+                  <>
+                    <th className="text-left py-3.5 px-4 text-[11px] font-bold text-slate/50 uppercase tracking-wider">Goal</th>
+                    <th className="text-left py-3.5 px-4 text-[11px] font-bold text-slate/50 uppercase tracking-wider">Target & Deadline</th>
+                  </>
+                )}
 
-                {!isWealthFix && !isWealthGoal && <>
+                {!isWealthFix && !isWealthGoal && (
                   <th className="text-left py-3.5 px-4 text-[11px] font-bold text-slate/50 uppercase tracking-wider">
-                    {planKey === "wealthfam" ? "Family Member / Plan" : "Plan Name"}
+                    {planKey === "wealthfam" ? "Family Plan" : "Plan Details"}
                   </th>
-                  <th className="text-center py-3.5 px-4 text-[11px] font-bold text-slate/50 uppercase tracking-wider">Rate</th>
-                  <th className="text-left py-3.5 px-4 text-[11px] font-bold text-slate/50 uppercase tracking-wider">Started</th>
-                </>}
+                )}
               </tr>
             </thead>
 
@@ -1036,81 +1033,84 @@ export default function PlanUsersPage() {
                             {getInitials(user.name)}
                           </AvatarFallback>
                         </Avatar>
-                        <span className="text-[13px] font-bold text-dark whitespace-nowrap">{user.name}</span>
+                        <div className="flex flex-col min-w-0">
+                          <span className="text-[13px] font-bold text-dark whitespace-nowrap">{user.name}</span>
+                          <span className="text-[11px] text-slate/60 font-medium truncate max-w-[200px]">{user.email}</span>
+                        </div>
                       </div>
                     </td>
-                    <td className="py-4 px-4">
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-[12px] font-semibold text-dark">{user.email}</span>
-                        <span className="text-[11px] text-slate/50 font-medium">{user.phone}</span>
-                      </div>
-                    </td>
+
                     <td className="py-4 px-4">
                       <SavingTypeBadge type={user.savingType} />
                     </td>
+
                     <td className="py-4 px-4">
                       <PlanStatusBadge status={user.status} balance={user.balance} />
                     </td>
+
                     <td className="py-4 px-4 text-right">
                       <span className="text-[13px] font-black text-dark font-outfit">{formatCurrency(user.balance)}</span>
                     </td>
+
                     <td className="py-4 px-4 text-right">
                       <InterestEarnedCell savingType={user.savingType} interestAmount={user.interestAmount} wealthPactAmount={user.wealthPactAmount} />
                     </td>
 
-                    {isWealthFix && <>
+                    {isWealthFix && (
+                      <>
+                        <td className="py-4 px-4">
+                          <span className="text-[12px] font-bold text-dark whitespace-nowrap">{user.planName || user.goalName || "—"}</span>
+                        </td>
+                        <td className="py-4 px-4">
+                          <div className="flex flex-col gap-0.5">
+                            <div className="flex items-center gap-1.5 text-[12px] font-semibold text-dark">
+                              <Calendar className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+                              <span>{user.maturityDate ? formatDate(user.maturityDate) : "—"}</span>
+                              {matDays !== null && (
+                                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                                  matDays < 0 ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : matDays <= 30 ? "bg-orange-50 text-orange-600 border border-orange-200" : "bg-slate-100 text-slate-600"
+                                }`}>
+                                  {matDays < 0 ? "Matured" : `${matDays}d left`}
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[10px] text-slate/50 font-medium">
+                              Started: {user.fixStartDate ? formatDate(user.fixStartDate) : "—"}
+                            </span>
+                          </div>
+                        </td>
+                      </>
+                    )}
+
+                    {isWealthGoal && (
+                      <>
+                        <td className="py-4 px-4">
+                          <span className="text-[12px] font-bold text-dark whitespace-nowrap">{user.goalName ?? "—"}</span>
+                        </td>
+                        <td className="py-4 px-4">
+                          <div className="flex flex-col gap-0.5">
+                            <span className="text-[12px] font-bold text-dark font-outfit">
+                              {user.goalTarget != null ? formatCurrency(user.goalTarget) : "—"}
+                            </span>
+                            <span className="text-[10px] text-slate/50 font-medium flex items-center gap-1">
+                              <Calendar className="w-3 h-3 text-pink-400 shrink-0" />
+                              {user.goalStartDate ? formatDate(user.goalStartDate) : "—"} → {user.goalDeadline ? formatDate(user.goalDeadline) : "—"}
+                            </span>
+                          </div>
+                        </td>
+                      </>
+                    )}
+
+                    {!isWealthFix && !isWealthGoal && (
                       <td className="py-4 px-4">
-                        <span className="text-[12px] font-bold text-dark whitespace-nowrap">{user.planName || user.goalName || "—"}</span>
-                      </td>
-                      <td className="py-4 px-4">
-                        <span className="text-[12px] font-semibold text-dark">{user.fixStartDate ? formatDate(user.fixStartDate) : "—"}</span>
-                      </td>
-                      <td className="py-4 px-4">
-                        <span className="text-[12px] font-semibold text-dark flex items-center gap-1.5">
-                          <Calendar className="w-3.5 h-3.5 text-orange-400 shrink-0" />
-                          {user.maturityDate ? formatDate(user.maturityDate) : "—"}
-                        </span>
-                      </td>
-                      <td className="py-4 px-4">
-                        {matDays !== null ? (
-                          <span className={`text-[12px] font-bold ${matDays < 0 ? "text-emerald-600" : matDays <= 30 ? "text-orange-500" : "text-slate/60"}`}>
-                            {matDays < 0 ? "Matured" : daysLabel(matDays)}
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-[12px] font-bold text-dark whitespace-nowrap">{user.planName ?? "—"}</span>
+                          <span className="text-[10px] text-slate/50 font-medium">
+                            {user.interestRate ? `${user.interestRate}% interest` : ""} {user.goalStartDate ? `· Started ${formatDate(user.goalStartDate)}` : ""}
                           </span>
-                        ) : <span className="text-slate/30 text-xs">—</span>}
+                        </div>
                       </td>
-                    </>}
-
-                    {isWealthGoal && <>
-                      <td className="py-4 px-4">
-                        <span className="text-[12px] font-bold text-dark whitespace-nowrap">{user.goalName ?? "—"}</span>
-                      </td>
-                      <td className="py-4 px-4 text-right">
-                        <span className="text-[12px] font-bold text-dark font-outfit">
-                          {user.goalTarget != null ? formatCurrency(user.goalTarget) : "—"}
-                        </span>
-                      </td>
-                      <td className="py-4 px-4">
-                        <span className="text-[12px] font-semibold text-dark">{user.goalStartDate ? formatDate(user.goalStartDate) : "—"}</span>
-                      </td>
-                      <td className="py-4 px-4">
-                        <span className="text-[12px] font-semibold text-dark flex items-center gap-1.5">
-                          <Calendar className="w-3.5 h-3.5 text-pink-400 shrink-0" />
-                          {user.goalDeadline ? formatDate(user.goalDeadline) : "—"}
-                        </span>
-                      </td>
-                    </>}
-
-                    {!isWealthFix && !isWealthGoal && <>
-                      <td className="py-4 px-4">
-                        <span className="text-[12px] font-bold text-dark whitespace-nowrap">{user.planName ?? "—"}</span>
-                      </td>
-                      <td className="py-4 px-4 text-center">
-                        <span className="text-[12px] font-bold text-dark">{user.interestRate ? `${user.interestRate}%` : "—"}</span>
-                      </td>
-                      <td className="py-4 px-4">
-                        <span className="text-[12px] font-semibold text-dark">{user.goalStartDate ? formatDate(user.goalStartDate) : "—"}</span>
-                      </td>
-                    </>}
+                    )}
                   </tr>
                 );
               })}
