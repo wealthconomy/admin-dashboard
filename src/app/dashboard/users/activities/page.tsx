@@ -75,7 +75,7 @@ function getFriendlyActivityTitle(act: any): string {
       .replace(/₦\s*[\d,]+(?:\.\d+)?/gi, "")
       .replace(/\b\d+(?:\.\d+)?\s*kobos?\b/gi, "")
       .trim();
-    return target ? `Withdrawal from Portfolio — ${target}` : "Withdrawal from Portfolio";
+    return target ? `Withdrawal from Portfolio: ${target}` : "Withdrawal from Portfolio";
   }
   if (
     desc.includes("withdrawal from portfolio") ||
@@ -91,7 +91,7 @@ function getFriendlyActivityTitle(act: any): string {
   const topUpMatch = rawDesc.match(/top up for portfolio:?\s*(.+?)(\s*\(|$)/i);
   if (topUpMatch?.[1]) {
     const target = topUpMatch[1].trim();
-    return target ? `Portfolio Top-up — ${target}` : "Portfolio Top-up";
+    return target ? `Portfolio Top-up: ${target}` : "Portfolio Top-up";
   }
   if (desc.includes("top up for portfolio")) {
     return "Portfolio Top-up";
@@ -101,7 +101,7 @@ function getFriendlyActivityTitle(act: any): string {
   const fundedMatch = rawDesc.match(/funded\s+\w*\s*portfolio:?\s*(.+?)(\s*\(|$)/i);
   if (fundedMatch?.[1]) {
     const target = fundedMatch[1].trim();
-    return target ? `Portfolio Funding — ${target}` : "Portfolio Funding";
+    return target ? `Portfolio Funding: ${target}` : "Portfolio Funding";
   }
   if (desc.includes("funded") && desc.includes("portfolio")) {
     return "Portfolio Funding";
@@ -111,7 +111,7 @@ function getFriendlyActivityTitle(act: any): string {
   const groupContribMatch = rawDesc.match(/contribution to wealthgroup:?\s*(.+?)(\s*\(|$)/i);
   if (groupContribMatch?.[1]) {
     const target = groupContribMatch[1].trim();
-    return target ? `Group Contribution — ${target}` : "Group Contribution";
+    return target ? `Group Contribution: ${target}` : "Group Contribution";
   }
   if (desc.includes("contribution to wealthgroup")) {
     return "Group Contribution";
@@ -121,13 +121,13 @@ function getFriendlyActivityTitle(act: any): string {
   const termGroupMatch = rawDesc.match(/refund from terminated wealth group:?\s*(.+?)(\s*\(|$)/i);
   if (termGroupMatch?.[1]) {
     const target = termGroupMatch[1].trim();
-    return target ? `Group Refund — ${target}` : "Group Refund";
+    return target ? `Group Refund: ${target}` : "Group Refund";
   }
 
   // 6. Downloaded library material
   const downloadMatch = rawDesc.match(/downloaded library material:?\s*"?(.+?)"?$/i);
   if (downloadMatch?.[1]) {
-    return `Library Download — ${downloadMatch[1].trim()}`;
+    return `Library Download: ${downloadMatch[1].trim()}`;
   }
   if (desc.includes("downloaded library material")) {
     return "Library Download";
