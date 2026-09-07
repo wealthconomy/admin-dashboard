@@ -36,8 +36,7 @@ import {
   useSuspendUserMutation,
   useUnsuspendUserMutation,
   useBlockUserMutation,
-  useUnblockUserMutation,
-  useDeleteUserMutation
+  useUnblockUserMutation
 } from "@/lib/redux/features/usersApi";
 import {
   useResetUserPasswordMutation,
@@ -189,13 +188,12 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
   const [unsuspendUserMutation] = useUnsuspendUserMutation();
   const [blockUserMutation] = useBlockUserMutation();
   const [unblockUserMutation] = useUnblockUserMutation();
-  const [deleteUserMutation] = useDeleteUserMutation();
   const [resetPasswordMutation] = useResetUserPasswordMutation();
   const [resetMfaMutation] = useResetUserMfaMutation();
 
   const [suspendStep, setSuspendStep] = useState(1);
   const [suspendUser, setSuspendUser] = useState<any | null>(null);
-  const [modalMode, setModalMode] = useState<"suspend" | "block" | "delete">("suspend");
+  const [modalMode, setModalMode] = useState<"suspend" | "block">("suspend");
   const [suspendData, setSuspendData] = useState({
     reason: "",
     duration: "30 Days",
@@ -206,13 +204,6 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
   const handleSuspendToggle = async () => {
     setIsSubmitting(true);
     try {
-      if (modalMode === "delete") {
-        await deleteUserMutation(resolvedId).unwrap();
-        toast.success("User successfully deleted!");
-        router.push("/dashboard/users");
-        return;
-      }
-
       if (userStatus === "Active") {
         if (modalMode === "block") {
           await blockUserMutation({ id: resolvedId, reason: suspendData.reason }).unwrap();
@@ -399,14 +390,6 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
                 >
                    <ShieldAlert className="h-3.5 w-3.5" />
                    Reset MFA
-                </DropdownMenuItem>
-                <div className="h-px bg-border/20 my-1 mx-1" />
-                <DropdownMenuItem 
-                  onClick={() => { setSuspendUser({ id: resolvedId, name: user?.name, status: userStatus }); setModalMode("delete"); setSuspendData(prev => ({...prev, reason: "Administrative deletion"})); setSuspendStep(2); }} 
-                  className="py-2.5 px-4 text-xs font-bold text-red-600 focus:bg-red-50 cursor-pointer rounded-xl gap-2"
-                >
-                   <Trash2 className="h-3.5 w-3.5" />
-                   Delete User
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -650,15 +633,15 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
                     <div className="space-y-3">
                        <div className="flex justify-between items-start">
                           <p className="text-[10px] font-bold text-slate/30 uppercase tracking-tighter">Action</p>
-                          <p className={`text-xs font-bold ${modalMode === 'delete' ? 'text-red-700' : (userStatus === 'Active' ? 'text-red-500' : 'text-emerald-600')}`}>
-                             {modalMode === 'delete' ? 'Delete (Permanent)' : (userStatus === 'Active' 
+                          <p className={`text-xs font-bold ${userStatus === 'Active' ? 'text-red-500' : 'text-emerald-600'}`}>
+                             {userStatus === 'Active' 
                                ? (modalMode === "block" ? "Block (Permanent)" : `Suspend (${suspendData.duration})`) 
-                               : 'Reactivate')}
+                               : 'Reactivate'}
                           </p>
                        </div>
                        <div className="space-y-1">
                           <p className="text-[10px] font-bold text-slate/30 uppercase tracking-tighter">Reason</p>
-                          <p className="text-xs font-medium text-dark leading-relaxed line-clamp-3">"{suspendData.reason || "User deletion requested"}"</p>
+                          <p className="text-xs font-medium text-dark leading-relaxed line-clamp-3">"{suspendData.reason || "Administrative action"}"</p>
                        </div>
                     </div>
                  </div>
@@ -667,7 +650,6 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
                     onClick={handleSuspendToggle}
                     disabled={isSubmitting}
                     className={`w-full h-12 rounded-xl font-bold shadow-lg transition-all active:scale-95 ${
-                      modalMode === 'delete' ? 'bg-[#7F1D1D] hover:bg-[#450a0a] text-white' : 
                       userStatus === 'Active' ? (modalMode === 'block' ? 'bg-[#991B1B] hover:bg-[#7F1D1D] text-white shadow-red-900/10' : 'bg-[#D93F3F] hover:bg-[#C23535] text-white shadow-red-900/10') : 'bg-[#155D5F] hover:bg-[#0F4A4C] text-white shadow-primary/10'
                     }`}
                   >
@@ -675,7 +657,6 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
                       <Loader2 className="h-4 w-4 animate-spin mx-auto text-white/80" />
                     ) : (
                      `Confirm ${
-                       modalMode === 'delete' ? 'Deletion' :
                        userStatus === 'Active' ? (modalMode === 'block' ? 'Blocking' : 'Suspension') : 'Activation'
                      }`
                     )}

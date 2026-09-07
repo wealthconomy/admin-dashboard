@@ -14,10 +14,10 @@ import {
   X,
   User,
   FileText,
-  DollarSign,
   Shield,
   Server,
   Calendar,
+  Sparkles,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -45,6 +45,8 @@ const ACTIVITY_TYPES = [
   { label: "All Types", value: "" },
   { label: "Financial", value: "FINANCIAL" },
   { label: "Security", value: "SECURITY" },
+  { label: "Profile", value: "PROFILE" },
+  { label: "Engagement", value: "ENGAGEMENT" },
   { label: "System", value: "SYSTEM" },
 ];
 
@@ -59,20 +61,101 @@ const PERIODS = [
   { label: "This Year", value: "year" },
 ];
 
+function getFriendlyActivityTitle(act: any): string {
+  const rawDesc = String(act?.description || act?.details || "");
+  const desc = rawDesc.toLowerCase();
+  const rawTitle = act?.title || act?.action || "Activity";
+
+  // 1. Withdrawal / Refund from portfolio (e.g. "withdrawal from portfolio: Benz", "withdrawl from porfolio:Benz", "refund from terminated portfolio: Benz")
+  const withdrawPortMatch = rawDesc.match(
+    /(?:withdraw(?:al|l|n)?|refund)\s+(?:to\s+\w+\s+)?from\s+(?:terminated\s+)?por?tfolio:?\s*(.+?)(\s*\(|$)/i
+  );
+  if (withdrawPortMatch?.[1]) {
+    const target = withdrawPortMatch[1]
+      .replace(/₦\s*[\d,]+(?:\.\d+)?/gi, "")
+      .replace(/\b\d+(?:\.\d+)?\s*kobos?\b/gi, "")
+      .trim();
+    return target ? `Withdrawal from Portfolio — ${target}` : "Withdrawal from Portfolio";
+  }
+  if (
+    desc.includes("withdrawal from portfolio") ||
+    desc.includes("withdrawl from porfolio") ||
+    desc.includes("refund from terminated") ||
+    desc.includes("portfolio refund") ||
+    rawTitle.toLowerCase().includes("portfolio refund")
+  ) {
+    return "Withdrawal from Portfolio";
+  }
+
+  // 2. Top up for portfolio
+  const topUpMatch = rawDesc.match(/top up for portfolio:?\s*(.+?)(\s*\(|$)/i);
+  if (topUpMatch?.[1]) {
+    const target = topUpMatch[1].trim();
+    return target ? `Portfolio Top-up — ${target}` : "Portfolio Top-up";
+  }
+  if (desc.includes("top up for portfolio")) {
+    return "Portfolio Top-up";
+  }
+
+  // 3. Funded portfolio
+  const fundedMatch = rawDesc.match(/funded\s+\w*\s*portfolio:?\s*(.+?)(\s*\(|$)/i);
+  if (fundedMatch?.[1]) {
+    const target = fundedMatch[1].trim();
+    return target ? `Portfolio Funding — ${target}` : "Portfolio Funding";
+  }
+  if (desc.includes("funded") && desc.includes("portfolio")) {
+    return "Portfolio Funding";
+  }
+
+  // 4. Contribution to wealthgroup
+  const groupContribMatch = rawDesc.match(/contribution to wealthgroup:?\s*(.+?)(\s*\(|$)/i);
+  if (groupContribMatch?.[1]) {
+    const target = groupContribMatch[1].trim();
+    return target ? `Group Contribution — ${target}` : "Group Contribution";
+  }
+  if (desc.includes("contribution to wealthgroup")) {
+    return "Group Contribution";
+  }
+
+  // 5. Refund from terminated wealth group
+  const termGroupMatch = rawDesc.match(/refund from terminated wealth group:?\s*(.+?)(\s*\(|$)/i);
+  if (termGroupMatch?.[1]) {
+    const target = termGroupMatch[1].trim();
+    return target ? `Group Refund — ${target}` : "Group Refund";
+  }
+
+  // 6. Downloaded library material
+  const downloadMatch = rawDesc.match(/downloaded library material:?\s*"?(.+?)"?$/i);
+  if (downloadMatch?.[1]) {
+    return `Library Download — ${downloadMatch[1].trim()}`;
+  }
+  if (desc.includes("downloaded library material")) {
+    return "Library Download";
+  }
+
+  // 7. Profile update
+  if (desc.includes("profile")) {
+    return "Profile Updated";
+  }
+
+  return rawTitle;
+}
+
 export default function ActivitiesPage() {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedType, setSelectedType] = useState("");
   const [selectedPeriod, setSelectedPeriod] = useState("all_time");
   const [selectedLog, setSelectedLog] = useState<any | null>(null);
-  const [page, setPage] = useState(1);
+  const [cursorStack, setCursorStack] = useState<string[]>([]);
+  const [currentCursor, setCurrentCursor] = useState<string | undefined>(undefined);
   const limit = 20;
 
   const { data: activitiesResponse, isLoading, isFetching, isError, refetch } = useGetActivitiesQuery({
     q: searchQuery.trim() || undefined,
     type: selectedType || undefined,
     period: selectedPeriod !== "all_time" ? selectedPeriod : undefined,
-    page,
+    after: currentCursor,
     limit,
   });
 
@@ -86,46 +169,61 @@ export default function ActivitiesPage() {
     ? rawData
     : [];
 
-  const paginationMeta = activitiesResponse?.data?.meta || activitiesResponse?.meta || activitiesResponse?.pagination || rawData?.meta || rawData?.pagination || {};
-  const totalRecords = Number(paginationMeta.total ?? paginationMeta.totalItems ?? paginationMeta.totalCount ?? paginationMeta.count ?? activitiesList.length);
-  const totalPages = Number(paginationMeta.pages ?? paginationMeta.totalPages ?? paginationMeta.pageCount ?? Math.max(1, Math.ceil(totalRecords / limit)));
+  const nextCursor = rawData?.nextCursor;
+  const hasNext = Boolean(rawData?.hasNext ?? (nextCursor != null));
+  const displayedActivities = activitiesList;
 
-  const displayedActivities = (activitiesList.length > limit && totalRecords === activitiesList.length)
-    ? activitiesList.slice((page - 1) * limit, page * limit)
-    : activitiesList;
+  const renderTypeBadge = (type: string, act?: any) => {
+    const rawType = (type || "").toUpperCase();
+    const desc = String(act?.description || act?.details || "").toUpperCase();
+    const title = String(act?.title || act?.action || "").toUpperCase();
 
-  const renderTypeBadge = (type: string) => {
-    const normalized = (type || "").toUpperCase();
-    switch (normalized) {
-      case "FINANCIAL":
-        return (
-          <Badge className="bg-emerald-50 hover:bg-emerald-50 text-emerald-700 border border-emerald-200/60 px-2.5 py-1 rounded-full gap-1.5 font-bold text-[10px] shadow-none flex items-center justify-center whitespace-nowrap">
-            <DollarSign className="h-3 w-3 text-emerald-600" />
-            Financial
-          </Badge>
-        );
-      case "SECURITY":
-        return (
-          <Badge className="bg-amber-50 hover:bg-amber-50 text-amber-700 border border-amber-200/60 px-2.5 py-1 rounded-full gap-1.5 font-bold text-[10px] shadow-none flex items-center justify-center whitespace-nowrap">
-            <Shield className="h-3 w-3 text-amber-600" />
-            Security
-          </Badge>
-        );
-      case "SYSTEM":
-        return (
-          <Badge className="bg-blue-50 hover:bg-blue-50 text-blue-700 border border-blue-200/60 px-2.5 py-1 rounded-full gap-1.5 font-bold text-[10px] shadow-none flex items-center justify-center whitespace-nowrap">
-            <Server className="h-3 w-3 text-blue-600" />
-            System
-          </Badge>
-        );
-      default:
-        return (
-          <Badge className="bg-slate-50 hover:bg-slate-50 text-slate-700 border border-slate-200 px-2.5 py-1 rounded-full gap-1 font-bold text-[10px] shadow-none flex items-center justify-center whitespace-nowrap">
-            <Activity className="h-3 w-3 text-slate-500" />
-            {type || "General"}
-          </Badge>
-        );
+    if (rawType.includes("FINANCIAL") || (!rawType && (desc.includes("PORTFOLIO") || desc.includes("WEALTHGROUP") || desc.includes("WALLET") || desc.includes("FUND")))) {
+      return (
+        <Badge className="bg-indigo-50 hover:bg-indigo-50 text-indigo-700 border border-indigo-200/60 px-2.5 py-1 rounded-full gap-1.5 font-bold text-[10px] shadow-none flex items-center justify-center whitespace-nowrap">
+          <span className="text-[11px] font-bold text-indigo-600 leading-none">₦</span>
+          Financial
+        </Badge>
+      );
     }
+    if (rawType.includes("SECURITY") || (!rawType && (desc.includes("PASSWORD") || desc.includes("PIN") || desc.includes("LOGIN") || desc.includes("AUTH")))) {
+      return (
+        <Badge className="bg-amber-50 hover:bg-amber-50 text-amber-700 border border-amber-200/60 px-2.5 py-1 rounded-full gap-1.5 font-bold text-[10px] shadow-none flex items-center justify-center whitespace-nowrap">
+          <Shield className="h-3 w-3 text-amber-600" />
+          Security
+        </Badge>
+      );
+    }
+    if (rawType.includes("PROFILE") || rawType.includes("USER") || rawType.includes("ACCOUNT") || (!rawType && (desc.includes("PROFILE") || title.includes("PROFILE")))) {
+      return (
+        <Badge className="bg-sky-50 hover:bg-sky-50 text-sky-700 border border-sky-200/60 px-2.5 py-1 rounded-full gap-1.5 font-bold text-[10px] shadow-none flex items-center justify-center whitespace-nowrap">
+          <User className="h-3 w-3 text-sky-600" />
+          Profile
+        </Badge>
+      );
+    }
+    if (rawType.includes("ENGAGEMENT") || rawType.includes("INTERACTION") || (!rawType && (desc.includes("LIBRARY") || desc.includes("DOWNLOAD") || desc.includes("REFERRAL")))) {
+      return (
+        <Badge className="bg-pink-50 hover:bg-pink-50 text-pink-700 border border-pink-200/60 px-2.5 py-1 rounded-full gap-1.5 font-bold text-[10px] shadow-none flex items-center justify-center whitespace-nowrap">
+          <Sparkles className="h-3 w-3 text-pink-600" />
+          Engagement
+        </Badge>
+      );
+    }
+    if (rawType.includes("SYSTEM")) {
+      return (
+        <Badge className="bg-blue-50 hover:bg-blue-50 text-blue-700 border border-blue-200/60 px-2.5 py-1 rounded-full gap-1.5 font-bold text-[10px] shadow-none flex items-center justify-center whitespace-nowrap">
+          <Server className="h-3 w-3 text-blue-600" />
+          System
+        </Badge>
+      );
+    }
+    return (
+      <Badge className="bg-slate-50 hover:bg-slate-50 text-slate-700 border border-slate-200 px-2.5 py-1 rounded-full gap-1 font-bold text-[10px] shadow-none flex items-center justify-center whitespace-nowrap">
+        <Activity className="h-3 w-3 text-slate-500" />
+        {type || "General"}
+      </Badge>
+    );
   };
 
   const renderStatusBadge = (status?: string) => {
@@ -181,7 +279,8 @@ export default function ActivitiesPage() {
               value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value);
-                setPage(1);
+                setCursorStack([]);
+                setCurrentCursor(undefined);
               }}
               className="w-full pl-10 pr-4 h-11 bg-surface border-border/30 rounded-xl text-xs font-medium focus-visible:ring-primary/20 shadow-none"
             />
@@ -196,19 +295,28 @@ export default function ActivitiesPage() {
                 <ChevronDown className="h-3.5 w-3.5" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-44 rounded-2xl border-border/50 p-2 shadow-xl bg-white">
+            <DropdownMenuContent className="w-48 rounded-2xl border-border/50 p-2 shadow-xl bg-white">
               {ACTIVITY_TYPES.map((t) => (
                 <DropdownMenuItem
                   key={t.value}
                   onClick={() => {
                     setSelectedType(t.value);
-                    setPage(1);
+                    setCursorStack([]);
+                    setCurrentCursor(undefined);
                   }}
-                  className={`rounded-xl py-2 px-3 text-xs font-medium cursor-pointer ${
+                  className={`rounded-xl py-2 px-3 text-xs font-medium cursor-pointer flex items-center justify-between ${
                     selectedType === t.value ? "bg-primary/10 text-primary font-bold" : "text-dark"
                   }`}
                 >
-                  {t.label}
+                  <span className="flex items-center gap-2">
+                    {t.value === "FINANCIAL" && <span className="w-2 h-2 rounded-full bg-indigo-500" />}
+                    {t.value === "SECURITY" && <span className="w-2 h-2 rounded-full bg-amber-500" />}
+                    {t.value === "PROFILE" && <span className="w-2 h-2 rounded-full bg-sky-500" />}
+                    {t.value === "ENGAGEMENT" && <span className="w-2 h-2 rounded-full bg-pink-500" />}
+                    {t.value === "SYSTEM" && <span className="w-2 h-2 rounded-full bg-blue-500" />}
+                    {!t.value && <span className="w-2 h-2 rounded-full bg-slate-300" />}
+                    {t.label}
+                  </span>
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>
@@ -229,7 +337,8 @@ export default function ActivitiesPage() {
                   key={p.value}
                   onClick={() => {
                     setSelectedPeriod(p.value);
-                    setPage(1);
+                    setCursorStack([]);
+                    setCurrentCursor(undefined);
                   }}
                   className={`rounded-xl py-2 px-3 text-xs font-medium cursor-pointer ${
                     selectedPeriod === p.value ? "bg-primary/10 text-primary font-bold" : "text-dark"
@@ -249,12 +358,12 @@ export default function ActivitiesPage() {
           <Table className="min-w-full table-fixed">
             <TableHeader className="bg-surface/50">
               <TableRow className="border-border/50 hover:bg-transparent">
-                <TableHead className="py-4 px-4 text-slate/50 font-bold text-[11px] uppercase tracking-widest w-[140px]">Timestamp</TableHead>
-                <TableHead className="py-4 px-4 text-slate/50 font-bold text-[11px] uppercase tracking-widest w-[190px]">User</TableHead>
-                <TableHead className="py-4 px-4 text-slate/50 font-bold text-[11px] uppercase tracking-widest w-[180px]">Activity Title</TableHead>
-                <TableHead className="py-4 px-4 text-slate/50 font-bold text-[11px] uppercase tracking-widest w-[130px]">Type</TableHead>
-                <TableHead className="py-4 px-4 text-slate/50 font-bold text-[11px] uppercase tracking-widest w-[120px]">Status</TableHead>
-                <TableHead className="py-4 px-4 text-slate/50 font-bold text-[11px] uppercase tracking-widest w-[200px]">Description</TableHead>
+                <TableHead className="py-4 px-4 text-black font-extrabold text-[11px] uppercase tracking-wider w-[140px]">Timestamp</TableHead>
+                <TableHead className="py-4 px-4 text-black font-extrabold text-[11px] uppercase tracking-wider w-[190px]">User</TableHead>
+                <TableHead className="py-4 px-4 text-black font-extrabold text-[11px] uppercase tracking-wider w-[180px]">Activity Title</TableHead>
+                <TableHead className="py-4 px-4 text-black font-extrabold text-[11px] uppercase tracking-wider w-[130px]">Type</TableHead>
+                <TableHead className="py-4 px-4 text-black font-extrabold text-[11px] uppercase tracking-wider w-[120px]">Status</TableHead>
+                <TableHead className="py-4 px-4 text-black font-extrabold text-[11px] uppercase tracking-wider w-[200px]">Description</TableHead>
                 <TableHead className="py-4 px-4 w-[60px]"></TableHead>
               </TableRow>
             </TableHeader>
@@ -288,7 +397,7 @@ export default function ActivitiesPage() {
                   const displayAvatar = userObj.imageUrl || act.imageUrl || "";
                   const dateStr = act.createdAt || act.timestamp;
                   const formattedDate = dateStr ? format(new Date(dateStr), "HH:mm, MMM dd, yyyy") : "-";
-                  const title = act.title || act.action || "Activity";
+                  const title = getFriendlyActivityTitle(act);
                   const desc = act.description || act.details || "-";
                   const status = act.metadata?.status || act.status || "SUCCESS";
 
@@ -321,7 +430,7 @@ export default function ActivitiesPage() {
                         </span>
                       </TableCell>
                       <TableCell className="py-4 px-4">
-                        {renderTypeBadge(act.type)}
+                        {renderTypeBadge(act.type, act)}
                       </TableCell>
                       <TableCell className="py-4 px-4">
                         {renderStatusBadge(status)}
@@ -379,73 +488,52 @@ export default function ActivitiesPage() {
       {/* Pagination indicators */}
       <div className="flex flex-col sm:flex-row justify-between items-center gap-3 text-xs font-bold text-slate/50 pt-6 px-1">
         <span>
-          Showing {totalRecords === 0 ? 0 : (page - 1) * limit + 1} - {Math.min(page * limit, totalRecords)} of {totalRecords} records (Page {page} of {totalPages || 1})
+          Showing {displayedActivities.length} record{displayedActivities.length === 1 ? "" : "s"} &bull; Page {cursorStack.length + 1}
         </span>
-        <div className="flex items-center gap-1.5 flex-wrap">
+        <div className="flex items-center gap-2">
           <Button 
             variant="outline" 
             size="sm" 
             onClick={() => {
-              setPage(p => Math.max(1, p - 1));
-              setTimeout(() => {
-                window.scrollTo({ top: 0, behavior: "smooth" });
-                const main = document.getElementById('main-scroll-container');
-                if (main) main.scrollTo({ top: 0, behavior: "smooth" });
-              }, 50);
+              if (cursorStack.length === 0) return;
+              const prev = cursorStack[cursorStack.length - 1];
+              setCursorStack(s => s.slice(0, -1));
+              setCurrentCursor(prev || undefined);
+              window.scrollTo({ top: 0, behavior: "smooth" });
+              const main = document.getElementById('main-scroll-container');
+              if (main) main.scrollTo({ top: 0, behavior: "smooth" });
             }}
-            disabled={page === 1 || isFetching}
-            className={`h-8 px-3 text-[11px] font-bold rounded-lg ${page === 1 ? 'text-slate/40 border-slate-200 cursor-not-allowed opacity-50' : 'text-dark border-slate-200 hover:bg-[#E8F3F3] hover:text-[#155D5F]'}`}
+            disabled={cursorStack.length === 0 || isFetching}
+            className={`h-8 px-3 text-[11px] font-bold rounded-lg ${
+              cursorStack.length === 0
+                ? 'text-slate/40 border-slate-200 cursor-not-allowed opacity-50'
+                : 'text-dark border-slate-200 hover:bg-[#E8F3F3] hover:text-[#155D5F]'
+            }`}
           >
             Prev
           </Button>
 
-          {Array.from({ length: totalPages || 1 }).map((_, idx) => {
-            const p = idx + 1;
-            // Show first page, last page, current page, and +/- 1 from current
-            if (p === 1 || p === totalPages || (p >= page - 1 && p <= page + 1)) {
-              return (
-                <Button
-                  key={p}
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setPage(p);
-                    setTimeout(() => {
-                      window.scrollTo({ top: 0, behavior: "smooth" });
-                      const main = document.getElementById('main-scroll-container');
-                      if (main) main.scrollTo({ top: 0, behavior: "smooth" });
-                    }, 50);
-                  }}
-                  disabled={isFetching}
-                  className={`h-8 min-w-[32px] px-2.5 text-[11px] font-bold rounded-lg ${
-                    page === p
-                      ? 'bg-[#155D5F]/10 text-[#155D5F] border-[#155D5F] hover:bg-[#155D5F]/20'
-                      : 'text-dark border-slate-200 hover:bg-[#E8F3F3] hover:text-[#155D5F]'
-                  }`}
-                >
-                  {p}
-                </Button>
-              );
-            }
-            if (p === page - 2 || p === page + 2) {
-              return <span key={p} className="px-1 text-slate/40 text-xs">...</span>;
-            }
-            return null;
-          })}
+          <span className="px-2 text-xs font-bold text-dark">
+            Page {cursorStack.length + 1}
+          </span>
 
           <Button 
             variant="outline" 
             size="sm" 
             onClick={() => {
-              setPage(p => Math.min(totalPages, p + 1));
-              setTimeout(() => {
-                window.scrollTo({ top: 0, behavior: "smooth" });
-                const main = document.getElementById('main-scroll-container');
-                if (main) main.scrollTo({ top: 0, behavior: "smooth" });
-              }, 50);
+              if (!hasNext || !nextCursor) return;
+              setCursorStack(s => [...s, currentCursor || ""]);
+              setCurrentCursor(nextCursor);
+              window.scrollTo({ top: 0, behavior: "smooth" });
+              const main = document.getElementById('main-scroll-container');
+              if (main) main.scrollTo({ top: 0, behavior: "smooth" });
             }}
-            disabled={page >= totalPages || isFetching}
-            className={`h-8 px-3 text-[11px] font-bold rounded-lg ${page >= totalPages ? 'text-slate/40 border-slate-200 cursor-not-allowed opacity-50' : 'text-dark border-slate-200 hover:bg-[#E8F3F3] hover:text-[#155D5F]'}`}
+            disabled={!hasNext || isFetching}
+            className={`h-8 px-3 text-[11px] font-bold rounded-lg ${
+              !hasNext
+                ? 'text-slate/40 border-slate-200 cursor-not-allowed opacity-50'
+                : 'text-dark border-slate-200 hover:bg-[#E8F3F3] hover:text-[#155D5F]'
+            }`}
           >
             Next
           </Button>
@@ -509,11 +597,11 @@ export default function ActivitiesPage() {
                   </div>
                   <div>
                     <p className="text-[11px] font-bold text-slate/50">Activity Type</p>
-                    <div className="mt-1">{renderTypeBadge(selectedLog.type)}</div>
+                    <div className="mt-1">{renderTypeBadge(selectedLog.type, selectedLog)}</div>
                   </div>
                   <div className="col-span-2">
                     <p className="text-[11px] font-bold text-slate/50">Activity Title</p>
-                    <p className="text-sm font-extrabold text-dark mt-0.5">{selectedLog.title || selectedLog.action || "N/A"}</p>
+                    <p className="text-sm font-extrabold text-dark mt-0.5">{getFriendlyActivityTitle(selectedLog)}</p>
                   </div>
                   <div className="col-span-2">
                     <p className="text-[11px] font-bold text-slate/50">Description</p>

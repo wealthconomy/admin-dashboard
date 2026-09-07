@@ -50,30 +50,158 @@ const formatDescription = (desc: string | null | undefined): string => {
 };
 
 
+interface TransactionActionInfo {
+  category: "WALLET_DEPOSIT" | "PORTFOLIO_FUND" | "PORTFOLIO_TOPUP" | "PORTFOLIO_WITHDRAW" | "GROUP_CONTRIBUTION" | "REFERRAL" | "BANK_PAYOUT" | "OTHER";
+  label: string;
+  badgeClass: string;
+  subtext: string;
+  isCredit: boolean;
+}
+
+const getTransactionActionInfo = (tx: any): TransactionActionInfo => {
+  const ref = String(tx?.reference || tx?.id || "").toUpperCase();
+  const desc = String(tx?.description || "").toLowerCase();
+  const rawAction = String(tx?.actionType || tx?.type || "").toUpperCase();
+  const isCredit = rawAction === "CREDIT" || rawAction === "DEPOSIT" || Number(tx?.amount || 0) > 0;
+
+  // 1. Portfolio Creation / Initial Funding
+  if (ref.startsWith("PORTFOLIO_CREATION") || desc.includes("funded ") || desc.includes("portfolio creation")) {
+    return {
+      category: "PORTFOLIO_FUND",
+      label: "Fund Portfolio",
+      badgeClass: "bg-purple-50 text-purple-700 border-purple-200",
+      subtext: tx?.description || "Deposit into Portfolio",
+      isCredit: false,
+    };
+  }
+
+  // 2. Portfolio Top-up
+  if (ref.startsWith("PORTFOLIO_TOPUP") || desc.includes("top up for portfolio") || desc.includes("top-up for portfolio")) {
+    return {
+      category: "PORTFOLIO_TOPUP",
+      label: "Portfolio Top-up",
+      badgeClass: "bg-blue-50 text-blue-700 border-blue-200",
+      subtext: tx?.description || "Top up to Portfolio",
+      isCredit: false,
+    };
+  }
+
+  // 3. Withdrawal from Portfolio back into Main Wallet
+  if (ref.startsWith("PORTFOLIO_WITHDRAW") || desc.includes("withdrawal from portfolio")) {
+    return {
+      category: "PORTFOLIO_WITHDRAW",
+      label: "Portfolio to Wallet",
+      badgeClass: "bg-amber-50 text-amber-700 border-amber-200",
+      subtext: tx?.description || "Withdrawn to Main Wallet",
+      isCredit: true,
+    };
+  }
+
+  // 4. WealthGroup Contribution
+  if (ref.startsWith("WGC_") || desc.includes("wealthgroup") || desc.includes("contribution to")) {
+    return {
+      category: "GROUP_CONTRIBUTION",
+      label: "Group Contribution",
+      badgeClass: "bg-violet-50 text-violet-700 border-violet-200",
+      subtext: tx?.description || "WealthGroup Contribution",
+      isCredit: false,
+    };
+  }
+
+  // 5. Referral Reward
+  if (ref.startsWith("REFERRAL") || rawAction === "REFERRAL" || desc.includes("referral reward") || desc.includes("referral")) {
+    return {
+      category: "REFERRAL",
+      label: "Referral Bonus",
+      badgeClass: "bg-teal-50 text-teal-700 border-teal-200",
+      subtext: "Bonus credited to wallet",
+      isCredit: true,
+    };
+  }
+
+  // 6. Deposit (via PAGA, Bank transfer, Card, Top-up, or raw DEPOSIT)
+  if (
+    desc.includes("wallet top-up") ||
+    desc.includes("top-up") ||
+    desc.includes("topup") ||
+    desc.includes("paga") ||
+    desc.includes("paystack") ||
+    desc.includes("monnify") ||
+    desc.includes("bank transfer") ||
+    desc.includes("deposit") ||
+    rawAction.includes("DEPOSIT") ||
+    rawAction.includes("TOPUP") ||
+    ref.startsWith("DEP")
+  ) {
+    return {
+      category: "WALLET_DEPOSIT",
+      label: "Deposit",
+      badgeClass: "bg-cyan-50 text-cyan-700 border-cyan-200",
+      subtext: tx?.description || "Deposit to Main Wallet",
+      isCredit: true,
+    };
+  }
+
+  // 7. External Bank Withdrawal / Cash-out
+  if (rawAction === "WITHDRAWAL" && !desc.includes("portfolio") && !desc.includes("wealthgroup")) {
+    return {
+      category: "BANK_PAYOUT",
+      label: "Bank Payout",
+      badgeClass: "bg-rose-50 text-rose-700 border-rose-200",
+      subtext: tx?.description || "Payout to Bank Account",
+      isCredit: false,
+    };
+  }
+
+  // 8. Fallback
+  const fallbackLabel = tx?.actionType || tx?.type || "Transaction";
+  const isDepositFallback = String(fallbackLabel).toLowerCase().includes("deposit") || desc.includes("deposit");
+  return {
+    category: isDepositFallback ? "WALLET_DEPOSIT" : "OTHER",
+    label: isDepositFallback ? "Deposit" : fallbackLabel,
+    badgeClass: isDepositFallback ? "bg-cyan-50 text-cyan-700 border-cyan-200" : "bg-slate-50 text-slate-700 border-slate-200",
+    subtext: tx?.description || "-",
+    isCredit,
+  };
+};
+
 const STATUSES = ["Successful", "Pending", "Failed"];
-const TYPES = ["Deposit", "Withdrawal", "Wealth TopUp"];
+const ACTION_FILTERS = [
+  { label: "All Actions", value: "All" },
+  { label: "Deposit", value: "WALLET_DEPOSIT" },
+  { label: "Fund Portfolio", value: "PORTFOLIO_FUND" },
+  { label: "Portfolio Top-up", value: "PORTFOLIO_TOPUP" },
+  { label: "Portfolio to Wallet", value: "PORTFOLIO_WITHDRAW" },
+  { label: "Group Contribution", value: "GROUP_CONTRIBUTION" },
+  { label: "Referral Bonus", value: "REFERRAL" },
+  { label: "Bank Payout", value: "BANK_PAYOUT" },
+];
 
 export default function TransactionsPage() {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All Status");
-  const [typeFilter, setTypeFilter] = useState("All Types");
+  const [actionFilter, setActionFilter] = useState("All");
   const [logModal, setLogModal] = useState<any | null>(null);
   const [receiptModal, setReceiptModal] = useState<any | null>(null);
-  const [page, setPage] = useState(1);
+  const [cursorStack, setCursorStack] = useState<string[]>([]);
+  const [currentCursor, setCurrentCursor] = useState<string | undefined>(undefined);
   const limit = 20;
 
   const { data: transactionsData, isLoading, isFetching, isError } = useGetTransactionsQuery({
     search: searchQuery || undefined,
+    q: searchQuery || undefined,
     status: statusFilter !== "All Status" ? statusFilter : undefined,
-    type: typeFilter !== "All Types" ? typeFilter : undefined,
-    page,
+    after: currentCursor || undefined,
     limit,
   });
   const transactionList = getSafeArray(transactionsData);
 
+  const rawData = transactionsData?.data || transactionsData;
+  const nextCursor = rawData?.nextCursor;
+  const hasNext = Boolean(rawData?.hasNext ?? (nextCursor != null));
+
   // Fetch users to build an email → userId map.
-  // The transaction API returns email but NOT userId, so we need this lookup.
   const { data: usersData } = useGetUsersQuery({ limit: 200 });
   const emailToUserId = (() => {
     const map = new Map<string, string>();
@@ -95,17 +223,12 @@ export default function TransactionsPage() {
 
   const filtered = transactionList.filter((tx: any) => {
     const matchStatus = statusFilter === "All Status" || tx.status === statusFilter;
-    const matchType = typeFilter === "All Types" || tx.actionType === typeFilter;
-    return matchStatus && matchType;
+    const actionInfo = getTransactionActionInfo(tx);
+    const matchAction = actionFilter === "All" || actionInfo.category === actionFilter || tx.actionType === actionFilter;
+    return matchStatus && matchAction;
   });
 
-  const paginationMeta = transactionsData?.data?.meta || transactionsData?.meta || transactionsData?.pagination || transactionsData?.data?.pagination || {};
-  const totalRecords = Number(paginationMeta.total ?? paginationMeta.totalItems ?? paginationMeta.totalCount ?? paginationMeta.count ?? filtered.length);
-  const totalPages = Number(paginationMeta.pages ?? paginationMeta.totalPages ?? paginationMeta.pageCount ?? Math.max(1, Math.ceil(totalRecords / limit)));
-
-  const displayedTransactions = (filtered.length > limit && totalRecords === filtered.length)
-    ? filtered.slice((page - 1) * limit, page * limit)
-    : filtered;
+  const displayedTransactions = filtered;
 
   const statusBadge = (s: string) => {
     const map: Record<string, string> = {
@@ -119,7 +242,7 @@ export default function TransactionsPage() {
       Failed: "bg-red-500",
     };
     return (
-      <Badge className={`${map[s] ?? "bg-slate-50 text-slate-500 border-slate-100"} border px-3.5 py-1.5 rounded-full gap-1.5 font-bold text-[10px] shadow-none flex items-center whitespace-nowrap`}>
+      <Badge className={`${map[s] ?? "bg-slate-50 text-slate-500 border-slate-100"} border px-3 py-1 rounded-full gap-1.5 font-bold text-[10px] shadow-none flex items-center whitespace-nowrap`}>
         <span className={`w-1.5 h-1.5 rounded-full ${dot[s] ?? "bg-slate-400"}`} />
         {s}
       </Badge>
@@ -145,7 +268,8 @@ export default function TransactionsPage() {
               value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value);
-                setPage(1);
+                setCursorStack([]);
+                setCurrentCursor(undefined);
               }}
               className="w-full pl-10 pr-4 h-11 bg-surface border-border/30 rounded-xl text-sm font-medium focus-visible:ring-primary/20 shadow-none"
             />
@@ -153,28 +277,27 @@ export default function TransactionsPage() {
           <div className="flex gap-2">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="h-11 px-4 rounded-xl border-border/50 font-bold text-sm text-slate hover:bg-surface gap-2 shrink-0">
+                <Button variant="outline" className="h-11 px-4 rounded-xl border-border/50 font-bold text-xs text-slate hover:bg-surface gap-2 shrink-0">
                   {statusFilter === "All Status" ? "Status" : statusFilter} <ChevronDown className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-40 rounded-2xl border-border/50 p-2 shadow-xl bg-white">
-                <DropdownMenuItem onClick={() => { setStatusFilter("All Status"); setPage(1); }} className="rounded-xl py-2 px-4 text-sm font-medium cursor-pointer">All Status</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => { setStatusFilter("All Status"); setCursorStack([]); setCurrentCursor(undefined); }} className="rounded-xl py-2 px-4 text-xs font-medium cursor-pointer">All Status</DropdownMenuItem>
                 {STATUSES.map((s) => (
-                  <DropdownMenuItem key={s} onClick={() => { setStatusFilter(s); setPage(1); }} className="rounded-xl py-2 px-4 text-sm font-medium cursor-pointer">{s}</DropdownMenuItem>
+                  <DropdownMenuItem key={s} onClick={() => { setStatusFilter(s); setCursorStack([]); setCurrentCursor(undefined); }} className="rounded-xl py-2 px-4 text-xs font-medium cursor-pointer">{s}</DropdownMenuItem>
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="h-11 px-4 rounded-xl border-border/50 font-bold text-sm text-slate hover:bg-surface gap-2 shrink-0">
-                  {typeFilter === "All Types" ? "Type" : typeFilter} <ChevronDown className="h-4 w-4" />
+                <Button variant="outline" className="h-11 px-4 rounded-xl border-border/50 font-bold text-xs text-slate hover:bg-surface gap-2 shrink-0">
+                  {ACTION_FILTERS.find(f => f.value === actionFilter)?.label || "Action"} <ChevronDown className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-44 rounded-2xl border-border/50 p-2 shadow-xl bg-white">
-                <DropdownMenuItem onClick={() => { setTypeFilter("All Types"); setPage(1); }} className="rounded-xl py-2 px-4 text-sm font-medium cursor-pointer">All Types</DropdownMenuItem>
-                {TYPES.map((t) => (
-                  <DropdownMenuItem key={t} onClick={() => { setTypeFilter(t); setPage(1); }} className="rounded-xl py-2 px-4 text-sm font-medium cursor-pointer">{t}</DropdownMenuItem>
+              <DropdownMenuContent align="end" className="w-48 rounded-2xl border-border/50 p-2 shadow-xl bg-white">
+                {ACTION_FILTERS.map((f) => (
+                  <DropdownMenuItem key={f.value} onClick={() => { setActionFilter(f.value); setCursorStack([]); setCurrentCursor(undefined); }} className="rounded-xl py-2 px-4 text-xs font-medium cursor-pointer">{f.label}</DropdownMenuItem>
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
@@ -188,8 +311,8 @@ export default function TransactionsPage() {
           <Table className="min-w-full">
             <TableHeader className="bg-surface/50">
               <TableRow className="border-border/50 hover:bg-transparent">
-                {["Timestamp", "User", "Amount", "Tx ID", "Action", "Status", ""].map((h, i) => (
-                  <TableHead key={i} className="py-4 px-4 text-slate/50 font-bold text-[11px] uppercase tracking-widest">{h}</TableHead>
+                {["Timestamp", "User", "Amount", "Action & Description", "Transaction ID", "Status", ""].map((h, i) => (
+                  <TableHead key={i} className="py-4 px-4 text-black font-extrabold text-[11px] uppercase tracking-wider">{h}</TableHead>
                 ))}
               </TableRow>
             </TableHeader>
@@ -205,27 +328,68 @@ export default function TransactionsPage() {
                 </TableRow>
               ) : isError ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="py-20 text-center text-red-500 font-medium">
+                  <TableCell colSpan={7} className="py-20 text-center text-red-500 font-medium">
                     Failed to load transactions.
                   </TableCell>
                 </TableRow>
               ) : displayedTransactions.length > 0 ? displayedTransactions.map((tx: any, i: number) => {
-                const formattedDate = tx.timestamp ? format(new Date(tx.timestamp), "HH:mm, MMMM dd, yyyy") : "-";
+                const formattedDate = tx.timestamp ? format(new Date(tx.timestamp), "HH:mm, MMM dd, yyyy") : "-";
+                const actionInfo = getTransactionActionInfo(tx);
+                const rawAmount = Number(tx.amount || 0);
+                const nairaVal = Math.abs(rawAmount) / 100;
+                const isPositive = actionInfo.isCredit;
+
                 return (
-                  <TableRow key={i} className="border-border/50 hover:bg-surface/30 transition-colors">
-                    <TableCell className="py-5 px-4 text-[11px] font-semibold text-slate/60 whitespace-nowrap">
+                  <TableRow key={tx.id || i} className="border-border/50 hover:bg-surface/30 transition-colors">
+                    {/* Timestamp */}
+                    <TableCell className="py-4 px-4 text-[11px] font-semibold text-slate/60 whitespace-nowrap">
                       {formattedDate}
                     </TableCell>
-                    <TableCell className="py-5 px-4">
-                      <span className="font-semibold text-[12px] text-dark">{tx.userName || tx.email || "-"}</span>
+
+                    {/* User */}
+                    <TableCell className="py-4 px-4">
+                      <div className="space-y-0.5">
+                        <span className="font-bold text-[12px] text-dark block leading-snug">{tx.userName || tx.email || "-"}</span>
+                        {tx.userName && tx.email && (
+                          <span className="text-[10px] text-slate/50 block truncate max-w-[150px]">{tx.email}</span>
+                        )}
+                      </div>
                     </TableCell>
-                    <TableCell className="py-5 px-4 text-[13px] font-bold text-dark">
-                      ₦{(Number(tx.amount || 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+
+                    {/* Amount */}
+                    <TableCell className="py-4 px-4 whitespace-nowrap">
+                      <span className={`text-[13px] font-extrabold ${isPositive ? "text-emerald-600" : "text-red-500"}`}>
+                        {isPositive ? "+" : "-"}₦{nairaVal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
                     </TableCell>
-                    <TableCell className="py-5 px-4 text-[11px] font-bold text-slate/60">#{tx.reference || tx.id || "-"}</TableCell>
-                    <TableCell className="py-5 px-4 text-[12px] font-medium text-dark/70">{tx.actionType || tx.type || "-"}</TableCell>
-                    <TableCell className="py-5 px-4">{statusBadge(tx.status || "Pending")}</TableCell>
-                    <TableCell className="py-5 px-4 text-right">
+
+                    {/* Action & Narrative Description */}
+                    <TableCell className="py-4 px-4">
+                      <div className="space-y-1">
+                        <Badge className={`${actionInfo.badgeClass} border px-2.5 py-0.5 rounded-full text-[10px] font-bold shadow-none whitespace-nowrap inline-flex`}>
+                          {actionInfo.label}
+                        </Badge>
+                        <p className="text-[11px] text-slate/70 font-medium line-clamp-1 max-w-[240px]" title={formatDescription(actionInfo.subtext)}>
+                          {formatDescription(actionInfo.subtext)}
+                        </p>
+                      </div>
+                    </TableCell>
+
+                    {/* Transaction ID */}
+                    <TableCell className="py-4 px-4">
+                      <span
+                        className="text-[11px] font-bold text-slate/70 font-mono block truncate max-w-[140px]"
+                        title={tx.reference || tx.id || "-"}
+                      >
+                        #{tx.reference || tx.id || "-"}
+                      </span>
+                    </TableCell>
+
+                    {/* Status */}
+                    <TableCell className="py-4 px-4">{statusBadge(tx.status || "Pending")}</TableCell>
+
+                    {/* Actions Menu */}
+                    <TableCell className="py-4 px-4 text-right">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" className="h-8 w-8 p-0 hover:bg-surface rounded-full">
@@ -246,7 +410,8 @@ export default function TransactionsPage() {
                       </DropdownMenu>
                     </TableCell>
                   </TableRow>
-                );}) : (
+                );
+              }) : (
                 <TableRow>
                   <TableCell colSpan={7} className="py-20 text-center">
                     <div className="flex flex-col items-center gap-2">
@@ -264,73 +429,52 @@ export default function TransactionsPage() {
       {/* Pagination indicators */}
       <div className="flex flex-col sm:flex-row justify-between items-center gap-3 text-xs font-bold text-slate/50 pt-6 px-1">
         <span>
-          Showing {totalRecords === 0 ? 0 : (page - 1) * limit + 1} - {Math.min(page * limit, totalRecords)} of {totalRecords} records (Page {page} of {totalPages || 1})
+          Showing {displayedTransactions.length} record{displayedTransactions.length === 1 ? "" : "s"} &bull; Page {cursorStack.length + 1}
         </span>
-        <div className="flex items-center gap-1.5 flex-wrap">
+        <div className="flex items-center gap-2">
           <Button 
             variant="outline" 
             size="sm" 
             onClick={() => {
-              setPage(p => Math.max(1, p - 1));
-              setTimeout(() => {
-                window.scrollTo({ top: 0, behavior: "smooth" });
-                const main = document.getElementById('main-scroll-container');
-                if (main) main.scrollTo({ top: 0, behavior: "smooth" });
-              }, 50);
+              if (cursorStack.length === 0) return;
+              const prev = cursorStack[cursorStack.length - 1];
+              setCursorStack(s => s.slice(0, -1));
+              setCurrentCursor(prev || undefined);
+              window.scrollTo({ top: 0, behavior: "smooth" });
+              const main = document.getElementById('main-scroll-container');
+              if (main) main.scrollTo({ top: 0, behavior: "smooth" });
             }}
-            disabled={page === 1 || isFetching}
-            className={`h-8 px-3 text-[11px] font-bold rounded-lg ${page === 1 ? 'text-slate/40 border-slate-200 cursor-not-allowed opacity-50' : 'text-dark border-slate-200 hover:bg-[#E8F3F3] hover:text-[#155D5F]'}`}
+            disabled={cursorStack.length === 0 || isFetching}
+            className={`h-8 px-3 text-[11px] font-bold rounded-lg ${
+              cursorStack.length === 0
+                ? 'text-slate/40 border-slate-200 cursor-not-allowed opacity-50'
+                : 'text-dark border-slate-200 hover:bg-[#E8F3F3] hover:text-[#155D5F]'
+            }`}
           >
             Prev
           </Button>
 
-          {Array.from({ length: totalPages || 1 }).map((_, idx) => {
-            const p = idx + 1;
-            // Show first page, last page, current page, and +/- 1 from current
-            if (p === 1 || p === totalPages || (p >= page - 1 && p <= page + 1)) {
-              return (
-                <Button
-                  key={p}
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setPage(p);
-                    setTimeout(() => {
-                      window.scrollTo({ top: 0, behavior: "smooth" });
-                      const main = document.getElementById('main-scroll-container');
-                      if (main) main.scrollTo({ top: 0, behavior: "smooth" });
-                    }, 50);
-                  }}
-                  disabled={isFetching}
-                  className={`h-8 min-w-[32px] px-2.5 text-[11px] font-bold rounded-lg ${
-                    page === p
-                      ? 'bg-[#155D5F]/10 text-[#155D5F] border-[#155D5F] hover:bg-[#155D5F]/20'
-                      : 'text-dark border-slate-200 hover:bg-[#E8F3F3] hover:text-[#155D5F]'
-                  }`}
-                >
-                  {p}
-                </Button>
-              );
-            }
-            if (p === page - 2 || p === page + 2) {
-              return <span key={p} className="px-1 text-slate/40 text-xs">...</span>;
-            }
-            return null;
-          })}
+          <span className="px-2 text-xs font-bold text-dark">
+            Page {cursorStack.length + 1}
+          </span>
 
           <Button 
             variant="outline" 
             size="sm" 
             onClick={() => {
-              setPage(p => Math.min(totalPages, p + 1));
-              setTimeout(() => {
-                window.scrollTo({ top: 0, behavior: "smooth" });
-                const main = document.getElementById('main-scroll-container');
-                if (main) main.scrollTo({ top: 0, behavior: "smooth" });
-              }, 50);
+              if (!hasNext || !nextCursor) return;
+              setCursorStack(s => [...s, currentCursor || ""]);
+              setCurrentCursor(nextCursor);
+              window.scrollTo({ top: 0, behavior: "smooth" });
+              const main = document.getElementById('main-scroll-container');
+              if (main) main.scrollTo({ top: 0, behavior: "smooth" });
             }}
-            disabled={page >= totalPages || isFetching}
-            className={`h-8 px-3 text-[11px] font-bold rounded-lg ${page >= totalPages ? 'text-slate/40 border-slate-200 cursor-not-allowed opacity-50' : 'text-dark border-slate-200 hover:bg-[#E8F3F3] hover:text-[#155D5F]'}`}
+            disabled={!hasNext || isFetching}
+            className={`h-8 px-3 text-[11px] font-bold rounded-lg ${
+              !hasNext
+                ? 'text-slate/40 border-slate-200 cursor-not-allowed opacity-50'
+                : 'text-dark border-slate-200 hover:bg-[#E8F3F3] hover:text-[#155D5F]'
+            }`}
           >
             Next
           </Button>
@@ -367,7 +511,7 @@ export default function TransactionsPage() {
 
             <div className="flex-1 overflow-y-auto p-7 pb-2">
               <p className="text-[13px] text-slate/40 font-medium mb-1">{formatDescription(logModal.description) || "Transaction Detail"}</p>
-              <h2 className="text-[24px] font-bold text-dark font-outfit mb-5">{logModal.type || logModal.actionType}</h2>
+              <h2 className="text-[24px] font-bold text-dark font-outfit mb-5">{getTransactionActionInfo(logModal).label}</h2>
 
               <div className="grid grid-cols-2 gap-x-10">
                 {/* LEFT */}
@@ -380,7 +524,7 @@ export default function TransactionsPage() {
                        <p className="text-[13px] text-[#1D84D9] font-semibold mt-0.5 cursor-pointer hover:underline" onClick={() => { setLogModal(null); navigateToUser(logModal); }}>{logModal.id}</p>
                     </div>
                     <div><p className="text-[12px] font-bold text-dark">Email</p><a href={`mailto:${logModal.email}`} className="text-[13px] text-[#1D84D9] font-semibold mt-0.5 hover:underline block">{logModal.email || "-"}</a></div>
-                    <div><p className="text-[12px] font-bold text-dark">Action</p><p className="text-[13px] text-slate/60 mt-0.5">{logModal.actionType || "-"}</p></div>
+                    <div><p className="text-[12px] font-bold text-dark">Action</p><p className="text-[13px] text-[#155D5F] font-bold mt-0.5">{getTransactionActionInfo(logModal).label}</p></div>
                     <div><p className="text-[12px] font-bold text-dark">Status</p><p className={`text-[13px] font-semibold mt-0.5 ${logModal.status === "Successful" ? "text-emerald-500" : logModal.status === "Failed" ? "text-red-500" : "text-orange-500"}`}>{logModal.status || "-"}</p></div>
                     <div><p className="text-[12px] font-bold text-dark">Timestamp</p><p className="text-[13px] text-slate/60 mt-0.5">{logModal.timestamp ? format(new Date(logModal.timestamp), "HH:mm, MMMM dd, yyyy") : "-"}</p></div>
                   </div>
@@ -403,13 +547,18 @@ export default function TransactionsPage() {
                       <p className="text-[12px] font-bold text-dark">Description</p>
                       <div className="mt-1 flex gap-4"><span className="text-[12px] text-slate/70 font-medium">{formatDescription(logModal.description)}</span></div>
                     </div>
-                    <div><p className="text-[12px] font-bold text-dark">Transaction Ref</p><p className="text-[13px] text-slate/60 mt-0.5">{logModal.reference || logModal.id || "-"}</p></div>
-                    <div><p className="text-[12px] font-bold text-dark">Transaction Amount</p><p className="text-[13px] text-slate/60 mt-0.5">₦{(Number(logModal.amount || 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p></div>
+                    <div><p className="text-[12px] font-bold text-dark">Transaction Ref</p><p className="text-[13px] text-slate/60 mt-0.5 font-mono">{logModal.reference || logModal.id || "-"}</p></div>
+                    <div>
+                      <p className="text-[12px] font-bold text-dark">Transaction Amount</p>
+                      <p className={`text-[15px] font-bold mt-0.5 ${getTransactionActionInfo(logModal).isCredit ? "text-emerald-600" : "text-red-500"}`}>
+                        {getTransactionActionInfo(logModal).isCredit ? "+" : "-"}₦{(Math.abs(Number(logModal.amount || 0)) / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </p>
+                    </div>
                   </div>
 
                   <h3 className="text-[15px] font-bold text-dark mt-6 mb-4">System Logs</h3>
                   <div className="space-y-4">
-                    <div><p className="text-[12px] font-bold text-dark">Log Entry ID</p><p className="text-[13px] text-slate/60 mt-0.5">{logModal.id}</p></div>
+                    <div><p className="text-[12px] font-bold text-dark">Log Entry ID</p><p className="text-[13px] text-slate/60 mt-0.5 font-mono">{logModal.id}</p></div>
                     <div><p className="text-[12px] font-bold text-dark">Log Recorded</p><p className="text-[13px] text-slate/60 mt-0.5">{logModal.timestamp ? format(new Date(logModal.timestamp), "HH:mm, MMMM dd, yyyy") : "-"}</p></div>
                   </div>
                 </div>
@@ -436,8 +585,10 @@ export default function TransactionsPage() {
             <div className="bg-white rounded-xl p-4 mb-4">
               <div className="flex items-start justify-between mb-1">
                 <div>
-                  <p className="text-[11px] text-emerald-600 font-bold">{receiptModal.type || receiptModal.actionType || "Transaction"}</p>
-                  <p className="text-[22px] font-black text-dark leading-tight">₦{(Number(receiptModal.amount || 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                  <p className="text-[11px] text-emerald-600 font-bold">{getTransactionActionInfo(receiptModal).label}</p>
+                  <p className={`text-[22px] font-black leading-tight ${getTransactionActionInfo(receiptModal).isCredit ? "text-emerald-600" : "text-red-500"}`}>
+                    {getTransactionActionInfo(receiptModal).isCredit ? "+" : "-"}₦{(Math.abs(Number(receiptModal.amount || 0)) / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </p>
                   <p className="text-[11px] text-slate/50 font-medium mt-1">{receiptModal.timestamp ? format(new Date(receiptModal.timestamp), "HH:mm, MMM dd, yyyy") : "-"}</p>
                 </div>
                 <div className="flex items-center gap-1 bg-white border border-border/50 rounded-lg px-3 py-1.5 shadow-sm mt-1">
@@ -454,9 +605,8 @@ export default function TransactionsPage() {
               <div className="space-y-2.5 pt-1">
                 {[
                   ["Status", <span key="status" className="text-emerald-500 font-bold flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" /> {receiptModal.status || "Success"}</span>],
-                  ["Account credited", "-"],
-                  ["Sender", receiptModal.userName || receiptModal.email || "-"],
-                  ["Transaction type", receiptModal.actionType || receiptModal.type || "-"],
+                  ["User", receiptModal.userName || receiptModal.email || "-"],
+                  ["Transaction type", getTransactionActionInfo(receiptModal).label],
                   ["SessionID", receiptModal.id],
                   ["Narrative", formatDescription(receiptModal.description)],
                 ].map(([label, value], idx) => (

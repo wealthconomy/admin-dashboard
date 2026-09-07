@@ -80,9 +80,9 @@ export function PortfolioStats({ timeFilter }: PortfolioStatsProps) {
       const activeCount = Number(
         apiData?.active ??
         apiData?.activeMembers ??
+        apiData?.activeCount ??
         apiData?.totalMembers ??
         apiData?.membersCount ??
-        apiData?.totalUsers ??
         apiData?.count ??
         apiData?.members ??
         (isGroupCard ? (tribesData?.totalMembers ?? tribesData?.totalGroups ?? tribesData?.totalCount ?? 0) : 0)

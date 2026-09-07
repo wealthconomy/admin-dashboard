@@ -41,6 +41,22 @@ export const newsletterApi = apiSlice.injectEndpoints({
       }),
       invalidatesTags: ["Newsletter"],
     }),
+
+    // List past newsletter broadcast campaign history
+    getNewsletterBroadcasts: builder.query({
+      query: (params) => ({
+        url: "/admin/newsletter/broadcasts",
+        params: {
+          page: params?.page || 1,
+          limit: params?.limit || 10,
+          q: params?.q,
+          period: params?.period,
+          sortBy: params?.sortBy,
+          sortDir: params?.sortDir,
+        },
+      }),
+      providesTags: ["Newsletter"],
+    }),
   }),
 });
 
@@ -48,4 +64,5 @@ export const {
   useGetNewsletterSubscribersQuery,
   useExportNewsletterSubscribersMutation,
   useSendNewsletterBroadcastMutation,
+  useGetNewsletterBroadcastsQuery,
 } = newsletterApi;

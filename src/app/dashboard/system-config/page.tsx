@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import { 
   useGetSettingsQuery, 
   useUpdateSettingsMutation,
@@ -26,7 +27,8 @@ export default function SystemConfigPage() {
   const [formState, setFormState] = useState({
     REFERRAL_ENABLED: false,
     REFERRAL_REWARD_KOBO: "",
-    MAINTENANCE_MODE: false
+    MAINTENANCE_MODE: false,
+    ACTIVE_PAYMENT_PROVIDER: "PAGA",
   });
 
   const [activeTab, setActiveTab] = useState<"settings" | "email">("settings");
@@ -42,6 +44,7 @@ export default function SystemConfigPage() {
         REFERRAL_ENABLED: settingsData.data.REFERRAL_ENABLED === "true" || settingsData.data.REFERRAL_ENABLED === true,
         REFERRAL_REWARD_KOBO: settingsData.data.REFERRAL_REWARD_KOBO || "50000",
         MAINTENANCE_MODE: settingsData.data.MAINTENANCE_MODE === "true" || settingsData.data.MAINTENANCE_MODE === true,
+        ACTIVE_PAYMENT_PROVIDER: settingsData.data.ACTIVE_PAYMENT_PROVIDER || "PAGA",
       });
     }
   }, [settingsData]);
@@ -53,7 +56,8 @@ export default function SystemConfigPage() {
         ...(settingsData?.data || {}),
         REFERRAL_ENABLED: String(formState.REFERRAL_ENABLED),
         REFERRAL_REWARD_KOBO: String(formState.REFERRAL_REWARD_KOBO),
-        MAINTENANCE_MODE: String(formState.MAINTENANCE_MODE)
+        MAINTENANCE_MODE: String(formState.MAINTENANCE_MODE),
+        ACTIVE_PAYMENT_PROVIDER: String(formState.ACTIVE_PAYMENT_PROVIDER || "PAGA").toUpperCase().trim(),
       };
       
       console.log("Sending payload:", payload);
@@ -66,7 +70,7 @@ export default function SystemConfigPage() {
   };
 
   return (
-    <div className="bg-white rounded-[20px] p-10 border border-border/50 shadow-sm w-full max-w-[1137px] mx-auto flex flex-col min-h-[800px]">
+    <div className="bg-white rounded-[20px] p-6 lg:p-10 border border-border/50 shadow-sm w-full max-w-[1137px] mx-auto flex flex-col h-auto pb-16">
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold font-outfit text-dark tracking-tight">
@@ -132,7 +136,8 @@ export default function SystemConfigPage() {
                 <h3 className="text-lg font-bold text-dark font-outfit mb-6">
                   General Settings
                 </h3>
-                <div className="space-y-8">
+                <div className="space-y-6">
+                  {/* Maintenance Mode */}
                   <div className="flex items-center justify-between p-4 bg-white border border-border/50 rounded-xl">
                     <div>
                       <Label className="text-sm font-bold text-dark block mb-1">
@@ -147,6 +152,22 @@ export default function SystemConfigPage() {
                       onCheckedChange={(val) => setFormState({ ...formState, MAINTENANCE_MODE: val })}
                     />
                   </div>
+
+                  {/* Active Payment Provider (PAGA Only) */}
+                  <div className="flex items-center justify-between p-4 bg-white border border-border/50 rounded-xl">
+                    <div>
+                      <Label className="text-sm font-bold text-dark block mb-1">
+                        Active Payment Provider
+                      </Label>
+                      <span className="text-xs font-medium text-slate/60">
+                        Primary transaction gateway configured on the platform.
+                      </span>
+                    </div>
+                    <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                      Paga Gateway ({formState.ACTIVE_PAYMENT_PROVIDER || "PAGA"})
+                    </Badge>
+                  </div>
                 </div>
               </div>
 
@@ -156,7 +177,7 @@ export default function SystemConfigPage() {
                   Referral Program
                 </h3>
                 
-                <div className="space-y-8">
+                <div className="space-y-6">
                   <div className="flex items-center justify-between p-4 bg-white border border-border/50 rounded-xl">
                     <div>
                       <Label className="text-sm font-bold text-dark block mb-1">

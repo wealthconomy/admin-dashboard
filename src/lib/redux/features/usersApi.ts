@@ -135,13 +135,13 @@ export const usersApi = apiSlice.injectEndpoints({
       },
       providesTags: ["Transactions"],
     }),
-    getTransactions: builder.query({
-      query: (params?: { [key: string]: any }) => {
+    getTransactions: builder.query<any, { after?: string; before?: string; limit?: number; page?: number; search?: string; q?: string; status?: string; [key: string]: any } | void>({
+      query: (params) => {
         const searchParams = new URLSearchParams();
         if (params) {
           Object.entries(params).forEach(([key, value]) => {
             if (value !== undefined && value !== null && value !== "") {
-              searchParams.append(key, value as string);
+              searchParams.append(key, String(value));
             }
           });
         }
@@ -162,8 +162,8 @@ export const usersApi = apiSlice.injectEndpoints({
       invalidatesTags: ["Transactions"],
     }),
     // User Activities
-    getActivities: builder.query({
-      query: (params?: { [key: string]: any }) => {
+    getActivities: builder.query<any, { after?: string; before?: string; limit?: number; page?: number; q?: string; type?: string; period?: string; [key: string]: any } | void>({
+      query: (params) => {
         const searchParams = new URLSearchParams();
         if (params) {
           Object.entries(params).forEach(([key, value]) => {
@@ -171,7 +171,7 @@ export const usersApi = apiSlice.injectEndpoints({
               if (Array.isArray(value)) {
                 searchParams.append(key, value.join(","));
               } else {
-                searchParams.append(key, value as string);
+                searchParams.append(key, String(value));
               }
             }
           });

@@ -65,7 +65,7 @@ type PlanUser = {
   goalStartDate?: string;
   planName?: string;
   createdAt?: string;
-  status: "ACTIVE" | "COMPLETED" | "MATURED" | "WITHDRAWN" | "CLOSED";
+  status: "ACTIVE" | "COMPLETED" | "MATURED" | "WITHDRAWN" | "CLOSED" | "TERMINATED";
 };
 
 type GroupMember = {
@@ -92,17 +92,26 @@ type WealthGroupData = {
   totalSaved?: number;
   interestEarned?: number;
   members: GroupMember[];
+  status?: string;
+  isTerminated?: boolean;
+  isCompleted?: boolean;
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function PlanStatusBadge({ status, balance }: { status?: string; balance?: number }) {
+function PlanStatusBadge({ status }: { status?: string }) {
   const s = String(status || "").toUpperCase();
-  if (s.includes("COMPLET") || (balance === 0 && !s.includes("ACTIVE"))) {
+  if (
+    s.includes("TERMINAT") ||
+    s.includes("CANCEL") ||
+    s.includes("LIQUIDAT") ||
+    s.includes("DISBAND") ||
+    s === "TERMINATED"
+  ) {
     return (
-      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-        Completed
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-red-50 text-red-700 border border-red-200">
+        <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+        Terminated
       </span>
     );
   }
@@ -119,6 +128,14 @@ function PlanStatusBadge({ status, balance }: { status?: string; balance?: numbe
       <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
         <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
         Matured
+      </span>
+    );
+  }
+  if (s.includes("COMPLET")) {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+        Completed
       </span>
     );
   }
@@ -294,7 +311,25 @@ function GroupCard({ group }: { group: WealthGroupData }) {
             </div>
           )}
           <div>
-            <p className="text-[14px] font-black text-dark font-outfit">{group.groupName}</p>
+            <div className="flex items-center gap-2">
+              <p className="text-[14px] font-black text-dark font-outfit">{group.groupName}</p>
+              {group.isTerminated ? (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-50 text-red-700 border border-red-200">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                  Terminated
+                </span>
+              ) : group.isCompleted ? (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  Completed
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#155D5F]/10 text-[#155D5F] border border-[#155D5F]/20">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#155D5F]" />
+                  Active
+                </span>
+              )}
+            </div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5">
               <span className="text-[11px] text-slate/50 font-medium">
                 {group.members.length} member{group.members.length !== 1 ? "s" : ""}
@@ -303,11 +338,17 @@ function GroupCard({ group }: { group: WealthGroupData }) {
               <span className="text-[10px] text-slate/40 font-medium flex items-center gap-1">
                 <Calendar className="w-3 h-3" />
                 {formatDate(group.startDate)} → {formatDate(group.endDate)}
-                <span className={`ml-1 font-bold ${getDaysRemaining(group.endDate) < 0 ? "text-emerald-500" :
-                  getDaysRemaining(group.endDate) <= 30 ? "text-orange-500" : "text-slate/40"
-                  }`}>
-                  · {getDaysRemaining(group.endDate) < 0 ? "Ended" : `${getDaysRemaining(group.endDate)}d left`}
-                </span>
+                {group.isTerminated ? (
+                  <span className="ml-1 font-bold text-red-500">
+                    · Terminated
+                  </span>
+                ) : (
+                  <span className={`ml-1 font-bold ${getDaysRemaining(group.endDate) < 0 ? "text-emerald-500" :
+                    getDaysRemaining(group.endDate) <= 30 ? "text-orange-500" : "text-slate/40"
+                    }`}>
+                    · {getDaysRemaining(group.endDate) < 0 ? "Ended" : `${getDaysRemaining(group.endDate)}d left`}
+                  </span>
+                )}
               </span>
             </div>
           </div>
@@ -416,7 +457,7 @@ export default function PlanUsersPage() {
   const router = useRouter();
   const [dateFilter, setDateFilter] = useState("all_time");
   const [isExpanded, setIsExpanded] = useState(false);
-  const [planTab, setPlanTab] = useState<"active" | "completed" | "all">("active");
+  const [planTab, setPlanTab] = useState<"active" | "completed" | "terminated" | "all">("active");
 
   const planKey = plan?.toLowerCase();
   const meta = PLAN_META[planKey as string];
@@ -608,10 +649,25 @@ export default function PlanUsersPage() {
       const planName = u.name || u.savingFor || u.goalName || u.targetName || u.title || u.goalTitle || "—";
 
       const rawStatus = String(u.status || u.planStatus || u.state || "").toUpperCase();
-      let status: "ACTIVE" | "COMPLETED" | "MATURED" | "WITHDRAWN" | "CLOSED" = "ACTIVE";
-      if (rawStatus.includes("COMPLET") || rawStatus.includes("MATUR") || rawStatus.includes("WITHDRAW") || rawStatus.includes("CLOSE") || rawStatus.includes("PAID")) {
-        status = rawStatus.includes("MATUR") ? "MATURED" : rawStatus.includes("WITHDRAW") ? "WITHDRAWN" : "COMPLETED";
-      } else if (balance === 0) {
+      let status: "ACTIVE" | "COMPLETED" | "MATURED" | "WITHDRAWN" | "CLOSED" | "TERMINATED" = "ACTIVE";
+
+      if (
+        rawStatus.includes("TERMINAT") ||
+        rawStatus.includes("CANCEL") ||
+        rawStatus.includes("LIQUIDAT") ||
+        rawStatus.includes("DISBAND") ||
+        rawStatus.includes("DELET") ||
+        Boolean(u.isTerminated) ||
+        Boolean(u.terminatedAt)
+      ) {
+        status = "TERMINATED";
+      } else if (rawStatus.includes("MATUR")) {
+        status = "MATURED";
+      } else if (rawStatus.includes("WITHDRAW")) {
+        status = "WITHDRAWN";
+      } else if (rawStatus.includes("CLOSE")) {
+        status = "CLOSED";
+      } else if (rawStatus.includes("COMPLET") || rawStatus.includes("PAID") || Boolean(u.isCompleted)) {
         status = "COMPLETED";
       } else {
         status = "ACTIVE";
@@ -660,80 +716,119 @@ export default function PlanUsersPage() {
                   ? tribesRes.tribes
                   : [];
 
-    return items.map((g: any) => ({
-      id: String(g.id || g._id || Math.random()),
-      groupName: g.groupName || g.name || g.title || "Group",
-      image: g.image || g.icon || g.avatar || null,
-      groupTarget: fromKobo(g.groupTarget ?? g.targetAmount ?? g.target ?? 0),
-      totalSaved: fromKobo(g.totalSaved ?? g.totalSavings ?? g.totalBalance ?? 0),
-      interestEarned: fromKobo(g.interestEarned ?? g.totalInterest ?? g.interestAmount ?? 0),
-      startDate: g.startDate || g.createdAt || new Date().toISOString(),
-      endDate: g.endDate || g.deadline || new Date().toISOString(),
-      members: (g.members || g.users || []).map((m: any) => {
-        const u = (typeof m.user === "object" && m.user !== null ? m.user : null) || (typeof m.customer === "object" && m.customer !== null ? m.customer : null) || m;
-        const firstName = u.firstName || u.first_name || m.firstName || "";
-        const lastName = u.lastName || u.last_name || m.lastName || "";
-        const fullName = `${firstName} ${lastName}`.trim();
-        const memberName = fullName || u.name || u.fullName || u.username || m.name || "Member";
-        const email = u.email || m.email || "—";
-        const phone = u.phone || u.phoneNumber || m.phone || "—";
-        const avatar = u.avatar || u.avatarUrl || u.imageUrl || m.avatar || "";
+    return items.map((g: any) => {
+      const rawStatus = String(g.status || g.state || "").toUpperCase();
+      const membersCount = Number(g.membersCount ?? g.members?.length ?? 0);
+      const totalSaved = fromKobo(g.totalSaved ?? g.totalSavings ?? g.totalBalance ?? 0);
+      const groupTarget = fromKobo(g.groupTarget ?? g.targetAmount ?? g.target ?? 0);
+      const endDate = g.endDate || g.deadline || new Date().toISOString();
 
-        const rawRole = String(m.role || u.role || "").toLowerCase();
-        const isAdmin = Boolean(m.isAdmin || rawRole === "admin" || rawRole === "leader" || rawRole === "creator" || m.isLeader);
+      const isEnded = endDate ? new Date(endDate).getTime() < Date.now() : false;
+      const isGoalMet = groupTarget > 0 && totalSaved >= groupTarget;
 
-        const rawInterest = m.interestOrImpact ?? m.interestAmount ?? m.interestEarned ?? m.interest ?? 0;
-        const rawType = String(m.savingType || m.type || "interest").toLowerCase();
-        const savingType: SavingType = rawType.includes("impact")
-          ? "impact"
-          : rawType.includes("mixed")
-            ? "mixed"
-            : "interest";
+      const isTerminated = Boolean(
+        g.isTerminated ||
+        g.terminatedAt ||
+        rawStatus.includes("TERMINAT") ||
+        rawStatus.includes("CANCEL") ||
+        rawStatus.includes("CLOSED") ||
+        rawStatus.includes("DELET") ||
+        (membersCount === 0 && totalSaved === 0)
+      );
 
-        const interestAmount = savingType !== "impact" ? fromKobo(rawInterest) : 0;
-        const wealthPactAmount = savingType === "impact" ? fromKobo(rawInterest) : 0;
+      const isCompleted = !isTerminated && (
+        rawStatus.includes("COMPLET") ||
+        isEnded ||
+        isGoalMet
+      );
 
-        return {
-          id: String(m.id || m._id || u.id || u._id || Math.random()),
-          name: memberName,
-          email,
-          phone,
-          avatar,
-          contribution: fromKobo(m.contribution ?? m.amount ?? m.balance ?? u.balance ?? 0),
-          savingType,
-          interestRate: Number(m.interestRate ?? m.rate ?? 0),
-          interestAmount,
-          wealthPactAmount,
-          isAdmin,
-        };
-      })
-    }));
+      return {
+        id: String(g.id || g._id || Math.random()),
+        groupName: g.groupName || g.name || g.title || "Group",
+        image: g.image || g.icon || g.avatar || null,
+        groupTarget,
+        totalSaved,
+        interestEarned: fromKobo(g.interestEarned ?? g.totalInterest ?? g.interestAmount ?? 0),
+        startDate: g.startDate || g.createdAt || new Date().toISOString(),
+        endDate,
+        status: isTerminated ? "TERMINATED" : isCompleted ? "COMPLETED" : "ACTIVE",
+        isTerminated,
+        isCompleted,
+        members: (g.members || g.users || []).map((m: any) => {
+          const u = (typeof m.user === "object" && m.user !== null ? m.user : null) || (typeof m.customer === "object" && m.customer !== null ? m.customer : null) || m;
+          const firstName = u.firstName || u.first_name || m.firstName || "";
+          const lastName = u.lastName || u.last_name || m.lastName || "";
+          const fullName = `${firstName} ${lastName}`.trim();
+          const memberName = fullName || u.name || u.fullName || u.username || m.name || "Member";
+          const email = u.email || m.email || "—";
+          const phone = u.phone || u.phoneNumber || m.phone || "—";
+          const avatar = u.avatar || u.avatarUrl || u.imageUrl || m.avatar || "";
+
+          const rawRole = String(m.role || u.role || "").toLowerCase();
+          const isAdmin = Boolean(m.isAdmin || rawRole === "admin" || rawRole === "leader" || rawRole === "creator" || m.isLeader);
+
+          const rawInterest = m.interestOrImpact ?? m.interestAmount ?? m.interestEarned ?? m.interest ?? 0;
+          const rawType = String(m.savingType || m.type || "interest").toLowerCase();
+          const savingType: SavingType = rawType.includes("impact")
+            ? "impact"
+            : rawType.includes("mixed")
+              ? "mixed"
+              : "interest";
+
+          const interestAmount = savingType !== "impact" ? fromKobo(rawInterest) : 0;
+          const wealthPactAmount = savingType === "impact" ? fromKobo(rawInterest) : 0;
+
+          return {
+            id: String(m.id || m._id || u.id || u._id || Math.random()),
+            name: memberName,
+            email,
+            phone,
+            avatar,
+            contribution: fromKobo(m.contribution ?? m.amount ?? m.balance ?? u.balance ?? 0),
+            savingType,
+            interestRate: Number(m.interestRate ?? m.rate ?? 0),
+            interestAmount,
+            wealthPactAmount,
+            isAdmin,
+          };
+        }),
+      };
+    });
   }, [tribesRes, isWealthGroup]);
 
   // Tab filtering logic
-  const activeUsers = useMemo(() => users.filter((u) => u.status === "ACTIVE" && u.balance > 0), [users]);
-  const completedUsers = useMemo(() => users.filter((u) => u.status !== "ACTIVE" || u.balance === 0), [users]);
+  const activeUsers = useMemo(() => users.filter((u) => u.status === "ACTIVE"), [users]);
+  const completedUsers = useMemo(() => users.filter((u) => u.status === "COMPLETED" || u.status === "MATURED"), [users]);
+  const terminatedUsers = useMemo(
+    () =>
+      users.filter(
+        (u) =>
+          u.status === "TERMINATED" ||
+          u.status === "WITHDRAWN" ||
+          u.status === "CLOSED"
+      ),
+    [users]
+  );
   const displayedUsers = useMemo(() => {
     if (planTab === "active") return activeUsers;
     if (planTab === "completed") return completedUsers;
+    if (planTab === "terminated") return terminatedUsers;
     return users;
-  }, [planTab, activeUsers, completedUsers, users]);
+  }, [planTab, activeUsers, completedUsers, terminatedUsers, users]);
 
-  const isGroupCompleted = (g: WealthGroupData) => {
-    const isEnded = g.endDate ? new Date(g.endDate).getTime() < Date.now() : false;
-    const isGoalMet = g.groupTarget > 0 && (g.totalSaved ?? 0) >= g.groupTarget;
-    return isEnded || isGoalMet || ((g.totalSaved ?? 0) === 0 && g.members.length > 0);
-  };
-  const activeGroups = useMemo(() => groups.filter((g) => !isGroupCompleted(g)), [groups]);
-  const completedGroups = useMemo(() => groups.filter((g) => isGroupCompleted(g)), [groups]);
+  const activeGroups = useMemo(() => groups.filter((g) => !g.isTerminated && !g.isCompleted), [groups]);
+  const completedGroups = useMemo(() => groups.filter((g) => g.isCompleted), [groups]);
+  const terminatedGroups = useMemo(() => groups.filter((g) => g.isTerminated), [groups]);
   const displayedGroups = useMemo(() => {
     if (planTab === "active") return activeGroups;
     if (planTab === "completed") return completedGroups;
+    if (planTab === "terminated") return terminatedGroups;
     return groups;
-  }, [planTab, activeGroups, completedGroups, groups]);
+  }, [planTab, activeGroups, completedGroups, terminatedGroups, groups]);
 
   const activeCount = isWealthGroup ? activeGroups.length : activeUsers.length;
   const completedCount = isWealthGroup ? completedGroups.length : completedUsers.length;
+  const terminatedCount = isWealthGroup ? terminatedGroups.length : terminatedUsers.length;
   const allCount = isWealthGroup ? groups.length : users.length;
 
   if (!meta) {
@@ -931,7 +1026,7 @@ export default function PlanUsersPage() {
 
       {/* Active vs Completed Tab Switcher */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-border/30 pb-3">
-        <div className="flex items-center gap-1.5 p-1 bg-surface/80 rounded-2xl border border-border/40 w-fit">
+        <div className="flex items-center gap-2 p-1 bg-surface rounded-2xl border border-border/40 w-fit flex-wrap">
           <button
             onClick={() => setPlanTab("active")}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
@@ -941,7 +1036,7 @@ export default function PlanUsersPage() {
             }`}
           >
             <span className="w-2 h-2 rounded-full bg-emerald-500" />
-            Active Plans ({activeCount})
+            {isWealthGroup ? "Active Groups" : "Active Plans"} ({activeCount})
           </button>
           <button
             onClick={() => setPlanTab("completed")}
@@ -952,7 +1047,18 @@ export default function PlanUsersPage() {
             }`}
           >
             <span className="w-2 h-2 rounded-full bg-slate-400" />
-            Completed Plans ({completedCount})
+            {isWealthGroup ? "Completed Groups" : "Completed Plans"} ({completedCount})
+          </button>
+          <button
+            onClick={() => setPlanTab("terminated")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+              planTab === "terminated"
+                ? "bg-white text-red-600 shadow-sm"
+                : "text-slate/60 hover:text-dark hover:bg-white/50"
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-red-500" />
+            {isWealthGroup ? "Terminated Groups" : "Terminated Plans"} ({terminatedCount})
           </button>
           <button
             onClick={() => setPlanTab("all")}
@@ -967,7 +1073,9 @@ export default function PlanUsersPage() {
         </div>
 
         <div className="text-xs font-semibold text-slate/50">
-          Showing {isWealthGroup ? displayedGroups.length : displayedUsers.length} {planTab === "active" ? "active" : planTab === "completed" ? "completed" : "total"} {isWealthGroup ? "group(s)" : "plan(s)"}
+          Showing {isWealthGroup ? displayedGroups.length : displayedUsers.length}{" "}
+          {planTab === "active" ? "active" : planTab === "completed" ? "completed" : planTab === "terminated" ? "terminated" : "total"}{" "}
+          {isWealthGroup ? "group(s)" : "plan(s)"}
         </div>
       </div>
 
@@ -982,7 +1090,7 @@ export default function PlanUsersPage() {
           {displayedGroups.length === 0 && (
             <div className="py-20 text-center flex flex-col items-center gap-2 text-slate/40">
               <Briefcase className="w-8 h-8" />
-              <p className="text-sm font-bold">No {planTab === "active" ? "active" : planTab === "completed" ? "completed" : ""} groups found for this period.</p>
+              <p className="text-sm font-bold">No {planTab === "active" ? "active" : planTab === "completed" ? "completed" : planTab === "terminated" ? "terminated" : ""} groups found for this period.</p>
             </div>
           )}
         </div>
@@ -1045,7 +1153,7 @@ export default function PlanUsersPage() {
                     </td>
 
                     <td className="py-4 px-4">
-                      <PlanStatusBadge status={user.status} balance={user.balance} />
+                      <PlanStatusBadge status={user.status} />
                     </td>
 
                     <td className="py-4 px-4 text-right">
@@ -1119,7 +1227,7 @@ export default function PlanUsersPage() {
           {displayedUsers.length === 0 && (
             <div className="py-20 text-center flex flex-col items-center gap-2 text-slate/40">
               <Users className="w-8 h-8" />
-              <p className="text-sm font-bold">No {planTab === "active" ? "active" : planTab === "completed" ? "completed" : ""} plans found for this period.</p>
+              <p className="text-sm font-bold">No {planTab === "active" ? "active" : planTab === "completed" ? "completed" : planTab === "terminated" ? "terminated" : ""} plans found for this period.</p>
             </div>
           )}
         </div>
@@ -1132,7 +1240,7 @@ function downloadCSV(plan: string, users: PlanUser[], groups: WealthGroupData[],
   try {
     let rows: string[][] = [];
     if (isWealthGroup) {
-      rows.push(["Group Name", "Member Name", "Member Email", "Phone", "Role", "Saving Type", "Contribution", "Interest Amount", "Impact Amount"]);
+      rows.push(["Group Name", "Member Name", "Member Email", "Phone", "Role", "Group Status", "Saving Type", "Contribution", "Interest Amount", "Impact Amount"]);
       groups.forEach((g) => {
         g.members.forEach((m) => {
           rows.push([
@@ -1141,6 +1249,7 @@ function downloadCSV(plan: string, users: PlanUser[], groups: WealthGroupData[],
             m.email,
             m.phone,
             m.isAdmin ? "Admin" : "Member",
+            g.status || "ACTIVE",
             m.savingType,
             String(m.contribution),
             String(m.interestAmount),
@@ -1149,12 +1258,13 @@ function downloadCSV(plan: string, users: PlanUser[], groups: WealthGroupData[],
         });
       });
     } else if (isWealthGoal) {
-      rows.push(["Member", "Email", "Phone", "Saving Type", "Balance", "Interest", "Impact", "Saving For", "Goal Target", "Started", "Deadline"]);
+      rows.push(["Member", "Email", "Phone", "Status", "Saving Type", "Balance", "Interest", "Impact", "Saving For", "Goal Target", "Started", "Deadline"]);
       users.forEach((u) => {
         rows.push([
           u.name,
           u.email,
           u.phone,
+          u.status,
           u.savingType,
           String(u.balance),
           String(u.interestAmount),
@@ -1166,12 +1276,13 @@ function downloadCSV(plan: string, users: PlanUser[], groups: WealthGroupData[],
         ]);
       });
     } else if (isWealthFix) {
-      rows.push(["Member", "Email", "Phone", "Saving Type", "Balance", "Interest", "Impact", "Fix Start", "Maturity Date"]);
+      rows.push(["Member", "Email", "Phone", "Status", "Saving Type", "Balance", "Interest", "Impact", "Fix Start", "Maturity Date"]);
       users.forEach((u) => {
         rows.push([
           u.name,
           u.email,
           u.phone,
+          u.status,
           u.savingType,
           String(u.balance),
           String(u.interestAmount),
@@ -1181,12 +1292,13 @@ function downloadCSV(plan: string, users: PlanUser[], groups: WealthGroupData[],
         ]);
       });
     } else {
-      rows.push(["Member", "Email", "Phone", "Saving Type", "Balance", "Interest", "Impact", "Plan Name", "Rate (%)", "Started"]);
+      rows.push(["Member", "Email", "Phone", "Status", "Saving Type", "Balance", "Interest", "Impact", "Plan Name", "Rate (%)", "Started"]);
       users.forEach((u) => {
         rows.push([
           u.name,
           u.email,
           u.phone,
+          u.status,
           u.savingType,
           String(u.balance),
           String(u.interestAmount),
