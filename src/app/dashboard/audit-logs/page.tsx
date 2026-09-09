@@ -17,6 +17,7 @@ import {
   Repeat,
   CheckCircle2,
   XCircle,
+  RotateCw,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -81,7 +82,9 @@ export default function AuditLogsPage() {
   const [selectedCategory, setSelectedCategory] = useState("All Categories");
   const [selectedLog, setSelectedLog] = useState<any | null>(null);
 
-  const { data: auditLogsData, isLoading, isFetching } = useGetAuditLogsQuery({ page, limit: 20 });
+  const { data: auditLogsData, isLoading, isFetching, refetch } = useGetAuditLogsQuery({ page, limit: 20 }, {
+    refetchOnMountOrArgChange: true,
+  });
   const { data: teamData } = useGetTeamQuery(undefined);
   const { data: meData } = useGetMeQuery(undefined);
   const { data: usersData } = useGetUsersQuery({ limit: 100 });
@@ -279,6 +282,17 @@ export default function AuditLogsPage() {
             className="h-10 px-4 rounded-xl border-border/50 font-bold text-xs text-[#155D5F] hover:bg-[#E8F3F3] transition-all"
           >
             Export Sheet
+          </Button>
+
+          <Button
+            variant="outline"
+            onClick={() => refetch()}
+            disabled={isFetching}
+            title="Refresh Audit Logs"
+            className="h-10 px-3 rounded-xl border-border/50 font-bold text-xs text-[#155D5F] hover:bg-[#E8F3F3] transition-all gap-1.5 cursor-pointer"
+          >
+            <RotateCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
+            <span className="hidden sm:inline">Refresh</span>
           </Button>
         </div>
       </div>

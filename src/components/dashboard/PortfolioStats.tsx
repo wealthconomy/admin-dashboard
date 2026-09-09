@@ -21,8 +21,8 @@ const mapFilterToPeriod = (filter: string) => {
 
 export function PortfolioStats({ timeFilter }: PortfolioStatsProps) {
   const period = mapFilterToPeriod(timeFilter);
-  const { data, isLoading: isLoadingStats } = useGetPortfolioStatsQuery(period);
-  const { data: tribesRes, isLoading: isLoadingTribes } = useGetTribesQuery({ period });
+  const { data, isLoading: isLoadingStats } = useGetPortfolioStatsQuery(period, { refetchOnMountOrArgChange: true });
+  const { data: tribesRes, isLoading: isLoadingTribes } = useGetTribesQuery({ period }, { refetchOnMountOrArgChange: true });
 
   const isLoading = isLoadingStats || isLoadingTribes;
 

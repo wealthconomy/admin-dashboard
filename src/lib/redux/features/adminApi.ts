@@ -173,11 +173,16 @@ export const adminApi = apiSlice.injectEndpoints({
     // Notifications & Wealth Groups
     // --------------------------------------------------------
     getAdminNotifications: builder.query({
-      query: (params?: { limit?: number, page?: number }) => {
+      query: (params?: { limit?: number; after?: string; before?: string; sortBy?: string; sortDir?: string; q?: string }) => {
         const queryParams = new URLSearchParams();
-        if (params?.limit) queryParams.append('limit', params.limit.toString());
-        if (params?.page) queryParams.append('page', params.page.toString());
-        return `/admin/notifications${queryParams.toString() ? `?${queryParams.toString()}` : ""}`;
+        queryParams.append('limit', String(params?.limit || 50));
+        if (params?.after) queryParams.append('after', params.after);
+        if (params?.before) queryParams.append('before', params.before);
+        if (params?.sortBy) queryParams.append('sortBy', params.sortBy);
+        if (params?.sortDir) queryParams.append('sortDir', params.sortDir);
+        if (params?.q) queryParams.append('q', params.q);
+        const queryString = queryParams.toString();
+        return `/admin/notifications${queryString ? `?${queryString}` : ""}`;
       },
       providesTags: ["AdminNotifications"] as any,
     }),

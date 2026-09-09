@@ -191,22 +191,28 @@ function DashboardHeader({
                     className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${
                       n.color === 'emerald' ? 'text-emerald-600 bg-emerald-50' : 
                       n.color === 'blue' ? 'text-blue-600 bg-blue-50' :
+                      n.color === 'purple' ? 'text-purple-600 bg-purple-50' :
                       n.color === 'orange' ? 'text-orange-600 bg-orange-50' :
                       'text-slate-600 bg-slate-50'
                     }`}
                   >
                     <n.icon className="h-5 w-5" />
                   </div>
-                  <div className="flex-1 space-y-1">
-                    <div className="flex items-center justify-between">
-                      <p className={`text-[12px] font-bold group-hover:text-primary transition-colors ${n.status === 'unread' ? 'text-dark' : 'text-dark/60'}`}>
-                        {n.title}
-                      </p>
-                      <span className="text-[10px] font-medium text-slate/40">
+                  <div className="flex-1 space-y-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        {n.status === 'unread' && (
+                          <span className="h-2 w-2 rounded-full bg-red-500 shrink-0" title="Unread" />
+                        )}
+                        <p className="text-[12px] font-bold text-dark group-hover:text-primary transition-colors truncate">
+                          {n.title}
+                        </p>
+                      </div>
+                      <span className="text-[10px] font-medium text-slate-400 shrink-0">
                         {n.time}
                       </span>
                     </div>
-                    <p className="text-[11px] font-medium text-slate/50 leading-relaxed line-clamp-2">
+                    <p className="text-[11px] font-semibold text-slate-700 leading-relaxed line-clamp-2">
                       {n.description}
                     </p>
                   </div>

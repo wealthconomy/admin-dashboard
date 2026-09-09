@@ -5,7 +5,7 @@ import {
   ArrowLeft, Wallet, Target, Crosshair, Users, Activity,
   Briefcase, TrendingUp, Minus, Calendar, FileText, FileSpreadsheet,
   ShieldCheck, ChevronDown, ChevronUp, Leaf, BarChart2, Blend, Loader2,
-  AlertCircle
+  AlertCircle, RotateCw
 } from "lucide-react";
 import { useState, useMemo } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -467,14 +467,14 @@ export default function PlanUsersPage() {
   const isWealthGroup = planKey === "wealthgroup";
 
   // Data Fetching
-  const { data: portfoliosRes, isLoading: isLoadingPortfolios } = useGetPortfoliosByTypeQuery(
-    { type: meta?.backendType || "", period: dateFilter },
-    { skip: !meta?.backendType || isWealthGroup }
+  const { data: portfoliosRes, isLoading: isLoadingPortfolios, isFetching: isFetchingPortfolios, refetch: refetchPortfolios } = useGetPortfoliosByTypeQuery(
+    { type: meta?.backendType || "", period: dateFilter, status: "ALL" },
+    { skip: !meta?.backendType || isWealthGroup, refetchOnMountOrArgChange: true }
   );
 
-  const { data: tribesRes, isLoading: isLoadingTribes } = useGetTribesQuery(
-    { period: dateFilter },
-    { skip: !isWealthGroup }
+  const { data: tribesRes, isLoading: isLoadingTribes, isFetching: isFetchingTribes, refetch: refetchTribes } = useGetTribesQuery(
+    { period: dateFilter, status: "ALL" },
+    { skip: !isWealthGroup, refetchOnMountOrArgChange: true }
   );
 
   const { data: allUsersData } = useGetUsersQuery({ limit: 500 });
@@ -483,6 +483,14 @@ export default function PlanUsersPage() {
   const [exportPortfolios] = useLazyExportPortfoliosByTypeQuery();
 
   const isLoading = isLoadingPortfolios || isLoadingTribes;
+  const isFetching = isFetchingPortfolios || isFetchingTribes;
+  const handleRefresh = () => {
+    if (isWealthGroup) {
+      refetchTribes();
+    } else {
+      refetchPortfolios();
+    }
+  };
 
   // Build a lookup map of all platform users by ID and email
   const userMap = useMemo(() => {
@@ -657,6 +665,7 @@ export default function PlanUsersPage() {
         rawStatus.includes("LIQUIDAT") ||
         rawStatus.includes("DISBAND") ||
         rawStatus.includes("DELET") ||
+        rawStatus.includes("INACTIVE") ||
         Boolean(u.isTerminated) ||
         Boolean(u.terminatedAt)
       ) {
@@ -949,6 +958,16 @@ export default function PlanUsersPage() {
               className="flex items-center gap-2 h-10 px-4 rounded-xl bg-surface hover:bg-surface/80 border border-border/50 text-[12px] font-bold text-slate transition-all active:scale-95 cursor-pointer"
             >
               <FileSpreadsheet className="w-4 h-4" />Export CSV
+            </button>
+
+            <button
+              onClick={handleRefresh}
+              disabled={isFetching}
+              title="Refresh Plan Members"
+              className="flex items-center gap-1.5 h-10 px-3.5 rounded-xl bg-surface hover:bg-surface/80 border border-border/50 text-[12px] font-bold text-slate transition-all active:scale-95 cursor-pointer shrink-0"
+            >
+              <RotateCw className={`w-3.5 h-3.5 text-[#155D5F] ${isFetching ? "animate-spin" : ""}`} />
+              <span className="hidden sm:inline">Refresh</span>
             </button>
           </div>
         </div>

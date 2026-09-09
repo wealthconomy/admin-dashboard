@@ -11,6 +11,7 @@ import {
   TrendingUp,
   Gift,
   CheckCircle,
+  RotateCw,
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -106,9 +107,16 @@ export default function ReferralsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [timeFilter, setTimeFilter] = useState("All time");
 
-  const { data: statsData, isLoading: statsLoading } = useGetReferralStatsQuery(undefined);
-  const { data: referralsData, isLoading: referralsLoading } = useGetReferralsListQuery(undefined);
-  const { data: payoutsData, isLoading: payoutsLoading } = useGetReferralPayoutsQuery(undefined);
+  const { data: statsData, isLoading: statsLoading, isFetching: statsFetching, refetch: refetchStats } = useGetReferralStatsQuery(undefined, { refetchOnMountOrArgChange: true });
+  const { data: referralsData, isLoading: referralsLoading, isFetching: referralsFetching, refetch: refetchReferrals } = useGetReferralsListQuery(undefined, { refetchOnMountOrArgChange: true });
+  const { data: payoutsData, isLoading: payoutsLoading, isFetching: payoutsFetching, refetch: refetchPayouts } = useGetReferralPayoutsQuery(undefined, { refetchOnMountOrArgChange: true });
+
+  const isFetching = statsFetching || referralsFetching || payoutsFetching;
+  const handleRefresh = () => {
+    refetchStats();
+    refetchReferrals();
+    refetchPayouts();
+  };
   const [approvePayout, { isLoading: isApproving }] = useApproveReferralPayoutMutation();
   const [approvingId, setApprovingId] = useState<string | null>(null);
 
@@ -290,6 +298,16 @@ export default function ReferralsPage() {
             <ChevronDown className="w-4 h-4 text-slate/50 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
           </div>
         )}
+
+        <button
+          onClick={handleRefresh}
+          disabled={isFetching}
+          title="Refresh Referrals & Payouts"
+          className="h-10 px-3.5 rounded-2xl bg-white border border-border text-slate text-xs font-bold transition-all flex items-center gap-2 hover:bg-surface cursor-pointer shrink-0"
+        >
+          <RotateCw className={`w-3.5 h-3.5 text-[#155D5F] ${isFetching ? "animate-spin" : ""}`} />
+          <span className="hidden sm:inline">Refresh</span>
+        </button>
       </div>
 
       {/* Referrals Tab */}

@@ -18,6 +18,7 @@ import {
   Server,
   Calendar,
   Sparkles,
+  RotateCw,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -40,6 +41,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useGetActivitiesQuery } from "@/lib/redux/features/usersApi";
 import { format } from "date-fns";
+import { formatCurrencyInText } from "@/lib/utils";
 
 const ACTIVITY_TYPES = [
   { label: "All Types", value: "" },
@@ -157,6 +159,8 @@ export default function ActivitiesPage() {
     period: selectedPeriod !== "all_time" ? selectedPeriod : undefined,
     after: currentCursor,
     limit,
+  }, {
+    refetchOnMountOrArgChange: true,
   });
 
   // Extract items array from the standardized API structure: { data: { items: [...] } }
@@ -349,6 +353,18 @@ export default function ActivitiesPage() {
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
+
+          {/* Refresh Button */}
+          <Button
+            variant="outline"
+            onClick={() => refetch()}
+            disabled={isFetching}
+            title="Refresh Activity Logs"
+            className="h-11 px-3 rounded-xl border-border/50 font-bold text-xs text-slate hover:bg-surface gap-1.5 shrink-0 cursor-pointer"
+          >
+            <RotateCw className={`h-3.5 w-3.5 text-[#155D5F] ${isFetching ? "animate-spin" : ""}`} />
+            <span className="hidden sm:inline">Refresh</span>
+          </Button>
         </div>
       </div>
 
@@ -398,7 +414,7 @@ export default function ActivitiesPage() {
                   const dateStr = act.createdAt || act.timestamp;
                   const formattedDate = dateStr ? format(new Date(dateStr), "HH:mm, MMM dd, yyyy") : "-";
                   const title = getFriendlyActivityTitle(act);
-                  const desc = act.description || act.details || "-";
+                  const desc = formatCurrencyInText(act.description || act.details || "-");
                   const status = act.metadata?.status || act.status || "SUCCESS";
 
                   return (
@@ -606,7 +622,7 @@ export default function ActivitiesPage() {
                   <div className="col-span-2">
                     <p className="text-[11px] font-bold text-slate/50">Description</p>
                     <p className="text-xs font-medium text-dark/80 mt-0.5 bg-white p-3 rounded-xl border border-border/30 whitespace-pre-wrap">
-                      {selectedLog.description || selectedLog.details || "No description recorded"}
+                      {formatCurrencyInText(selectedLog.description || selectedLog.details || "No description recorded")}
                     </p>
                   </div>
                   <div>

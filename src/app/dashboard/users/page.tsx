@@ -22,7 +22,8 @@ import {
   XCircle,
   Wallet,
   TrendingUp,
-  Layers
+  Layers,
+  RotateCw
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -91,6 +92,8 @@ export default function UsersPage() {
     status: selectedStatus !== "All Status" ? selectedStatus : undefined,
     transactionType: selectedTransactionType !== "All Types" ? selectedTransactionType : undefined,
     sortBySavings: sortSavings !== "Default" ? sortSavings : undefined,
+  }, {
+    refetchOnMountOrArgChange: true,
   });
 
   const [suspendUserMutation] = useSuspendUserMutation();
@@ -240,6 +243,17 @@ export default function UsersPage() {
           >
             <Download className="h-4 w-4" />
             Export CSV
+          </Button>
+
+          <Button
+            variant="outline"
+            onClick={() => refetch()}
+            disabled={isFetching}
+            title="Refresh Users"
+            className="h-11 px-3 rounded-xl border-border/50 font-bold text-slate hover:bg-surface transition-all gap-1.5 cursor-pointer"
+          >
+            <RotateCw className={`h-4 w-4 text-[#155D5F] ${isFetching ? "animate-spin" : ""}`} />
+            <span className="hidden sm:inline">Refresh</span>
           </Button>
 
           <DropdownMenu>

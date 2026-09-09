@@ -3,7 +3,7 @@
 import { useState } from "react";
 import {
   Search, ChevronDown, MoreVertical, Eye, Filter,
-  ArrowRightLeft, X, User, FileText, Receipt,
+  ArrowRightLeft, X, User, FileText, Receipt, RotateCw,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -21,6 +21,7 @@ import {
 import { useGetTransactionsQuery, useGetUsersQuery } from "@/lib/redux/features/usersApi";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { formatCurrencyInText } from "@/lib/utils";
 
 const getSafeArray = (data: any) => {
   if (!data) return [];
@@ -38,16 +39,10 @@ const getSafeArray = (data: any) => {
   return [];
 };
 
-// Descriptions from the backend embed raw kobo amounts as integers (e.g. "Referral reward: 50000").
-// This helper finds standalone integers ≥ 100 in the text and converts them to ₦ naira.
 const formatDescription = (desc: string | null | undefined): string => {
-  if (!desc) return "-";
-  return desc.replace(/\b(\d{3,})\b/g, (match) => {
-    const n = Number(match);
-    // Only treat as kobo if it's a round number that makes sense as a monetary value
-    return `₦${(n / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
-  });
+  return formatCurrencyInText(desc);
 };
+
 
 
 interface TransactionActionInfo {
@@ -188,12 +183,14 @@ export default function TransactionsPage() {
   const [currentCursor, setCurrentCursor] = useState<string | undefined>(undefined);
   const limit = 20;
 
-  const { data: transactionsData, isLoading, isFetching, isError } = useGetTransactionsQuery({
+  const { data: transactionsData, isLoading, isFetching, isError, refetch } = useGetTransactionsQuery({
     search: searchQuery || undefined,
     q: searchQuery || undefined,
     status: statusFilter !== "All Status" ? statusFilter : undefined,
     after: currentCursor || undefined,
     limit,
+  }, {
+    refetchOnMountOrArgChange: true,
   });
   const transactionList = getSafeArray(transactionsData);
 
@@ -301,6 +298,18 @@ export default function TransactionsPage() {
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>
+
+            {/* Refresh Button */}
+            <Button
+              variant="outline"
+              onClick={() => refetch()}
+              disabled={isFetching}
+              title="Refresh Transactions"
+              className="h-11 px-3 rounded-xl border-border/50 font-bold text-xs text-slate hover:bg-surface gap-1.5 shrink-0 cursor-pointer"
+            >
+              <RotateCw className={`h-3.5 w-3.5 text-[#155D5F] ${isFetching ? "animate-spin" : ""}`} />
+              <span className="hidden sm:inline">Refresh</span>
+            </Button>
           </div>
         </div>
       </div>
