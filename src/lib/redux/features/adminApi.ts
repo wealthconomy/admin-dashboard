@@ -88,8 +88,12 @@ export const adminApi = apiSlice.injectEndpoints({
     // --------------------------------------------------------
     // System Settings & Configs
     // --------------------------------------------------------
+    getSystemConfig: builder.query({
+      query: () => "/admin/system-config",
+      providesTags: ["Dashboard"],
+    }),
     getSystemConfigs: builder.query({
-      query: (params) => {
+      query: (params?: any) => {
         const searchParams = new URLSearchParams();
         if (params) {
           Object.entries(params).forEach(([key, value]) => {
@@ -104,6 +108,14 @@ export const adminApi = apiSlice.injectEndpoints({
       providesTags: ["Dashboard"],
     }),
     updateSystemConfig: builder.mutation({
+      query: ({ key, value }) => ({
+        url: `/admin/system-config/${key}`,
+        method: "PUT",
+        body: { value },
+      }),
+      invalidatesTags: ["Dashboard"],
+    }),
+    updateSystemConfigByKey: builder.mutation({
       query: ({ key, value }) => ({
         url: `/admin/system-config/${key}`,
         method: "PUT",
@@ -296,8 +308,10 @@ export const {
   useCreateRoleMutation,
   useUpdateRoleMutation,
   useDeleteRoleMutation,
+  useGetSystemConfigQuery,
   useGetSystemConfigsQuery,
   useUpdateSystemConfigMutation,
+  useUpdateSystemConfigByKeyMutation,
   useGetSettingsQuery,
   useUpdateSettingsMutation,
   useUpdateProfileMutation,

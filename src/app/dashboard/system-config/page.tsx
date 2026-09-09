@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, Save } from "lucide-react";
+import { Loader2, Save, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,8 +13,71 @@ import {
   useUpdateSettingsMutation,
   useGetEmailTemplatesQuery,
   useUpdateEmailTemplateMutation,
-  usePreviewEmailTemplateMutation
+  usePreviewEmailTemplateMutation,
+  useGetSystemConfigQuery,
+  useUpdateSystemConfigByKeyMutation,
 } from "@/lib/redux/features/adminApi";
+
+interface InterestRatesForm {
+  INTEREST_RATE_WEALTH_GOAL: string;
+  INTEREST_RATE_WEALTH_FIX: string;
+  INTEREST_RATE_WEALTH_FLEX: string;
+  INTEREST_RATE_WEALTH_FAM: string;
+  INTEREST_RATE_WEALTH_FLOW: string;
+  INTEREST_DISBURSEMENT_FREQUENCY: string;
+  WALLET_FEE_KOBO: string;
+}
+
+const RATE_FIELDS: Array<{
+  key: keyof Pick<
+    InterestRatesForm,
+    | "INTEREST_RATE_WEALTH_GOAL"
+    | "INTEREST_RATE_WEALTH_FIX"
+    | "INTEREST_RATE_WEALTH_FLEX"
+    | "INTEREST_RATE_WEALTH_FAM"
+    | "INTEREST_RATE_WEALTH_FLOW"
+  >;
+  label: string;
+  planName: string;
+  badgeColor: string;
+  description: string;
+}> = [
+  {
+    key: "INTEREST_RATE_WEALTH_GOAL",
+    label: "WealthGoal Interest Rate (% P.A.)",
+    planName: "WealthGoal",
+    badgeColor: "bg-pink-50 text-pink-600 border-pink-200",
+    description: "Annual percentage yield for goal-based milestone savings portfolios.",
+  },
+  {
+    key: "INTEREST_RATE_WEALTH_FIX",
+    label: "WealthFix Interest Rate (% P.A.)",
+    planName: "WealthFix",
+    badgeColor: "bg-orange-50 text-orange-600 border-orange-200",
+    description: "Annual interest yield for strict fixed-term deposits locked until maturity.",
+  },
+  {
+    key: "INTEREST_RATE_WEALTH_FLEX",
+    label: "WealthFlex Interest Rate (% P.A.)",
+    planName: "WealthFlex",
+    badgeColor: "bg-emerald-50 text-emerald-600 border-emerald-200",
+    description: "Annual interest yield for flexible savings with instant access and withdrawals.",
+  },
+  {
+    key: "INTEREST_RATE_WEALTH_FAM",
+    label: "WealthFam Interest Rate (% P.A.)",
+    planName: "WealthFam",
+    badgeColor: "bg-purple-50 text-purple-600 border-purple-200",
+    description: "Annual interest yield for joint family savings and shared goals.",
+  },
+  {
+    key: "INTEREST_RATE_WEALTH_FLOW",
+    label: "WealthFlow Interest Rate (% P.A.)",
+    planName: "WealthFlow",
+    badgeColor: "bg-blue-50 text-blue-600 border-blue-200",
+    description: "Annual interest yield for recurring automated cashflow savings plans.",
+  },
+];
 
 export default function SystemConfigPage() {
   const { data: settingsData, isLoading } = useGetSettingsQuery(undefined);
@@ -24,6 +87,10 @@ export default function SystemConfigPage() {
   const [updateTemplate, { isLoading: isUpdatingTemplate }] = useUpdateEmailTemplateMutation();
   const [previewTemplate, { isLoading: isPreviewing }] = usePreviewEmailTemplateMutation();
 
+  // Interest Rates (GET /admin/system-config and PUT /admin/system-config/{key})
+  const { data: systemConfigData, isLoading: isLoadingConfig, refetch: refetchConfig } = useGetSystemConfigQuery(undefined);
+  const [updateSystemConfigByKey] = useUpdateSystemConfigByKeyMutation();
+
   const [formState, setFormState] = useState({
     REFERRAL_ENABLED: false,
     REFERRAL_REWARD_KOBO: "",
@@ -31,7 +98,24 @@ export default function SystemConfigPage() {
     ACTIVE_PAYMENT_PROVIDER: "PAGA",
   });
 
-  const [activeTab, setActiveTab] = useState<"settings" | "email">("settings");
+  const [ratesForm, setRatesForm] = useState<InterestRatesForm>({
+    INTEREST_RATE_WEALTH_GOAL: "",
+    INTEREST_RATE_WEALTH_FIX: "",
+    INTEREST_RATE_WEALTH_FLEX: "",
+    INTEREST_RATE_WEALTH_FAM: "",
+    INTEREST_RATE_WEALTH_FLOW: "",
+    INTEREST_DISBURSEMENT_FREQUENCY: "MONTHLY",
+    WALLET_FEE_KOBO: "",
+  });
+
+  const [minAppVersion, setMinAppVersion] = useState("1.0.0");
+  const [originalMinAppVersion, setOriginalMinAppVersion] = useState("1.0.0");
+  const [isSavingGeneral, setIsSavingGeneral] = useState(false);
+
+  const [originalRates, setOriginalRates] = useState<Partial<InterestRatesForm>>({});
+  const [isSavingRates, setIsSavingRates] = useState(false);
+
+  const [activeTab, setActiveTab] = useState<"settings" | "email" | "interest-rates">("settings");
   
   // Email Template Modal State
   const [editingTemplate, setEditingTemplate] = useState<any | null>(null);
@@ -49,9 +133,59 @@ export default function SystemConfigPage() {
     }
   }, [settingsData]);
 
+  useEffect(() => {
+    const rawItems =
+      systemConfigData?.data?.items ||
+      systemConfigData?.items ||
+      (Array.isArray(systemConfigData?.data) ? systemConfigData.data : []) ||
+      (Array.isArray(systemConfigData) ? systemConfigData : []);
+
+    if (Array.isArray(rawItems) && rawItems.length > 0) {
+      const map: Record<string, string> = {};
+      rawItems.forEach((item: any) => {
+        if (item?.key) {
+          map[item.key] = String(item.value ?? "");
+        }
+      });
+
+      const loadedVersion = map["MIN_APP_VERSION"] || "1.0.0";
+      setMinAppVersion(loadedVersion);
+      setOriginalMinAppVersion(loadedVersion);
+
+      const loaded: InterestRatesForm = {
+        INTEREST_RATE_WEALTH_GOAL: map["INTEREST_RATE_WEALTH_GOAL"] ?? "",
+        INTEREST_RATE_WEALTH_FIX: map["INTEREST_RATE_WEALTH_FIX"] ?? "",
+        INTEREST_RATE_WEALTH_FLEX: map["INTEREST_RATE_WEALTH_FLEX"] ?? "",
+        INTEREST_RATE_WEALTH_FAM: map["INTEREST_RATE_WEALTH_FAM"] ?? "",
+        INTEREST_RATE_WEALTH_FLOW: map["INTEREST_RATE_WEALTH_FLOW"] ?? "",
+        INTEREST_DISBURSEMENT_FREQUENCY: map["INTEREST_DISBURSEMENT_FREQUENCY"] || "MONTHLY",
+        WALLET_FEE_KOBO: map["WALLET_FEE_KOBO"] ?? "",
+      };
+
+      setRatesForm(loaded);
+      setOriginalRates(loaded);
+    }
+  }, [systemConfigData]);
+
   const handleSave = async () => {
+    const trimmedVersion = minAppVersion.trim();
+    const versionChanged = trimmedVersion !== originalMinAppVersion.trim();
+
+    // Validate semver format (e.g. 1.0.0 or 2.1.3)
+    if (versionChanged && trimmedVersion) {
+      const semverRegex = /^\d+(\.\d+){1,2}$/;
+      if (!semverRegex.test(trimmedVersion)) {
+        toast.error("Please enter a valid version format (e.g. 1.0.0)");
+        return;
+      }
+    }
+
+    setIsSavingGeneral(true);
+    let generalSuccess = false;
+    let versionSuccess = false;
+
     try {
-      // Send as strings as required by the backend
+      // 1. Save standard settings to POST /admin/settings
       const payload = {
         ...(settingsData?.data || {}),
         REFERRAL_ENABLED: String(formState.REFERRAL_ENABLED),
@@ -63,9 +197,78 @@ export default function SystemConfigPage() {
       console.log("Sending payload:", payload);
 
       await updateSettings(payload).unwrap();
+      generalSuccess = true;
+
+      // 2. If MIN_APP_VERSION changed, save via PUT /admin/system-config/MIN_APP_VERSION
+      if (versionChanged) {
+        await updateSystemConfigByKey({
+          key: "MIN_APP_VERSION",
+          value: trimmedVersion,
+        }).unwrap();
+        setOriginalMinAppVersion(trimmedVersion);
+        versionSuccess = true;
+        refetchConfig();
+      }
+
       toast.success("System settings updated successfully");
     } catch (err: any) {
-      toast.error(err?.data?.message || "Failed to update system settings");
+      console.error("Error saving settings:", err);
+      if (generalSuccess && !versionSuccess) {
+        toast.error("General settings saved, but failed to update Minimum App Version");
+      } else {
+        toast.error(err?.data?.message || "Failed to update system settings");
+      }
+    } finally {
+      setIsSavingGeneral(false);
+    }
+  };
+
+  const handleSaveInterestRates = async () => {
+    const changedKeys = (Object.keys(ratesForm) as Array<keyof InterestRatesForm>).filter(
+      (key) => String(ratesForm[key] ?? "").trim() !== String(originalRates[key] ?? "").trim()
+    );
+
+    if (changedKeys.length === 0) {
+      toast.info("No changes to save.");
+      return;
+    }
+
+    setIsSavingRates(true);
+    const failedKeys: string[] = [];
+    const succeededKeys: string[] = [];
+
+    await Promise.all(
+      changedKeys.map(async (key) => {
+        try {
+          await updateSystemConfigByKey({
+            key,
+            value: String(ratesForm[key] ?? "").trim(),
+          }).unwrap();
+          succeededKeys.push(key);
+        } catch (err: any) {
+          console.error(`Failed to update ${key}:`, err);
+          failedKeys.push(key);
+        }
+      })
+    );
+
+    setIsSavingRates(false);
+
+    if (succeededKeys.length > 0) {
+      setOriginalRates((prev) => {
+        const next = { ...prev };
+        succeededKeys.forEach((k) => {
+          next[k as keyof InterestRatesForm] = ratesForm[k as keyof InterestRatesForm];
+        });
+        return next;
+      });
+      refetchConfig();
+    }
+
+    if (failedKeys.length === 0) {
+      toast.success("Interest rates and fees updated successfully");
+    } else {
+      toast.error(`Failed to update: ${failedKeys.join(", ")}`);
     }
   };
 
@@ -77,16 +280,16 @@ export default function SystemConfigPage() {
             System Configuration
           </h1>
           <p className="text-slate/60 text-sm mt-1 font-medium">
-            Manage system-wide parameters, referral rewards, and email templates.
+            Manage system-wide parameters, interest rates, referral rewards, and email templates.
           </p>
         </div>
         {activeTab === "settings" && (
           <Button 
             onClick={handleSave}
-            disabled={isLoading || isSaving}
-            className="bg-[#155D5F] hover:bg-[#155D5F]/90 text-white rounded-xl h-11 px-8 font-bold text-sm shadow-lg shadow-primary/10 transition-all active:scale-95"
+            disabled={isLoading || isSaving || isSavingGeneral}
+            className="bg-[#155D5F] hover:bg-[#155D5F]/90 text-white rounded-xl h-11 px-8 font-bold text-sm shadow-lg shadow-primary/10 transition-all active:scale-95 cursor-pointer"
           >
-            {isSaving ? (
+            {isSaving || isSavingGeneral ? (
               <Loader2 className="h-4 w-4 animate-spin mr-2" />
             ) : (
               <Save className="h-4 w-4 mr-2" />
@@ -94,12 +297,26 @@ export default function SystemConfigPage() {
             Save Settings
           </Button>
         )}
+        {activeTab === "interest-rates" && (
+          <Button 
+            onClick={handleSaveInterestRates}
+            disabled={isLoadingConfig || isSavingRates}
+            className="bg-[#155D5F] hover:bg-[#155D5F]/90 text-white rounded-xl h-11 px-8 font-bold text-sm shadow-lg shadow-primary/10 transition-all active:scale-95 cursor-pointer"
+          >
+            {isSavingRates ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            ) : (
+              <Save className="h-4 w-4 mr-2" />
+            )}
+            Save Interest Rates
+          </Button>
+        )}
       </div>
 
       <div className="flex border-b border-border/50 mb-8 gap-8">
         <button
           onClick={() => setActiveTab("settings")}
-          className={`pb-3 text-sm font-bold transition-all relative ${
+          className={`pb-3 text-sm font-bold transition-all relative cursor-pointer ${
             activeTab === "settings" ? "text-[#155D5F]" : "text-slate/60 hover:text-dark"
           }`}
         >
@@ -109,8 +326,19 @@ export default function SystemConfigPage() {
           )}
         </button>
         <button
+          onClick={() => setActiveTab("interest-rates")}
+          className={`pb-3 text-sm font-bold transition-all relative cursor-pointer ${
+            activeTab === "interest-rates" ? "text-[#155D5F]" : "text-slate/60 hover:text-dark"
+          }`}
+        >
+          Interest Rates
+          {activeTab === "interest-rates" && (
+            <span className="absolute bottom-[-1px] left-0 right-0 h-0.5 bg-[#155D5F] rounded-t-full" />
+          )}
+        </button>
+        <button
           onClick={() => setActiveTab("email")}
-          className={`pb-3 text-sm font-bold transition-all relative ${
+          className={`pb-3 text-sm font-bold transition-all relative cursor-pointer ${
             activeTab === "email" ? "text-[#155D5F]" : "text-slate/60 hover:text-dark"
           }`}
         >
@@ -121,7 +349,9 @@ export default function SystemConfigPage() {
         </button>
       </div>
 
-      {(isLoading || isLoadingTemplates) ? (
+      {((activeTab === "settings" && isLoading) ||
+        (activeTab === "email" && isLoadingTemplates) ||
+        (activeTab === "interest-rates" && isLoadingConfig)) ? (
         <div className="flex flex-col items-center justify-center py-32 flex-1">
           <Loader2 className="h-8 w-8 animate-spin text-primary/40 mx-auto mb-4" />
           <p className="text-sm font-medium text-slate/40">Loading configuration...</p>
@@ -220,7 +450,164 @@ export default function SystemConfigPage() {
                   </div>
                 </div>
               </div>
+
+              {/* App Release & Versioning */}
+              <div className="bg-surface/30 border border-border/50 rounded-[20px] p-8">
+                <h3 className="text-lg font-bold text-dark font-outfit mb-6">
+                  App Release
+                </h3>
+                
+                <div className="space-y-6">
+                  <div className="space-y-3 p-4 bg-white border border-border/50 rounded-xl">
+                    <Label className="text-sm font-bold text-dark block">
+                      Minimum App Version
+                    </Label>
+                    <span className="text-xs font-medium text-slate/60 block mb-3">
+                      Users on an app version below this will be prompted to update before they can continue using the app.
+                    </span>
+                    <div className="relative max-w-sm">
+                      <Input 
+                        type="text"
+                        placeholder="1.0.0"
+                        value={minAppVersion}
+                        onChange={(e) => setMinAppVersion(e.target.value)}
+                        className="h-12 bg-surface/50 border-border/30 rounded-xl px-5 text-sm font-medium focus-visible:ring-primary/20 transition-all border shadow-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
             </>
+          )}
+
+          {activeTab === "interest-rates" && (
+            <div className="space-y-8">
+              {/* Portfolio Savings Plans Interest Rates */}
+              <div className="bg-surface/30 border border-border/50 rounded-[20px] p-8">
+                <div className="mb-6">
+                  <h3 className="text-lg font-bold text-dark font-outfit">
+                    Portfolio Savings Interest Rates
+                  </h3>
+                  <p className="text-xs font-medium text-slate/60 mt-1">
+                    Annual percentage yield (% Per Annum) applied to savings portfolios. Enter numeric percentages (e.g. 12 for 12% P.A.).
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {RATE_FIELDS.map((field) => (
+                    <div
+                      key={field.key}
+                      className="p-5 bg-white border border-border/50 rounded-xl space-y-2 hover:border-border transition-colors"
+                    >
+                      <div className="flex items-center justify-between">
+                        <Label className="text-sm font-bold text-dark">
+                          {field.label}
+                        </Label>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${field.badgeColor}`}>
+                          {field.planName}
+                        </span>
+                      </div>
+                      <span className="text-xs font-medium text-slate/50 block min-h-[32px] leading-relaxed">
+                        {field.description}
+                      </span>
+                      <div className="relative max-w-sm mt-2">
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          placeholder="e.g. 12"
+                          value={ratesForm[field.key]}
+                          onChange={(e) =>
+                            setRatesForm({
+                              ...ratesForm,
+                              [field.key]: e.target.value,
+                            })
+                          }
+                          className="h-12 bg-surface/50 border-border/30 rounded-xl px-4 pr-10 text-sm font-semibold focus-visible:ring-primary/20 transition-all border shadow-none"
+                        />
+                        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate/40 pointer-events-none">
+                          %
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Disbursement & Transaction Fees */}
+              <div className="bg-surface/30 border border-border/50 rounded-[20px] p-8">
+                <div className="mb-6">
+                  <h3 className="text-lg font-bold text-dark font-outfit">
+                    Disbursement & Wallet Fees
+                  </h3>
+                  <p className="text-xs font-medium text-slate/60 mt-1">
+                    Configure interest calculation cadence and flat transaction charges on primary wallets.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Disbursement Frequency */}
+                  <div className="p-5 bg-white border border-border/50 rounded-xl space-y-2">
+                    <Label className="text-sm font-bold text-dark block">
+                      Interest Disbursement Frequency
+                    </Label>
+                    <span className="text-xs font-medium text-slate/50 block min-h-[32px] leading-relaxed">
+                      Frequency at which accumulated interest earnings are calculated and disbursed to user balances.
+                    </span>
+                    <div className="relative max-w-sm mt-2">
+                      <select
+                        value={ratesForm.INTEREST_DISBURSEMENT_FREQUENCY}
+                        onChange={(e) =>
+                          setRatesForm({
+                            ...ratesForm,
+                            INTEREST_DISBURSEMENT_FREQUENCY: e.target.value,
+                          })
+                        }
+                        className="h-12 w-full appearance-none rounded-xl bg-surface/50 border border-border/30 px-4 pr-10 text-sm font-bold text-dark focus:outline-none focus:ring-1 focus:ring-primary/20 transition-all cursor-pointer"
+                      >
+                        <option value="DAILY">DAILY</option>
+                        <option value="WEEKLY">WEEKLY</option>
+                        <option value="MONTHLY">MONTHLY</option>
+                      </select>
+                      <ChevronDown className="w-4 h-4 text-slate/40 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    </div>
+                  </div>
+
+                  {/* Wallet Fee Kobo */}
+                  <div className="p-5 bg-white border border-border/50 rounded-xl space-y-2">
+                    <Label className="text-sm font-bold text-dark block">
+                      Wallet Transaction Fee (Kobo)
+                    </Label>
+                    <span className="text-xs font-medium text-slate/50 block min-h-[32px] leading-relaxed">
+                      Flat transaction fee charged on wallet operations in kobo (e.g. 10000 kobo = ₦100.00).
+                    </span>
+                    <div className="relative max-w-sm mt-2">
+                      <Input
+                        type="number"
+                        min="0"
+                        placeholder="e.g. 10000"
+                        value={ratesForm.WALLET_FEE_KOBO}
+                        onChange={(e) =>
+                          setRatesForm({
+                            ...ratesForm,
+                            WALLET_FEE_KOBO: e.target.value,
+                          })
+                        }
+                        className="h-12 bg-surface/50 border-border/30 rounded-xl px-5 text-sm font-semibold focus-visible:ring-primary/20 transition-all border shadow-none pl-12"
+                      />
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate/40 pointer-events-none">
+                        ₦
+                      </span>
+                      {ratesForm.WALLET_FEE_KOBO && !isNaN(Number(ratesForm.WALLET_FEE_KOBO)) && (
+                        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-[#155D5F] pointer-events-none">
+                          = ₦{(Number(ratesForm.WALLET_FEE_KOBO) / 100).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           )}
 
           {activeTab === "email" && (
