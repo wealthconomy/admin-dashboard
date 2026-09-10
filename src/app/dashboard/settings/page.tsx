@@ -114,7 +114,6 @@ export default function SettingsPage() {
       { key: "email",     label: "Email address" },
       { key: "phone",     label: "Phone number" },
       { key: "username",  label: "Username" },
-      { key: "dob",       label: "Date of birth" },
       { key: "address",   label: "Address" },
     ];
 
@@ -428,18 +427,6 @@ export default function SettingsPage() {
                     <Input
                       value={profileForm.username}
                       onChange={(e) => setProfileForm({...profileForm, username: e.target.value})}
-                      readOnly={!isEditingProfile}
-                      className="h-12 bg-surface/50 border-border/30 rounded-xl px-5 text-sm font-medium focus-visible:ring-primary/20 transition-all border shadow-none disabled:opacity-70 disabled:cursor-not-allowed"
-                    />
-                  </div>
-                  <div className="space-y-2.5">
-                    <Label className="text-[13px] font-bold text-slate/70 ml-1">
-                      Date of birth:
-                    </Label>
-                    <Input
-                      type="date"
-                      value={profileForm.dob}
-                      onChange={(e) => setProfileForm({...profileForm, dob: e.target.value})}
                       readOnly={!isEditingProfile}
                       className="h-12 bg-surface/50 border-border/30 rounded-xl px-5 text-sm font-medium focus-visible:ring-primary/20 transition-all border shadow-none disabled:opacity-70 disabled:cursor-not-allowed"
                     />
