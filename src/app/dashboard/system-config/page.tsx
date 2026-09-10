@@ -24,6 +24,11 @@ interface InterestRatesForm {
   INTEREST_RATE_WEALTH_FLEX: string;
   INTEREST_RATE_WEALTH_FAM: string;
   INTEREST_RATE_WEALTH_FLOW: string;
+  INTEREST_RATE_WEALTH_GROUP: string;
+  PENALTY_RATE_WEALTH_GOAL: string;
+  PENALTY_RATE_WEALTH_FAM: string;
+  PENALTY_RATE_WEALTH_FLOW: string;
+  EARLY_TERMINATION_PENALTY_PCT: string;
   INTEREST_DISBURSEMENT_FREQUENCY: string;
   WALLET_FEE_KOBO: string;
 }
@@ -36,6 +41,7 @@ const RATE_FIELDS: Array<{
     | "INTEREST_RATE_WEALTH_FLEX"
     | "INTEREST_RATE_WEALTH_FAM"
     | "INTEREST_RATE_WEALTH_FLOW"
+    | "INTEREST_RATE_WEALTH_GROUP"
   >;
   label: string;
   planName: string;
@@ -77,6 +83,56 @@ const RATE_FIELDS: Array<{
     badgeColor: "bg-blue-50 text-blue-600 border-blue-200",
     description: "Annual interest yield for recurring automated cashflow savings plans.",
   },
+  {
+    key: "INTEREST_RATE_WEALTH_GROUP",
+    label: "WealthGroup Interest Rate (% P.A.)",
+    planName: "WealthGroup",
+    badgeColor: "bg-indigo-50 text-indigo-600 border-indigo-200",
+    description: "Annual interest yield for rotational and collaborative group savings plans.",
+  },
+];
+
+const PENALTY_FIELDS: Array<{
+  key: keyof Pick<
+    InterestRatesForm,
+    | "PENALTY_RATE_WEALTH_GOAL"
+    | "EARLY_TERMINATION_PENALTY_PCT"
+    | "PENALTY_RATE_WEALTH_FAM"
+    | "PENALTY_RATE_WEALTH_FLOW"
+  >;
+  label: string;
+  planName: string;
+  badgeColor: string;
+  description: string;
+}> = [
+  {
+    key: "PENALTY_RATE_WEALTH_GOAL",
+    label: "WealthGoal Early Termination Penalty (%)",
+    planName: "WealthGoal",
+    badgeColor: "bg-pink-50 text-pink-600 border-pink-200",
+    description: "Penalty fee percentage deducted when liquidating a goal portfolio before target date.",
+  },
+  {
+    key: "EARLY_TERMINATION_PENALTY_PCT",
+    label: "WealthFix Early Termination Penalty (%)",
+    planName: "WealthFix",
+    badgeColor: "bg-orange-50 text-orange-600 border-orange-200",
+    description: "Penalty percentage deducted for breaking a fixed-term deposit before its official maturity date.",
+  },
+  {
+    key: "PENALTY_RATE_WEALTH_FAM",
+    label: "WealthFam Early Termination Penalty (%)",
+    planName: "WealthFam",
+    badgeColor: "bg-purple-50 text-purple-600 border-purple-200",
+    description: "Penalty fee percentage applied when closing or withdrawing from a family savings plan prematurely.",
+  },
+  {
+    key: "PENALTY_RATE_WEALTH_FLOW",
+    label: "WealthFlow Early Termination Penalty (%)",
+    planName: "WealthFlow",
+    badgeColor: "bg-blue-50 text-blue-600 border-blue-200",
+    description: "Penalty fee percentage applied when terminating an automated cashflow savings plan before scheduled term.",
+  },
 ];
 
 export default function SystemConfigPage() {
@@ -104,6 +160,11 @@ export default function SystemConfigPage() {
     INTEREST_RATE_WEALTH_FLEX: "",
     INTEREST_RATE_WEALTH_FAM: "",
     INTEREST_RATE_WEALTH_FLOW: "",
+    INTEREST_RATE_WEALTH_GROUP: "",
+    PENALTY_RATE_WEALTH_GOAL: "",
+    PENALTY_RATE_WEALTH_FAM: "",
+    PENALTY_RATE_WEALTH_FLOW: "",
+    EARLY_TERMINATION_PENALTY_PCT: "",
     INTEREST_DISBURSEMENT_FREQUENCY: "MONTHLY",
     WALLET_FEE_KOBO: "",
   });
@@ -114,8 +175,9 @@ export default function SystemConfigPage() {
 
   const [originalRates, setOriginalRates] = useState<Partial<InterestRatesForm>>({});
   const [isSavingRates, setIsSavingRates] = useState(false);
+  const [isSavingPenalties, setIsSavingPenalties] = useState(false);
 
-  const [activeTab, setActiveTab] = useState<"settings" | "email" | "interest-rates">("settings");
+  const [activeTab, setActiveTab] = useState<"settings" | "email" | "interest-rates" | "penalties">("settings");
   
   // Email Template Modal State
   const [editingTemplate, setEditingTemplate] = useState<any | null>(null);
@@ -158,6 +220,11 @@ export default function SystemConfigPage() {
         INTEREST_RATE_WEALTH_FLEX: map["INTEREST_RATE_WEALTH_FLEX"] ?? "",
         INTEREST_RATE_WEALTH_FAM: map["INTEREST_RATE_WEALTH_FAM"] ?? "",
         INTEREST_RATE_WEALTH_FLOW: map["INTEREST_RATE_WEALTH_FLOW"] ?? "",
+        INTEREST_RATE_WEALTH_GROUP: map["INTEREST_RATE_WEALTH_GROUP"] ?? "",
+        PENALTY_RATE_WEALTH_GOAL: map["PENALTY_RATE_WEALTH_GOAL"] ?? "",
+        PENALTY_RATE_WEALTH_FAM: map["PENALTY_RATE_WEALTH_FAM"] ?? "",
+        PENALTY_RATE_WEALTH_FLOW: map["PENALTY_RATE_WEALTH_FLOW"] ?? "",
+        EARLY_TERMINATION_PENALTY_PCT: map["EARLY_TERMINATION_PENALTY_PCT"] ?? "",
         INTEREST_DISBURSEMENT_FREQUENCY: map["INTEREST_DISBURSEMENT_FREQUENCY"] || "MONTHLY",
         WALLET_FEE_KOBO: map["WALLET_FEE_KOBO"] ?? "",
       };
@@ -224,12 +291,23 @@ export default function SystemConfigPage() {
   };
 
   const handleSaveInterestRates = async () => {
-    const changedKeys = (Object.keys(ratesForm) as Array<keyof InterestRatesForm>).filter(
+    const rateKeys: Array<keyof InterestRatesForm> = [
+      "INTEREST_RATE_WEALTH_GOAL",
+      "INTEREST_RATE_WEALTH_FIX",
+      "INTEREST_RATE_WEALTH_FLEX",
+      "INTEREST_RATE_WEALTH_FAM",
+      "INTEREST_RATE_WEALTH_FLOW",
+      "INTEREST_RATE_WEALTH_GROUP",
+      "INTEREST_DISBURSEMENT_FREQUENCY",
+      "WALLET_FEE_KOBO",
+    ];
+
+    const changedKeys = rateKeys.filter(
       (key) => String(ratesForm[key] ?? "").trim() !== String(originalRates[key] ?? "").trim()
     );
 
     if (changedKeys.length === 0) {
-      toast.info("No changes to save.");
+      toast.info("No interest rate changes to save.");
       return;
     }
 
@@ -267,6 +345,62 @@ export default function SystemConfigPage() {
 
     if (failedKeys.length === 0) {
       toast.success("Interest rates and fees updated successfully");
+    } else {
+      toast.error(`Failed to update: ${failedKeys.join(", ")}`);
+    }
+  };
+
+  const handleSavePenalties = async () => {
+    const penaltyKeys: Array<keyof InterestRatesForm> = [
+      "PENALTY_RATE_WEALTH_GOAL",
+      "EARLY_TERMINATION_PENALTY_PCT",
+      "PENALTY_RATE_WEALTH_FAM",
+      "PENALTY_RATE_WEALTH_FLOW",
+    ];
+
+    const changedKeys = penaltyKeys.filter(
+      (key) => String(ratesForm[key] ?? "").trim() !== String(originalRates[key] ?? "").trim()
+    );
+
+    if (changedKeys.length === 0) {
+      toast.info("No penalty changes to save.");
+      return;
+    }
+
+    setIsSavingPenalties(true);
+    const failedKeys: string[] = [];
+    const succeededKeys: string[] = [];
+
+    await Promise.all(
+      changedKeys.map(async (key) => {
+        try {
+          await updateSystemConfigByKey({
+            key,
+            value: String(ratesForm[key] ?? "").trim(),
+          }).unwrap();
+          succeededKeys.push(key);
+        } catch (err: any) {
+          console.error(`Failed to update ${key}:`, err);
+          failedKeys.push(key);
+        }
+      })
+    );
+
+    setIsSavingPenalties(false);
+
+    if (succeededKeys.length > 0) {
+      setOriginalRates((prev) => {
+        const next = { ...prev };
+        succeededKeys.forEach((k) => {
+          next[k as keyof InterestRatesForm] = ratesForm[k as keyof InterestRatesForm];
+        });
+        return next;
+      });
+      refetchConfig();
+    }
+
+    if (failedKeys.length === 0) {
+      toast.success("Termination penalties updated successfully");
     } else {
       toast.error(`Failed to update: ${failedKeys.join(", ")}`);
     }
@@ -311,6 +445,20 @@ export default function SystemConfigPage() {
             Save Interest Rates
           </Button>
         )}
+        {activeTab === "penalties" && (
+          <Button 
+            onClick={handleSavePenalties}
+            disabled={isLoadingConfig || isSavingPenalties}
+            className="bg-[#155D5F] hover:bg-[#155D5F]/90 text-white rounded-xl h-11 px-8 font-bold text-sm shadow-lg shadow-primary/10 transition-all active:scale-95 cursor-pointer"
+          >
+            {isSavingPenalties ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            ) : (
+              <Save className="h-4 w-4 mr-2" />
+            )}
+            Save Penalties
+          </Button>
+        )}
       </div>
 
       <div className="flex border-b border-border/50 mb-8 gap-8">
@@ -337,6 +485,17 @@ export default function SystemConfigPage() {
           )}
         </button>
         <button
+          onClick={() => setActiveTab("penalties")}
+          className={`pb-3 text-sm font-bold transition-all relative cursor-pointer ${
+            activeTab === "penalties" ? "text-[#155D5F]" : "text-slate/60 hover:text-dark"
+          }`}
+        >
+          Termination Penalties
+          {activeTab === "penalties" && (
+            <span className="absolute bottom-[-1px] left-0 right-0 h-0.5 bg-[#155D5F] rounded-t-full" />
+          )}
+        </button>
+        <button
           onClick={() => setActiveTab("email")}
           className={`pb-3 text-sm font-bold transition-all relative cursor-pointer ${
             activeTab === "email" ? "text-[#155D5F]" : "text-slate/60 hover:text-dark"
@@ -351,7 +510,8 @@ export default function SystemConfigPage() {
 
       {((activeTab === "settings" && isLoading) ||
         (activeTab === "email" && isLoadingTemplates) ||
-        (activeTab === "interest-rates" && isLoadingConfig)) ? (
+        (activeTab === "interest-rates" && isLoadingConfig) ||
+        (activeTab === "penalties" && isLoadingConfig)) ? (
         <div className="flex flex-col items-center justify-center py-32 flex-1">
           <Loader2 className="h-8 w-8 animate-spin text-primary/40 mx-auto mb-4" />
           <p className="text-sm font-medium text-slate/40">Loading configuration...</p>
@@ -605,6 +765,68 @@ export default function SystemConfigPage() {
                       )}
                     </div>
                   </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === "penalties" && (
+            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="bg-surface/30 border border-border/50 rounded-[20px] p-8">
+                <div className="mb-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg font-bold text-dark font-outfit">
+                        Early Termination Penalties
+                      </h3>
+                      <p className="text-xs font-medium text-slate/60 mt-1">
+                        Penalty percentage deducted when liquidating or breaking a savings plan before its scheduled maturity date.
+                      </p>
+                    </div>
+                    <span className="text-xs font-semibold text-slate/50 bg-slate/10 px-3 py-1.5 rounded-full border border-border/40">
+                      WealthFlex exempt (anytime withdrawals)
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {PENALTY_FIELDS.map((field) => (
+                    <div
+                      key={field.key}
+                      className="p-5 bg-white border border-border/50 rounded-xl space-y-2 hover:border-border transition-colors"
+                    >
+                      <div className="flex items-center justify-between">
+                        <Label className="text-sm font-bold text-dark">
+                          {field.label}
+                        </Label>
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${field.badgeColor}`}>
+                          {field.planName}
+                        </span>
+                      </div>
+                      <span className="text-xs font-medium text-slate/50 block min-h-[32px] leading-relaxed">
+                        {field.description}
+                      </span>
+                      <div className="relative max-w-sm mt-2">
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          placeholder="e.g. 5"
+                          value={ratesForm[field.key]}
+                          onChange={(e) =>
+                            setRatesForm({
+                              ...ratesForm,
+                              [field.key]: e.target.value,
+                            })
+                          }
+                          className="h-12 bg-surface/50 border-border/30 rounded-xl px-4 pr-10 text-sm font-semibold focus-visible:ring-primary/20 transition-all border shadow-none"
+                        />
+                        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate/40 pointer-events-none">
+                          %
+                        </span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
