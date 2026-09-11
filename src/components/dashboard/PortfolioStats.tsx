@@ -77,24 +77,47 @@ export function PortfolioStats({ timeFilter }: PortfolioStatsProps) {
       );
       const nairaAmt = rawAmt / 100;
 
-      const activeCount = Number(
-        apiData?.active ??
-        apiData?.activeMembers ??
-        apiData?.activeCount ??
-        apiData?.totalMembers ??
-        apiData?.membersCount ??
-        apiData?.count ??
-        apiData?.members ??
-        (isGroupCard ? (tribesData?.totalMembers ?? tribesData?.totalGroups ?? tribesData?.totalCount ?? 0) : 0)
-      );
+      const groupItems = Array.isArray(tribesData?.items) ? tribesData.items : [];
+      const groupActiveCount = isGroupCard
+        ? (groupItems.length > 0
+            ? groupItems.filter((g: any) => {
+                const s = String(g.status || "").toUpperCase();
+                return s === "ACTIVE" && !g.isTerminated;
+              }).length
+            : (tribesData?.totalGroups != null ? Number(tribesData.totalGroups) : 0))
+        : 0;
 
-      const completedCount = Number(
-        apiData?.completed ??
-        apiData?.completedCount ??
-        apiData?.completedPortfolios ??
-        apiData?.completedMembers ??
-        0
-      );
+      const groupCompletedCount = isGroupCard
+        ? (groupItems.length > 0
+            ? groupItems.filter((g: any) => {
+                const s = String(g.status || "").toUpperCase();
+                return s === "COMPLETED";
+              }).length
+            : 0)
+        : 0;
+
+      const activeCount = isGroupCard
+        ? groupActiveCount
+        : Number(
+            apiData?.active ??
+            apiData?.activeMembers ??
+            apiData?.activeCount ??
+            apiData?.totalMembers ??
+            apiData?.membersCount ??
+            apiData?.count ??
+            apiData?.members ??
+            0
+          );
+
+      const completedCount = isGroupCard
+        ? groupCompletedCount
+        : Number(
+            apiData?.completed ??
+            apiData?.completedCount ??
+            apiData?.completedPortfolios ??
+            apiData?.completedMembers ??
+            0
+          );
 
       return {
         ...card,

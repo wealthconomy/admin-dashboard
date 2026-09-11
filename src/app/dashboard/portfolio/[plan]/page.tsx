@@ -828,17 +828,18 @@ export default function PlanUsersPage() {
   const activeGroups = useMemo(() => groups.filter((g) => !g.isTerminated && !g.isCompleted), [groups]);
   const completedGroups = useMemo(() => groups.filter((g) => g.isCompleted), [groups]);
   const terminatedGroups = useMemo(() => groups.filter((g) => g.isTerminated), [groups]);
+  const validGroups = useMemo(() => groups.filter((g) => !g.isTerminated), [groups]);
   const displayedGroups = useMemo(() => {
     if (planTab === "active") return activeGroups;
     if (planTab === "completed") return completedGroups;
     if (planTab === "terminated") return terminatedGroups;
-    return groups;
-  }, [planTab, activeGroups, completedGroups, terminatedGroups, groups]);
+    return validGroups;
+  }, [planTab, activeGroups, completedGroups, terminatedGroups, validGroups]);
 
   const activeCount = isWealthGroup ? activeGroups.length : activeUsers.length;
   const completedCount = isWealthGroup ? completedGroups.length : completedUsers.length;
   const terminatedCount = isWealthGroup ? terminatedGroups.length : terminatedUsers.length;
-  const allCount = isWealthGroup ? groups.length : users.length;
+  const allCount = isWealthGroup ? validGroups.length : users.length;
 
   if (!meta) {
     return (
@@ -854,19 +855,19 @@ export default function PlanUsersPage() {
   const tribesData = tribesRes?.data || tribesRes || {};
 
   const totalMembers = isWealthGroup
-    ? Number(tribesData?.totalMembers ?? tribesData?.totalCount ?? groups.reduce((s, g) => s + g.members.length, 0))
+    ? Number(tribesData?.totalMembers ?? validGroups.reduce((s, g) => s + g.members.length, 0))
     : Number(resData?.totalMembers ?? resData?.totalUsers ?? resData?.totalCount ?? resData?.total ?? users.length);
 
   const totalBalance = isWealthGroup
-    ? (tribesData?.totalSavings != null ? fromKobo(tribesData.totalSavings) : (tribesData?.totalBalance != null ? fromKobo(tribesData.totalBalance) : groups.reduce((s, g) => s + g.members.reduce((sm, m) => sm + m.contribution, 0), 0)))
+    ? (tribesData?.totalSavings != null ? fromKobo(tribesData.totalSavings) : (tribesData?.totalBalance != null ? fromKobo(tribesData.totalBalance) : validGroups.reduce((s, g) => s + g.members.reduce((sm, m) => sm + m.contribution, 0), 0)))
     : (resData?.totalBalance != null ? fromKobo(resData.totalBalance) : (resData?.totalAmount != null ? fromKobo(resData.totalAmount) : (resData?.totalSavings != null ? fromKobo(resData.totalSavings) : users.reduce((s, u) => s + u.balance, 0))));
 
   const totalInterest = isWealthGroup
-    ? (tribesData?.totalInterest != null ? fromKobo(tribesData.totalInterest) : groups.reduce((s, g) => s + g.members.reduce((sm, m) => sm + (m.interestAmount || 0), 0), 0))
+    ? (tribesData?.totalInterest != null ? fromKobo(tribesData.totalInterest) : validGroups.reduce((s, g) => s + g.members.reduce((sm, m) => sm + (m.interestAmount || 0), 0), 0))
     : (resData?.totalInterest != null ? fromKobo(resData.totalInterest) : users.reduce((s, u) => s + (u.interestAmount || 0), 0));
 
   const totalWealthPact = isWealthGroup
-    ? (tribesData?.totalWealthpact != null ? fromKobo(tribesData.totalWealthpact) : groups.reduce((s, g) => s + g.members.reduce((sm, m) => sm + (m.wealthPactAmount || 0), 0), 0))
+    ? (tribesData?.totalWealthpact != null ? fromKobo(tribesData.totalWealthpact) : validGroups.reduce((s, g) => s + g.members.reduce((sm, m) => sm + (m.wealthPactAmount || 0), 0), 0))
     : (resData?.totalWealthpact != null ? fromKobo(resData.totalWealthpact) : users.reduce((s, u) => s + (u.wealthPactAmount || 0), 0));
 
   const avgBalance = portfoliosRes?.avgBalanceOrTarget || resData?.avgBalanceOrTarget
@@ -874,15 +875,16 @@ export default function PlanUsersPage() {
     : (totalMembers > 0 ? totalBalance / totalMembers : 0);
 
   const interestUsers = isWealthGroup
-    ? groups.reduce((s, g) => s + g.members.filter(m => m.savingType !== 'impact').length, 0)
+    ? validGroups.reduce((s, g) => s + g.members.filter(m => m.savingType !== 'impact').length, 0)
     : users.filter(u => u.savingType !== 'impact').length;
 
   const impactUsers = isWealthGroup
-    ? groups.reduce((s, g) => s + g.members.filter(m => m.savingType === 'impact').length, 0)
+    ? validGroups.reduce((s, g) => s + g.members.filter(m => m.savingType === 'impact').length, 0)
     : users.filter(u => u.savingType === 'impact').length;
 
+  const totalGroupsCount = validGroups.length;
   const summaryCards = isWealthGroup ? [
-    { title: "Total Groups", value: Number(tribesData?.totalGroups ?? tribesRes?.totalGroups ?? groups.length).toLocaleString(), subtext: "All active groups", icon: Users, color: "bg-[#E6F9F9] text-[#155D5F]", dotColor: "bg-[#155D5F]" },
+    { title: "Total Groups", value: totalGroupsCount.toLocaleString(), subtext: "Active & completed groups", icon: Users, color: "bg-[#E6F9F9] text-[#155D5F]", dotColor: "bg-[#155D5F]" },
     { title: "Total Savings", value: formatCurrency(totalBalance), subtext: "Combined deposits", icon: Wallet, color: "bg-[#E6F9F9] text-[#155D5F]", dotColor: "bg-[#65D36A]" },
     { title: "Total Interest", value: formatCurrency(totalInterest), subtext: `Earned across groups (${interestUsers}/${totalMembers} savers)`, icon: Activity, color: "bg-[#E6F9F9] text-[#155D5F]", dotColor: "bg-[#65D36A]" },
     { title: "Total Wealthpact", value: formatCurrency(totalWealthPact), subtext: `Impact plan accrued (${impactUsers}/${totalMembers} savers)`, icon: Leaf, color: "bg-[#E6F9F9] text-[#155D5F]", dotColor: "bg-[#65D36A]" },

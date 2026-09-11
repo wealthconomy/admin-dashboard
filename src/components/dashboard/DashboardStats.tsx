@@ -8,7 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ChevronDown, ChevronUp, ClipboardList, Users, UserPlus, Briefcase, CreditCard, Wallet, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronUp, ClipboardList, Users, UserPlus, Briefcase, CreditCard, Wallet, Loader2, TrendingUp, TrendingDown } from "lucide-react";
 
 interface DashboardStatsProps {
   timeFilter: string;
@@ -57,30 +57,33 @@ export function DashboardStats({ timeFilter, setTimeFilter }: DashboardStatsProp
     if (isLoading) return "Loading...";
     if (isError) return "Failed to load";
     if (!apiField) return fallback;
-    return apiField.subtext || apiField.todayValue || apiField.trend || fallback;
+    return apiField.subtext || apiField.todayValue || fallback;
   };
 
   const stats = [
     {
       title: "Total registered users",
       value: formatValue(data?.totalRegisteredUsers, "0"),
-      subtext: formatSubtext(data?.totalRegisteredUsers, "Pending API"),
+      subtext: formatSubtext(data?.totalRegisteredUsers, "all time"),
+      trend: data?.totalRegisteredUsers?.trend,
       icon: ClipboardList,
       color: "bg-[#E6F9F9] text-[#155D5F]",
       dotColor: "bg-[#155D5F]"
     },
     {
       title: "Active users",
-      value: formatValue(data?.activeUsers, "Pending API"),
-      subtext: formatSubtext(data?.activeUsers, "Pending API"),
+      value: formatValue(data?.activeUsers, "0"),
+      subtext: formatSubtext(data?.activeUsers, "all time"),
+      trend: data?.activeUsers?.trend,
       icon: Users,
       color: "bg-[#E6F9F9] text-[#155D5F]",
       dotColor: "bg-[#65D36A]"
     },
     {
       title: "New sign-ups today",
-      value: formatValue(data?.newSignupsToday, "Pending API"),
-      subtext: formatSubtext(data?.newSignupsToday, "Pending API"),
+      value: formatValue(data?.newSignupsToday, "0"),
+      subtext: formatSubtext(data?.newSignupsToday, "all time"),
+      trend: data?.newSignupsToday?.trend,
       icon: UserPlus,
       color: "bg-[#E6F9F9] text-[#155D5F]",
       dotColor: "bg-[#65D36A]"
@@ -88,15 +91,17 @@ export function DashboardStats({ timeFilter, setTimeFilter }: DashboardStatsProp
     {
       title: "Total savings deposit",
       value: formatValue(data?.activeInvestmentVolume, "₦0.00"), // Mapped to active investment volume
-      subtext: formatSubtext(data?.activeInvestmentVolume, "Pending API"),
+      subtext: formatSubtext(data?.activeInvestmentVolume, "all time"),
+      trend: data?.activeInvestmentVolume?.trend,
       icon: Briefcase,
       color: "bg-[#E6F9F9] text-[#155D5F]",
       subtextStyle: "text-[#65D36A]"
     },
     {
       title: "Total Withdrawal",
-      value: formatValue(data?.totalWithdrawal, "Pending API"),
-      subtext: formatSubtext(data?.totalWithdrawal, "Pending API"),
+      value: formatValue(data?.totalWithdrawal, "₦0.00"),
+      subtext: formatSubtext(data?.totalWithdrawal, "all time"),
+      trend: data?.totalWithdrawal?.trend,
       icon: CreditCard,
       color: "bg-[#E6F9F9] text-[#155D5F]",
       subtextStyle: "text-[#65D36A]"
@@ -104,7 +109,8 @@ export function DashboardStats({ timeFilter, setTimeFilter }: DashboardStatsProp
     {
       title: "Total transaction volume",
       value: formatValue(data?.totalTransactionVolume, "₦0", true), // Mapped to total transaction volume
-      subtext: formatSubtext(data?.totalTransactionVolume, "Across wallets & savers"),
+      subtext: formatSubtext(data?.totalTransactionVolume, "all time"),
+      trend: data?.totalTransactionVolume?.trend,
       icon: Wallet,
       color: "bg-[#E6F9F9] text-[#155D5F]",
       subtextStyle: "text-[#65D36A]"
@@ -192,11 +198,26 @@ export function DashboardStats({ timeFilter, setTimeFilter }: DashboardStatsProp
                 
                 <div className="flex flex-col gap-2">
                   <div className="h-[1px] bg-[#155D5F]/20 w-full"></div>
-                  <div className={`flex items-center gap-1.5 text-xs font-medium ${stat.subtextStyle || 'text-slate'}`}>
-                    {stat.dotColor && (
-                      <div className={`w-1.5 h-1.5 rounded-full ${stat.dotColor}`}></div>
+                  <div className="flex items-center gap-2">
+                    {stat.trend && (
+                      <span
+                        className={`inline-flex items-center gap-0.5 text-[11px] font-bold px-1.5 py-0.5 rounded-full ${
+                          stat.trend.startsWith("-")
+                            ? "text-red-700 bg-red-100/80 border border-red-200"
+                            : "text-emerald-700 bg-emerald-100/80 border border-emerald-200"
+                        }`}
+                      >
+                        {stat.trend.startsWith("-") ? (
+                          <TrendingDown className="w-3 h-3 text-red-600" />
+                        ) : (
+                          <TrendingUp className="w-3 h-3 text-emerald-600" />
+                        )}
+                        {stat.trend}
+                      </span>
                     )}
-                    <span className="leading-none">{stat.subtext}</span>
+                    <span className="text-[11px] font-semibold text-slate/70 truncate">
+                      {stat.subtext}
+                    </span>
                   </div>
                 </div>
               </div>
