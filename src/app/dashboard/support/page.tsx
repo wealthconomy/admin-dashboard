@@ -1,20 +1,48 @@
 "use client";
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   Search,
   MoreVertical,
   Send,
-  ChevronRight,
   User,
   Check,
   CheckCheck,
+  CheckCircle2,
+  RotateCcw,
+  UserCheck,
+  Copy,
+  Sparkles,
+  Paperclip,
+  LifeBuoy,
+  MessageSquare,
+  Flag,
+  AlertTriangle,
+  ShieldAlert,
+  AlertCircle,
+  Trash2,
+  Eye,
+  RefreshCw,
+  X,
+  Clock,
+  Ban,
 } from "lucide-react";
 import Image from "next/image";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,35 +56,138 @@ import {
   useClaimSupportChatMutation,
   useResolveSupportChatMutation,
   useReopenSupportChatMutation,
+  useGetWealthGroupReportsQuery,
+  useUpdateWealthGroupReportStatusMutation,
+  useDeleteWealthGroupReportMutation,
+  SupportChat,
+  SupportMessage,
+  WealthGroupReport,
 } from "@/lib/redux/features/supportApi";
 import { useSocket } from "@/context/SocketContext";
 import { useUnreadCounts } from "@/context/UnreadCountContext";
 
-export default function SupportCentrePage() {
+function getDateLabel(dateStr?: string): string {
+  if (!dateStr) return "";
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return "";
+
+    const today = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(today.getDate() - 1);
+
+    if (d.toDateString() === today.toDateString()) {
+      return "Today";
+    }
+    if (d.toDateString() === yesterday.toDateString()) {
+      return "Yesterday";
+    }
+    return d.toLocaleDateString([], {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    });
+  } catch {
+    return "";
+  }
+}
+
+function formatRelativeTime(dateStr?: string): string {
+  if (!dateStr) return "";
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return "";
+    const diffMs = Date.now() - d.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 1) return "Just now";
+    if (diffMins < 60) return `${diffMins}m ago`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    return d.toLocaleDateString([], { month: "short", day: "numeric" });
+  } catch {
+    return "";
+  }
+}
+
+const CANNED_TOPICS = [
+  {
+    topic: "Greeting",
+    icon: "👋",
+    text: "Hello! How can I assist you with your Wealthconomy account today?",
+  },
+  {
+    topic: "In Review",
+    icon: "⏳",
+    text: "We are currently reviewing your request with our operations team.",
+  },
+  {
+    topic: "Verified",
+    icon: "✅",
+    text: "Your transaction has been verified and updated successfully.",
+  },
+  {
+    topic: "Closing",
+    icon: "🙏",
+    text: "Thank you for contacting Wealthconomy support. Have a wonderful day!",
+  },
+];
+
+function SupportCentreContent() {
+  const searchParams = useSearchParams();
   const { socket, isConnected } = useSocket();
   const { markSupportRead } = useUnreadCounts();
 
-  const [selectedChat, setSelectedChat] = useState<any | null>(null);
+  // Top-level Navigation Tab ("chat" vs "reports")
+  const [mainTab, setMainTab] = useState<"chat" | "reports">("chat");
+
+  // Chat States
+  const [selectedChat, setSelectedChat] = useState<SupportChat | any | null>(null);
   const [inputText, setInputText] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [activeTab, setActiveTab] = useState<"queue" | "active" | "resolved">("queue");
-  const [liveMessages, setLiveMessages] = useState<any[]>([]);
+  const [liveMessages, setLiveMessages] = useState<SupportMessage[] | any[]>([]);
+  const [isSending, setIsSending] = useState(false);
+  const [showCanned, setShowCanned] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
-  // Map activeTab to stage query parameter (queue -> UNASSIGNED / queue, active -> ACTIVE / active, resolved -> RESOLVED / resolved)
+  // Wealth Group Reports States
+  const [reportStatusFilter, setReportStatusFilter] = useState<"ALL" | "PENDING" | "RESOLVED" | "DISMISSED">("ALL");
+  const [reportSearch, setReportSearch] = useState("");
+  const [selectedReport, setSelectedReport] = useState<WealthGroupReport | any | null>(null);
+
+  // Handle URL deep-linking (?tab=reports&reportId=...)
+  useEffect(() => {
+    const tabParam = searchParams.get("tab");
+    if (tabParam === "reports") {
+      setMainTab("reports");
+    }
+  }, [searchParams]);
+
+  // Map activeTab to stage query parameter
   const stageParam = activeTab === "queue" ? "queue" : activeTab === "active" ? "active" : "resolved";
-  const { data: usersData, isLoading: isUsersLoading, refetch: refetchUsers } = useGetSupportChatsQuery({ 
-    stage: stageParam, 
-    search: searchTerm 
-  }, {
-    pollingInterval: 4000,
-  });
   
-  const users = Array.isArray(usersData) ? usersData : (usersData?.data || []);
+  const {
+    data: usersData,
+    isLoading: isUsersLoading,
+    refetch: refetchUsers,
+  } = useGetSupportChatsQuery(
+    { stage: stageParam, search: searchTerm },
+    { pollingInterval: 5000 }
+  );
+
+  const users: (SupportChat | any)[] = useMemo(() => {
+    if (Array.isArray(usersData)) return usersData;
+    if (Array.isArray(usersData?.data)) return usersData.data;
+    return [];
+  }, [usersData]);
 
   const currentChatId = selectedChat?.id || selectedChat?._id;
-  const { data: chatData, isLoading: isChatLoading, refetch: refetchChat } = useGetSupportChatQuery(currentChatId, { 
-    skip: !selectedChat,
+  const {
+    data: chatData,
+    isLoading: isChatLoading,
+    refetch: refetchChat,
+  } = useGetSupportChatQuery(currentChatId, {
+    skip: !currentChatId,
   });
 
   const [replyChat] = useReplySupportChatMutation();
@@ -64,132 +195,323 @@ export default function SupportCentrePage() {
   const [resolveChat] = useResolveSupportChatMutation();
   const [reopenChat] = useReopenSupportChatMutation();
 
-  const [lastMessagesMap, setLastMessagesMap] = useState<Record<string, { text: string; time: string; timestamp: number }>>({});
+  // Wealth Group Reports RTK Query
+  const {
+    data: reportsResponse,
+    isLoading: isReportsLoading,
+    isFetching: isReportsFetching,
+    refetch: refetchReports,
+  } = useGetWealthGroupReportsQuery(
+    {
+      populate: "reporter,group",
+      status: reportStatusFilter === "ALL" ? undefined : reportStatusFilter,
+      search: reportSearch || undefined,
+      limit: 50,
+    },
+    { pollingInterval: 10000 }
+  );
 
-  const updateLastMessageForChat = (chatIds: (string | undefined)[], text: string, timeStr?: string, createdAt?: string) => {
-    const timestamp = createdAt ? new Date(createdAt).getTime() : Date.now();
-    const time = timeStr || new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    setLastMessagesMap((prev) => {
-      const next = { ...prev };
-      chatIds.forEach((id) => {
-        if (id) {
-          const existing = next[id];
-          if (!existing || existing.timestamp <= timestamp) {
-            next[id] = { text, time, timestamp };
-          }
-        }
-      });
-      return next;
-    });
-  };
+  const [updateReportStatus, { isLoading: isUpdatingStatus }] = useUpdateWealthGroupReportStatusMutation();
+  const [deleteReport, { isLoading: isDeletingReport }] = useDeleteWealthGroupReportMutation();
 
-  // Pre-seed and sync lastMessagesMap from REST support chats
-  useEffect(() => {
-    if (!users || !Array.isArray(users)) return;
+  const rawReportsList: (WealthGroupReport | any)[] = useMemo(() => {
+    if (Array.isArray(reportsResponse?.data?.items)) return reportsResponse.data.items;
+    if (Array.isArray(reportsResponse?.items)) return reportsResponse.items;
+    if (Array.isArray(reportsResponse?.data?.reports)) return reportsResponse.data.reports;
+    if (Array.isArray(reportsResponse?.reports)) return reportsResponse.reports;
+    if (Array.isArray(reportsResponse?.data)) return reportsResponse.data;
+    if (Array.isArray(reportsResponse)) return reportsResponse;
+    return [];
+  }, [reportsResponse]);
 
-    users.forEach((item: any) => {
-      const keys = [item.id, item._id, item.chatId, item.userId].filter(Boolean);
-      const rawMsg = item.lastMessage || item.latestMessage || item.last_message || item.recentMessage || item.messages?.[item.messages.length - 1];
-
-      if (rawMsg) {
-        let text = "";
-        let time = "";
-        let timestamp = 0;
-
-        if (typeof rawMsg === "string") {
-          text = rawMsg;
-        } else if (typeof rawMsg === "object") {
-          text = rawMsg.text || rawMsg.content || rawMsg.message || rawMsg.body || "";
-          const createdAt = rawMsg.createdAt || rawMsg.created_at || rawMsg.timestamp || rawMsg.time;
-          if (createdAt) {
-            timestamp = new Date(createdAt).getTime();
-            try {
-              time = new Date(createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-            } catch (e) {}
-          }
-        }
-
-        if (text) {
-          updateLastMessageForChat(keys, text, time, timestamp ? new Date(timestamp).toISOString() : undefined);
-        }
+  const reportsList: (WealthGroupReport | any)[] = useMemo(() => {
+    return rawReportsList.filter((r: any) => {
+      if (reportStatusFilter !== "ALL") {
+        const s = (r.status || "").toUpperCase();
+        if (s !== reportStatusFilter) return false;
       }
+      if (reportSearch.trim()) {
+        const q = reportSearch.toLowerCase();
+        const gName = (r.group?.name || "").toLowerCase();
+        const reason = (r.reason || "").toLowerCase();
+        const rName = `${r.reporter?.firstName || ""} ${r.reporter?.lastName || ""}`.toLowerCase();
+        const rEmail = (r.reporter?.email || "").toLowerCase();
+        return gName.includes(q) || reason.includes(q) || rName.includes(q) || rEmail.includes(q);
+      }
+      return true;
     });
+  }, [rawReportsList, reportStatusFilter, reportSearch]);
+
+  const reportsMetrics = useMemo(() => {
+    let pending = 0;
+    let resolved = 0;
+    let dismissed = 0;
+
+    rawReportsList.forEach((r: any) => {
+      const s = (r.status || "").toUpperCase();
+      if (s === "PENDING") pending++;
+      else if (s === "RESOLVED") resolved++;
+      else if (s === "DISMISSED") dismissed++;
+    });
+
+    const total = reportsResponse?.data?.totalCount ?? rawReportsList.length;
+    return { total, pending, resolved, dismissed };
+  }, [reportsResponse, rawReportsList]);
+
+  const totalChatUnread = useMemo(() => {
+    return users.reduce(
+      (acc: number, u: any) => acc + (u.adminUnreadCount ?? u.unreadCount ?? 0),
+      0
+    );
   }, [users]);
 
-  // Sync REST messages when switching chats or fetching
-  useEffect(() => {
-    const raw = Array.isArray(chatData?.messages) ? chatData.messages : (chatData?.data?.messages || []);
-    setLiveMessages(raw);
-  }, [chatData, currentChatId]);
+  const [lastMessagesMap, setLastMessagesMap] = useState<
+    Record<string, { text: string; time: string; timestamp: number }>
+  >({});
 
-  // When selecting a chat, mark it as read
+  // Helper to reliably classify if a message originated from Support/Admin vs Customer
+  const isMessageFromSupport = useCallback(
+    (msg: any): boolean => {
+      if (!msg) return false;
+      if (msg.senderRole === "ADMIN" || msg.senderRole === "SUPER_ADMIN") return true;
+      if (msg.role === "ADMIN" || msg.role === "SUPER_ADMIN") return true;
+      if (msg.isAdmin === true) return true;
+      if (typeof msg.sender === "string" && msg.sender.toLowerCase() === "admin") return true;
+      if (typeof msg.senderName === "string") {
+        const name = msg.senderName.trim().toLowerCase();
+        if (
+          name === "admin support" ||
+          name === "admin" ||
+          /\b(admin\s*support|support\s*team|wealthconomy\s*support)\b/i.test(name)
+        ) {
+          return true;
+        }
+      }
+      if (typeof msg.id === "string" && (msg.id.startsWith("temp_") || msg.id.startsWith("admin_temp_"))) {
+        return true;
+      }
+      return false;
+    },
+    []
+  );
+
+  const updateLastMessageForChat = useCallback(
+    (
+      chatIds: (string | number | undefined)[],
+      text: string,
+      timeStr?: string,
+      createdAtIso?: string
+    ) => {
+      const validIds = chatIds.filter(Boolean).map(String);
+      if (validIds.length === 0) return;
+
+      const formattedTime =
+        timeStr ||
+        (createdAtIso
+          ? formatRelativeTime(createdAtIso)
+          : formatRelativeTime(new Date().toISOString()));
+
+      const timestamp = createdAtIso
+        ? new Date(createdAtIso).getTime()
+        : Date.now();
+
+      setLastMessagesMap((prev) => {
+        const next = { ...prev };
+        validIds.forEach((id) => {
+          next[id] = {
+            text,
+            time: formattedTime,
+            timestamp,
+          };
+        });
+        return next;
+      });
+    },
+    []
+  );
+
+  // Sync messages from REST response
   useEffect(() => {
-    if (selectedChat && currentChatId) {
-      markSupportRead(currentChatId);
+    if (chatData) {
+      let loadedMessages: any[] = [];
+      if (Array.isArray(chatData)) {
+        loadedMessages = chatData;
+      } else if (chatData.data && Array.isArray(chatData.data.messages)) {
+        loadedMessages = chatData.data.messages;
+      } else if (Array.isArray(chatData.messages)) {
+        loadedMessages = chatData.messages;
+      } else if (Array.isArray(chatData.data)) {
+        loadedMessages = chatData.data;
+      }
+
+      setLiveMessages(loadedMessages);
+
+      if (loadedMessages.length > 0) {
+        const lastMsg = loadedMessages[loadedMessages.length - 1];
+        const lastText = lastMsg.text || lastMsg.content || lastMsg.message || "";
+        const rawTime = lastMsg.createdAt || lastMsg.time;
+        updateLastMessageForChat(
+          [
+            currentChatId,
+            selectedChat?.id,
+            selectedChat?._id,
+            selectedChat?.userId,
+          ],
+          lastText,
+          undefined,
+          rawTime
+        );
+      }
     }
-  }, [selectedChat, currentChatId, markSupportRead]);
+  }, [chatData, currentChatId, selectedChat, updateLastMessageForChat]);
 
-  // Real-time support chat messages via WebSocket
+  // Sync selectedChat stage from live chatData if present
+  useEffect(() => {
+    if (chatData) {
+      const resolvedChatObj = chatData.data || chatData;
+      if (resolvedChatObj?.stage) {
+        setSelectedChat((prev: any) =>
+          prev && prev.stage !== resolvedChatObj.stage
+            ? { ...prev, stage: resolvedChatObj.stage }
+            : prev
+        );
+      }
+    }
+  }, [chatData]);
+
+  // WebSocket listeners
   useEffect(() => {
     if (!socket) return;
 
     const handleSupportNewMessage = (data: any) => {
-      console.log("[WebSocket] support:new_message received:", data);
+      console.log("[SupportSocket] 📨 Incoming message event:", data);
+      if (!data) return;
 
       const msg = data.message || data;
-      const targetChatId = data.chatId || msg.chatId || msg.userId;
-      const text = msg.text || msg.content || msg.message || msg.body || (typeof msg === "string" ? msg : "");
-      const createdAt = msg.createdAt || msg.created_at || msg.timestamp;
+      const targetChatId = String(
+        data.chatId || msg.chatId || msg.room || ""
+      );
 
-      updateLastMessageForChat([targetChatId], text, undefined, createdAt);
+      const isCurrentActiveChat =
+        Boolean(currentChatId) &&
+        (targetChatId === String(currentChatId) ||
+          targetChatId === String(selectedChat?.userId) ||
+          targetChatId === String(selectedChat?.id) ||
+          targetChatId === String(selectedChat?._id));
 
-      // If active ticket is open, append message immediately
-      if (currentChatId && targetChatId === currentChatId) {
+      const text = msg.text || msg.content || msg.message || "";
+      const rawCreatedAt = msg.createdAt || msg.time || new Date().toISOString();
+
+      updateLastMessageForChat(
+        [
+          targetChatId,
+          msg.chatId,
+          msg.userId,
+          isCurrentActiveChat ? currentChatId : undefined,
+        ],
+        text,
+        undefined,
+        rawCreatedAt
+      );
+
+      if (isCurrentActiveChat) {
         setLiveMessages((prev) => {
-          if (prev.some((m) => m.id === msg.id)) return prev;
-          return [
-            ...prev,
-            {
-              ...msg,
-              isMe: msg.sender === "admin",
-              time: new Date(msg.createdAt || Date.now()).toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              }),
-            },
-          ];
+          const alreadyExists = prev.some(
+            (m) =>
+              (msg.id && m.id === msg.id) ||
+              (m.id &&
+                m.id.startsWith("temp_") &&
+                m.text === text &&
+                isMessageFromSupport(msg) === isMessageFromSupport(m))
+          );
+          if (alreadyExists) {
+            return prev.map((m) =>
+              (msg.id && m.id === msg.id) ||
+              (m.id &&
+                m.id.startsWith("temp_") &&
+                m.text === text &&
+                isMessageFromSupport(msg) === isMessageFromSupport(m))
+                ? { ...m, ...msg, isMe: isMessageFromSupport(msg) }
+                : m
+            );
+          }
+          return [...prev, { ...msg, isMe: isMessageFromSupport(msg) }];
         });
+
         markSupportRead(currentChatId);
       } else {
-        // Refresh ticket list to update badge and preview
         refetchUsers();
+        const sender = msg.senderName || msg.userName || "Customer";
+        toast.info(`New message from ${sender}`, {
+          description: text ? text.slice(0, 60) : "Sent a new message",
+        });
       }
+    };
+
+    const handleStatusChange = (data: any) => {
+      console.log("[SupportSocket] 👤 user:status_change received:", data);
+      if (!data) return;
+
+      const changedId = data.userId || data.adminId || data.id;
+      const newStatus = data.status || "offline";
+
+      setSelectedChat((prev: any) => {
+        if (!prev) return prev;
+        if (prev.userId === changedId || prev.id === changedId) {
+          return { ...prev, status: newStatus };
+        }
+        return prev;
+      });
+
+      refetchUsers();
     };
 
     socket.on("support:new_message", handleSupportNewMessage);
     socket.on("chat:new_message", handleSupportNewMessage);
+    socket.on("user:status_change", handleStatusChange);
 
     return () => {
       socket.off("support:new_message", handleSupportNewMessage);
       socket.off("chat:new_message", handleSupportNewMessage);
+      socket.off("user:status_change", handleStatusChange);
     };
-  }, [socket, currentChatId, markSupportRead, refetchUsers]);
+  }, [
+    socket,
+    currentChatId,
+    selectedChat,
+    markSupportRead,
+    refetchUsers,
+    updateLastMessageForChat,
+    isMessageFromSupport,
+  ]);
 
   // Format messages for rendering
   const formattedMessages = useMemo(() => {
     return liveMessages.map((msg: any) => {
-      const isMe = msg.isMe !== undefined ? msg.isMe : (msg.sender === "admin" || msg.senderRole === "ADMIN");
-      const time = msg.time || (msg.createdAt 
-        ? new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        : "");
+      const isMe = isMessageFromSupport(msg);
+
+      const time =
+        msg.time ||
+        (msg.createdAt
+          ? new Date(msg.createdAt).toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            })
+          : "");
+
+      const customerDisplayName =
+        selectedChat?.userName || selectedChat?.name || "Client";
+
       return {
         ...msg,
         isMe,
         time,
-        sender: msg.sender || (isMe ? "Admin" : (selectedChat?.name || "Client")),
+        sender: isMe
+          ? "Admin Support"
+          : msg.senderName || msg.sender || customerDisplayName,
       };
     });
-  }, [liveMessages, selectedChat]);
+  }, [liveMessages, selectedChat, isMessageFromSupport]);
 
   // Auto scroll to bottom when messages update
   useEffect(() => {
@@ -198,21 +520,29 @@ export default function SupportCentrePage() {
     }
   }, [formattedMessages]);
 
-  const filteredUsers = users.filter(
-    (user: any) => {
+  const filteredUsers = useMemo(() => {
+    return users.filter((user: any) => {
       const userStage = (user.stage || "").toLowerCase();
-      const tabMatch = activeTab === "queue" 
-        ? (userStage === "queue" || userStage === "unassigned")
-        : userStage === activeTab;
-      
-      const searchMatch = !searchTerm || (
-        (user.name?.toLowerCase() || "").includes(searchTerm.toLowerCase()) ||
-        (user.id || user._id)?.toString().includes(searchTerm)
-      );
+      let tabMatch = false;
+      if (activeTab === "queue") {
+        tabMatch = userStage === "queue" || userStage === "unassigned" || !userStage;
+      } else if (activeTab === "active") {
+        tabMatch = userStage === "active" || userStage === "assigned";
+      } else if (activeTab === "resolved") {
+        tabMatch = userStage === "resolved" || userStage === "closed";
+      }
+
+      if (!searchTerm) return tabMatch;
+
+      const nameToSearch = (user.userName || user.name || "").toLowerCase();
+      const idToSearch = String(user.id || user._id || "");
+      const searchMatch =
+        nameToSearch.includes(searchTerm.toLowerCase()) ||
+        idToSearch.includes(searchTerm);
 
       return tabMatch && searchMatch;
-    }
-  );
+    });
+  }, [users, activeTab, searchTerm]);
 
   const toggleChat = (item: any) => {
     const currentId = item.id || item._id;
@@ -220,459 +550,1403 @@ export default function SupportCentrePage() {
     if (selectedId === currentId) {
       setSelectedChat(null);
     } else {
-      setSelectedChat({ ...item, unreadCount: 0 });
+      setSelectedChat({ ...item, adminUnreadCount: 0, unreadCount: 0 });
       markSupportRead(currentId);
     }
   };
 
-  const handleSendMessage = async () => {
-    if (!inputText.trim() || !selectedChat) return;
-    
-    const textToSend = inputText.trim();
+  const handleSendMessage = async (customText?: string) => {
+    const textToSend = (customText || inputText).trim();
+    if (!textToSend || !selectedChat || isSending) return;
+
     const activeId = selectedChat.id || selectedChat._id;
     setInputText("");
+    setIsSending(true);
 
-    // Optimistic local message
     const tempId = `temp_${Date.now()}`;
-    const optimisticMsg = {
+    const optimisticMsg: SupportMessage = {
       id: tempId,
       chatId: activeId,
+      senderName: "Admin Support",
       sender: "admin",
-      senderId: "me",
       text: textToSend,
       isMe: true,
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      time: new Date().toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
       createdAt: new Date().toISOString(),
+      isRead: false,
     };
     setLiveMessages((prev) => [...prev, optimisticMsg]);
 
-    updateLastMessageForChat([activeId, selectedChat.id, selectedChat._id], textToSend, undefined, new Date().toISOString());
+    updateLastMessageForChat(
+      [activeId, selectedChat.id, selectedChat._id],
+      textToSend,
+      undefined,
+      new Date().toISOString()
+    );
 
-    // 1. Emit real-time WebSocket event
-    if (socket && isConnected) {
-      socket.emit("support:send_message", {
-        chatId: activeId,
-        text: textToSend,
-      });
+    if (
+      selectedChat.stage === "queue" ||
+      selectedChat.stage === "unassigned"
+    ) {
+      setSelectedChat((prev: any) =>
+        prev ? { ...prev, stage: "active" } : null
+      );
     }
 
-    // 2. Execute REST mutation for persistence & tag invalidation
     try {
-      await replyChat({ id: activeId, text: textToSend }).unwrap();
-    } catch (err) {
-      console.warn("REST replySupportChat fallback handled:", err);
+      const res = await replyChat({ id: activeId, text: textToSend }).unwrap();
+
+      if (res?.data || res?.id) {
+        const serverMsg = res.data || res;
+        setLiveMessages((prev) =>
+          prev.map((m) =>
+            m.id === tempId
+              ? {
+                  ...serverMsg,
+                  isMe: true,
+                  senderName: "Admin Support",
+                  time:
+                    serverMsg.time ||
+                    new Date().toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    }),
+                }
+              : m
+          )
+        );
+      }
+      refetchUsers();
+    } catch (err: any) {
+      console.warn("replySupportChat error:", err);
+      toast.error(
+        err?.data?.message || "Failed to send message. Please try again."
+      );
+      setLiveMessages((prev) => prev.filter((m) => m.id !== tempId));
+    } finally {
+      setIsSending(false);
     }
   };
 
-  const handleClaimChat = async (userId: string | number) => {
+  const handleClaimChat = async (chatId: string | number) => {
     try {
-      await claimChat(userId.toString()).unwrap();
+      await claimChat(chatId.toString()).unwrap();
+      setSelectedChat((prev: any) => (prev ? { ...prev, stage: "active" } : null));
       setActiveTab("active");
-    } catch (err) {
+      refetchUsers();
+      socket?.emit("chat:stage_change", { chatId: chatId.toString(), stage: "active" });
+      socket?.emit("support:stage_change", { chatId: chatId.toString(), stage: "active" });
+      toast.success("Ticket claimed and moved to Active");
+    } catch (err: any) {
       console.error("Failed to claim chat: ", err);
+      toast.error(err?.data?.message || "Failed to claim ticket");
     }
   };
 
-  const handleCloseChat = async (userId: string | number) => {
+  const handleCloseChat = async (chatId: string | number) => {
     try {
-      await resolveChat(userId.toString()).unwrap();
+      await resolveChat(chatId.toString()).unwrap();
+      setSelectedChat((prev: any) =>
+        prev ? { ...prev, stage: "resolved" } : null
+      );
       setActiveTab("resolved");
-    } catch (err) {
+      refetchUsers();
+      socket?.emit("chat:stage_change", { chatId: chatId.toString(), stage: "resolved" });
+      socket?.emit("support:stage_change", { chatId: chatId.toString(), stage: "resolved" });
+      toast.success("Ticket marked as Resolved");
+    } catch (err: any) {
       console.error("Failed to close chat: ", err);
+      toast.error(err?.data?.message || "Failed to resolve ticket");
     }
   };
 
-  const handleReopenChat = async (userId: string | number) => {
+  const handleReopenChat = async (chatId: string | number) => {
     try {
-      await reopenChat(userId.toString()).unwrap();
+      await reopenChat(chatId.toString()).unwrap();
+      setSelectedChat((prev: any) => (prev ? { ...prev, stage: "active" } : null));
       setActiveTab("active");
-    } catch (err) {
+      refetchUsers();
+      socket?.emit("chat:stage_change", { chatId: chatId.toString(), stage: "active" });
+      socket?.emit("support:stage_change", { chatId: chatId.toString(), stage: "active" });
+      toast.success("Ticket reopened and moved to Active");
+    } catch (err: any) {
       console.error("Failed to reopen chat: ", err);
+      toast.error(err?.data?.message || "Failed to reopen ticket");
     }
   };
+
+  const handleUpdateReportStatus = async (
+    id: string,
+    status: "RESOLVED" | "DISMISSED" | "PENDING"
+  ) => {
+    try {
+      await updateReportStatus({ id, status }).unwrap();
+      toast.success(`Report marked as ${status.toLowerCase()}`);
+      if (selectedReport?.id === id) {
+        setSelectedReport((prev: any) => (prev ? { ...prev, status } : null));
+      }
+      refetchReports();
+    } catch (err: any) {
+      toast.error(err?.data?.message || `Failed to update report status`);
+    }
+  };
+
+  const handleDeleteReport = async (id: string) => {
+    if (!window.confirm("Are you sure you want to delete this report record?")) return;
+    try {
+      await deleteReport(id).unwrap();
+      toast.success("Report deleted successfully");
+      if (selectedReport?.id === id) {
+        setSelectedReport(null);
+      }
+      refetchReports();
+    } catch (err: any) {
+      toast.error(err?.data?.message || "Failed to delete report");
+    }
+  };
+
+  const copyToClipboard = (text: string) => {
+    if (!navigator.clipboard) return;
+    navigator.clipboard.writeText(text);
+    toast.success("Copied to clipboard");
+  };
+
+  const currentStage = (selectedChat?.stage || "").toLowerCase();
 
   return (
-    <div className="bg-white rounded-[20px] border border-border/50 shadow-sm w-full max-w-[1140px] h-[850px] mx-auto flex overflow-hidden animate-in fade-in duration-500">
-      {/* Sidebar */}
-      <aside className="w-[380px] border-r border-border/50 flex flex-col bg-white shrink-0">
-        <div className="p-6 space-y-6 flex flex-col h-full min-h-0">
-          <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-bold font-outfit text-dark tracking-tight">
-              Support Chats
+    <div className="w-full max-w-[1200px] mx-auto space-y-5 pb-12 animate-in fade-in duration-500">
+      {/* Top Support Navigation Bar */}
+      <div className="bg-white rounded-2xl border border-border/60 shadow-sm p-4 px-6 flex flex-col md:flex-row items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5">
+          <div className="h-11 w-11 rounded-2xl bg-[#155D5F]/10 flex items-center justify-center text-[#155D5F]">
+            <LifeBuoy className="h-6 w-6" />
+          </div>
+          <div>
+            <h1 className="text-xl font-bold font-outfit text-dark tracking-tight">
+              Support & Resolution Centre
             </h1>
-            {isConnected && (
-              <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                Live
+            <p className="text-xs font-medium text-slate/50">
+              Manage live customer tickets and moderate user-reported wealth groups
+            </p>
+          </div>
+        </div>
+
+        {/* Segmented Tab Switcher */}
+        <div className="flex items-center bg-surface p-1 rounded-xl border border-border/50">
+          <button
+            onClick={() => setMainTab("chat")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              mainTab === "chat"
+                ? "bg-white text-[#155D5F] shadow-sm"
+                : "text-slate/60 hover:text-dark"
+            }`}
+          >
+            <MessageSquare className="h-4 w-4" />
+            Live Customer Support
+            {totalChatUnread > 0 && (
+              <span className="bg-[#155D5F] text-white text-[10px] font-extrabold px-1.5 py-0.5 rounded-full">
+                {totalChatUnread}
               </span>
             )}
-          </div>
+          </button>
 
-          <div className="relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate/40" />
-            <Input
-              placeholder="Search for user or ID"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-11 h-12 bg-surface/50 border-border/30 rounded-2xl text-sm font-medium focus-visible:ring-primary/20 transition-all shadow-none"
-            />
-          </div>
+          <button
+            onClick={() => setMainTab("reports")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              mainTab === "reports"
+                ? "bg-white text-[#155D5F] shadow-sm"
+                : "text-slate/60 hover:text-dark"
+            }`}
+          >
+            <Flag className="h-4 w-4 text-amber-600" />
+            Wealth Group Reports
+            {reportsMetrics.pending > 0 && (
+              <span className="bg-amber-500 text-white text-[10px] font-extrabold px-1.5 py-0.5 rounded-full animate-pulse">
+                {reportsMetrics.pending}
+              </span>
+            )}
+          </button>
+        </div>
+      </div>
 
-          {/* Users Stage Tabs */}
-          <div className="space-y-4 flex-1 flex flex-col min-h-0">
-            <div className="flex bg-surface/80 p-1 rounded-xl gap-1 shrink-0">
-              <button
-                onClick={() => setActiveTab("queue")}
-                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  activeTab === "queue"
-                    ? "bg-white text-[#155D5F] shadow-sm"
-                    : "text-slate/60 hover:text-dark"
-                }`}
-              >
-                Queue ({users.filter((u: any) => {
-                  const st = (u.stage || "").toLowerCase();
-                  return st === "queue" || st === "unassigned";
-                }).length})
-              </button>
-              <button
-                onClick={() => setActiveTab("active")}
-                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  activeTab === "active"
-                    ? "bg-white text-[#155D5F] shadow-sm"
-                    : "text-slate/60 hover:text-dark"
-                }`}
-              >
-                Active ({users.filter((u: any) => (u.stage || "").toLowerCase() === "active").length})
-              </button>
-              <button
-                onClick={() => setActiveTab("resolved")}
-                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                  activeTab === "resolved"
-                    ? "bg-white text-[#155D5F] shadow-sm"
-                    : "text-slate/60 hover:text-dark"
-                }`}
-              >
-                Resolved ({users.filter((u: any) => (u.stage || "").toLowerCase() === "resolved").length})
-              </button>
-            </div>
+      {/* TAB 1: Live Customer Support Chat */}
+      {mainTab === "chat" && (
+        <div className="bg-white rounded-[24px] border border-border/60 shadow-md w-full h-[860px] flex overflow-hidden animate-in fade-in duration-300">
+          {/* Sidebar */}
+          <aside className="w-[380px] border-r border-border/50 flex flex-col bg-white shrink-0">
+            <div className="p-6 space-y-6 flex flex-col h-full min-h-0">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-bold font-outfit text-dark tracking-tight">
+                    Support Tickets
+                  </h2>
+                  <p className="text-xs text-slate/50 font-medium mt-0.5">
+                    Real-time conversations
+                  </p>
+                </div>
+                {isConnected ? (
+                  <span className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                    LIVE
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1.5 text-[10px] font-bold text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-100">
+                    <span className="h-2 w-2 rounded-full bg-amber-500" />
+                    CONNECTING
+                  </span>
+                )}
+              </div>
 
-            <div className="space-y-2 overflow-y-auto pr-2 flex-1 custom-scrollbar">
-              {filteredUsers.length > 0 ? (
-                filteredUsers.map((user: any) => {
-                  const currentId = user.id || user._id;
-                  const allKeys = [user.id, user._id, user.chatId, user.userId].filter(Boolean);
-                  const selectedId = selectedChat?.id || selectedChat?._id;
-                  const isCurrentSelected = selectedChat && allKeys.some(k => k === selectedId);
-                  const unread = user.unreadCount ?? 0;
+              {/* Search */}
+              <div className="relative">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate/40" />
+                <Input
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search tickets by name..."
+                  className="pl-10 text-xs h-10 rounded-xl border-border/60 bg-surface/50 focus-visible:ring-[#155D5F]/20"
+                />
+              </div>
 
-                  let latestMsgText = "";
-                  let latestMsgTime = "";
-                  let latestTimestamp = 0;
+              {/* Ticket Stage Tabs */}
+              <div className="flex items-center bg-surface p-1 rounded-xl border border-border/50">
+                <button
+                  onClick={() => setActiveTab("queue")}
+                  className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    activeTab === "queue"
+                      ? "bg-white text-[#155D5F] shadow-sm"
+                      : "text-slate/60 hover:text-dark"
+                  }`}
+                >
+                  Queue
+                </button>
+                <button
+                  onClick={() => setActiveTab("active")}
+                  className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    activeTab === "active"
+                      ? "bg-white text-[#155D5F] shadow-sm"
+                      : "text-slate/60 hover:text-dark"
+                  }`}
+                >
+                  Active
+                </button>
+                <button
+                  onClick={() => setActiveTab("resolved")}
+                  className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    activeTab === "resolved"
+                      ? "bg-white text-[#155D5F] shadow-sm"
+                      : "text-slate/60 hover:text-dark"
+                  }`}
+                >
+                  Resolved
+                </button>
+              </div>
 
-                  // 1. Direct active chat messages in current view
-                  if (isCurrentSelected && liveMessages.length > 0) {
-                    const lastLive = liveMessages[liveMessages.length - 1];
-                    latestMsgText = lastLive.text || lastLive.content || lastLive.message || "";
-                    latestMsgTime = lastLive.createdAt ? new Date(lastLive.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "";
-                    latestTimestamp = lastLive.createdAt ? new Date(lastLive.createdAt).getTime() : Date.now();
-                  }
+              {/* Ticket List */}
+              <div className="space-y-2 overflow-y-auto pr-2 flex-1 custom-scrollbar">
+                {filteredUsers.length > 0 ? (
+                  filteredUsers.map((user: any) => {
+                    const currentId = user.id || user._id;
+                    const allKeys = [
+                      user.id,
+                      user._id,
+                      user.chatId,
+                      user.userId,
+                    ].filter(Boolean);
+                    const selectedId = selectedChat?.id || selectedChat?._id;
+                    const isCurrentSelected =
+                      selectedChat && allKeys.some((k) => k === selectedId);
+                    
+                    const unread =
+                      user.adminUnreadCount ?? user.unreadCount ?? 0;
+                    const displayName =
+                      user.userName ||
+                      user.name ||
+                      `User ${String(currentId).slice(0, 6)}`;
+                    const avatarUrl = user.avatarUrl || user.image;
 
-                  // 2. Real-time message map
-                  allKeys.forEach((k) => {
-                    const m = lastMessagesMap[k];
-                    if (m && m.timestamp >= latestTimestamp) {
-                      latestMsgText = m.text;
-                      latestMsgTime = m.time;
-                      latestTimestamp = m.timestamp;
+                    let latestMsgText = "";
+                    let latestMsgTime = "";
+                    let latestTimestamp = 0;
+
+                    if (isCurrentSelected && liveMessages.length > 0) {
+                      const lastLive = liveMessages[liveMessages.length - 1];
+                      latestMsgText =
+                        lastLive.text ||
+                        lastLive.content ||
+                        lastLive.message ||
+                        "";
+                      latestMsgTime = lastLive.createdAt
+                        ? formatRelativeTime(lastLive.createdAt)
+                        : "";
+                      latestTimestamp = lastLive.createdAt
+                        ? new Date(lastLive.createdAt).getTime()
+                        : Date.now();
                     }
-                  });
 
-                  // 3. API provided lastMessage
-                  const rawLastMsg = user.lastMessage || user.latestMessage || user.last_message || user.recentMessage || user.messages?.[user.messages.length - 1];
-                  if (rawLastMsg) {
-                    if (typeof rawLastMsg === "string") {
-                      if (!latestMsgText) latestMsgText = rawLastMsg;
-                    } else if (typeof rawLastMsg === "object") {
-                      const extractedText = rawLastMsg.text || rawLastMsg.content || rawLastMsg.message || rawLastMsg.body || "";
-                      const extractedTime = rawLastMsg.createdAt || rawLastMsg.created_at || rawLastMsg.timestamp || rawLastMsg.time;
-                      const apiTimestamp = extractedTime ? new Date(extractedTime).getTime() : 0;
-                      if (apiTimestamp >= latestTimestamp || !latestMsgText) {
-                        if (extractedText) latestMsgText = extractedText;
-                        if (extractedTime) {
-                          try {
-                            latestMsgTime = new Date(extractedTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                          } catch (e) {}
+                    allKeys.forEach((k) => {
+                      const m = lastMessagesMap[k];
+                      if (m && m.timestamp >= latestTimestamp) {
+                        latestMsgText = m.text;
+                        latestMsgTime = m.time;
+                        latestTimestamp = m.timestamp;
+                      }
+                    });
+
+                    const rawLastMsg =
+                      user.lastMessage ||
+                      user.latestMessage ||
+                      user.last_message ||
+                      user.recentMessage ||
+                      user.messages?.[user.messages.length - 1];
+
+                    if (rawLastMsg) {
+                      if (typeof rawLastMsg === "string") {
+                        if (!latestMsgText) latestMsgText = rawLastMsg;
+                      } else if (typeof rawLastMsg === "object") {
+                        const extractedText =
+                          rawLastMsg.text ||
+                          rawLastMsg.content ||
+                          rawLastMsg.message ||
+                          rawLastMsg.body ||
+                          "";
+                        const extractedTime =
+                          rawLastMsg.createdAt ||
+                          rawLastMsg.created_at ||
+                          rawLastMsg.timestamp ||
+                          rawLastMsg.time;
+                        const apiTimestamp = extractedTime
+                          ? new Date(extractedTime).getTime()
+                          : 0;
+                        if (apiTimestamp >= latestTimestamp || !latestMsgText) {
+                          if (extractedText) latestMsgText = extractedText;
+                          if (extractedTime) {
+                            latestMsgTime = formatRelativeTime(extractedTime);
+                          }
                         }
                       }
                     }
-                  }
 
-                  const displayLastMsg = latestMsgText || "No messages yet";
-                  const displayTime = latestMsgTime;
+                    const displayLastMsg = latestMsgText || "No messages yet";
+                    const displayTime =
+                      latestMsgTime ||
+                      (user.lastMessageTime
+                        ? formatRelativeTime(user.lastMessageTime)
+                        : "");
 
-                  return (
-                  <div
-                    key={currentId}
-                    onClick={() => toggleChat(user)}
-                    className={`flex items-center gap-3 p-3.5 rounded-2xl cursor-pointer transition-all group border ${
-                      selectedId === currentId
-                        ? "bg-[#E8F3F3] border-[#155D5F]/10 shadow-sm"
-                        : "hover:bg-surface border-transparent"
-                    }`}
-                  >
-                    <div className="relative">
-                      <Avatar className="h-11 w-11 mt-1 shrink-0 ring-1 ring-border/10">
-                        <AvatarImage src={user.image || user.avatarUrl} />
-                        <AvatarFallback className="bg-primary/5 font-bold text-primary">
-                          {(user.name || "U")[0]}
-                        </AvatarFallback>
-                      </Avatar>
-                      {user.status === "online" && (
-                        <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-[#10B981] border-2 border-white" />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <p
-                          className={`text-sm font-bold truncate ${selectedId === currentId ? "text-dark" : "text-dark/80 group-hover:text-dark"}`}
-                        >
-                          {user.name || `User ${String(currentId).slice(0, 6)}`}
-                        </p>
-                        {displayTime && (
-                          <span className="text-[9px] font-bold text-slate/40">{displayTime}</span>
+                    const isOnline = user.status === "online";
+
+                    return (
+                      <div
+                        key={currentId}
+                        onClick={() => toggleChat(user)}
+                        className={`flex items-center gap-3 p-3.5 rounded-2xl cursor-pointer transition-all group border ${
+                          selectedId === currentId
+                            ? "bg-[#E8F3F3]/80 border-[#155D5F]/20 shadow-sm border-l-4 border-l-[#155D5F]"
+                            : "hover:bg-surface border-transparent"
+                        }`}
+                      >
+                        <div className="relative">
+                          <Avatar className="h-11 w-11 mt-0.5 shrink-0 ring-1 ring-border/10">
+                            <AvatarImage src={avatarUrl} />
+                            <AvatarFallback className="bg-primary/5 font-bold text-[#155D5F]">
+                              {(displayName || "U")[0]}
+                            </AvatarFallback>
+                          </Avatar>
+                          {isOnline && (
+                            <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-[#10B981] border-2 border-white" />
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between">
+                            <p
+                              className={`text-sm font-bold truncate ${
+                                selectedId === currentId
+                                  ? "text-dark"
+                                  : "text-dark/80 group-hover:text-dark"
+                              }`}
+                            >
+                              {displayName}
+                            </p>
+                            {displayTime && (
+                              <span className="text-[10px] font-semibold text-slate/40">
+                                {displayTime}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] font-medium text-slate/50 truncate mt-0.5">
+                            {displayLastMsg}
+                          </p>
+                        </div>
+                        {unread > 0 && (
+                          <div className="h-5 min-w-5 px-1.5 rounded-full bg-[#155D5F] flex items-center justify-center text-[10px] font-extrabold text-white shadow-sm shrink-0 animate-in zoom-in-75">
+                            {unread}
+                          </div>
                         )}
                       </div>
-                      <p className="text-[11px] font-medium text-slate/50 truncate mt-0.5">
-                        {displayLastMsg}
-                      </p>
-                    </div>
-                    {unread > 0 && (
-                      <div className="h-5 min-w-5 px-1.5 rounded-full bg-[#155D5F] flex items-center justify-center text-[10px] font-extrabold text-white shadow-sm shrink-0 animate-in zoom-in-75">
-                        {unread}
+                    );
+                  })
+                ) : isUsersLoading ? (
+                  <div className="space-y-2">
+                    {[1, 2, 3, 4, 5].map((i) => (
+                      <div
+                        key={i}
+                        className="flex items-center gap-3 p-3.5 rounded-2xl border border-transparent animate-pulse"
+                      >
+                        <Skeleton className="h-11 w-11 rounded-full shrink-0 bg-slate-200" />
+                        <div className="flex-1 min-w-0 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Skeleton className="h-3.5 w-24 bg-slate-200 rounded" />
+                            <Skeleton className="h-2.5 w-10 bg-slate-100 rounded" />
+                          </div>
+                          <Skeleton className="h-3 w-4/5 bg-slate-100 rounded" />
+                        </div>
                       </div>
-                    )}
+                    ))}
                   </div>
-                  );
-                })
-              ) : (
-                <div className="flex flex-col items-center justify-center py-10 text-center space-y-2 opacity-40">
-                  <Search className="h-8 w-8 text-slate/40" />
-                  <p className="text-xs font-bold font-outfit">
-                    No users found in {activeTab}
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-12 text-center space-y-2 opacity-40">
+                    <Search className="h-8 w-8 text-slate/40" />
+                    <p className="text-xs font-bold font-outfit">
+                      No tickets in {activeTab}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </aside>
+
+          {/* Chat Area */}
+          <main className="flex-1 flex flex-col bg-white min-w-0">
+            {!selectedChat ? (
+              <div className="flex-1 flex flex-col items-center justify-center text-center p-12 space-y-8 animate-in fade-in zoom-in-95 duration-500">
+                <div className="p-0.5 bg-surface/50 rounded-full shadow-inner relative">
+                  <Image
+                    src="/logo1.png"
+                    alt="Logo"
+                    width={250}
+                    height={200}
+                    className=""
+                  />
+                  <div className="absolute -top-1 -right-1 h-3.5 w-3.5 bg-green-500 rounded-full" />
+                  <div className="absolute -top-1 -right-1 h-3.5 w-3.5 bg-green-500/50 rounded-full animate-ping" />
+                </div>
+                <div className="space-y-3">
+                  <h3 className="text-2xl font-bold font-outfit text-dark/90 tracking-tight">
+                    No conversation selected
+                  </h3>
+                  <p className="text-sm font-medium text-slate/40 max-w-[320px] leading-relaxed">
+                    Choose a ticket from the left queue to view customer inquiries and provide live assistance.
                   </p>
                 </div>
-              )}
+              </div>
+            ) : (
+              <div className="flex-1 flex flex-col min-h-0 animate-in fade-in duration-300">
+                {/* Chat Header */}
+                <header className="px-8 py-4 border-b border-border/50 flex items-center justify-between bg-white sticky top-0 z-10">
+                  <div className="flex items-center gap-4">
+                    <div className="relative">
+                      <Avatar className="h-12 w-12 ring-2 ring-primary/5 transition-transform duration-300 hover:scale-105">
+                        <AvatarImage
+                          src={selectedChat.avatarUrl || selectedChat.image}
+                        />
+                        <AvatarFallback className="bg-primary/5 font-bold text-[#155D5F]">
+                          {((selectedChat.userName || selectedChat.name || "U")[0])}
+                        </AvatarFallback>
+                      </Avatar>
+                      {selectedChat.status === "online" && (
+                        <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full bg-[#10B981] border-2 border-white" />
+                      )}
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-dark flex items-center gap-2">
+                        {selectedChat.userName ||
+                          selectedChat.name ||
+                          `User ${String(selectedChat.id || selectedChat._id).slice(0, 6)}`}
+                        {selectedChat.isAdmin && (
+                          <Badge className="bg-primary/5 text-[#155D5F] border-none text-[9.5px] font-extrabold px-2.5 py-0.5 rounded-full">
+                            {selectedChat.role || "ADMIN"}
+                          </Badge>
+                        )}
+                      </h3>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span
+                          className={`h-2 w-2 rounded-full ${
+                            selectedChat.status === "online"
+                              ? "bg-[#10B981]"
+                              : "bg-slate-300"
+                          }`}
+                        />
+                        <span className="text-[11px] font-bold text-slate/40 uppercase tracking-wider">
+                          {selectedChat.status === "online" ? "Online" : "Offline"}
+                        </span>
+                        {!selectedChat.isAdmin && (
+                          <Badge
+                            className={`text-[10px] px-2.5 py-0.5 rounded-md font-bold uppercase tracking-wider ${
+                              currentStage === "queue" || currentStage === "unassigned"
+                                ? "bg-amber-100 text-amber-800 hover:bg-amber-100 border border-amber-200"
+                                : currentStage === "active"
+                                ? "bg-blue-100 text-blue-800 hover:bg-blue-100 border border-blue-200"
+                                : "bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border border-emerald-200"
+                            }`}
+                          >
+                            {currentStage === "queue" || currentStage === "unassigned"
+                              ? "In Queue"
+                              : currentStage === "active"
+                              ? "Active"
+                              : "Resolved"}
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Header Action Buttons */}
+                  {!selectedChat.isAdmin && (
+                    <div className="flex items-center gap-3">
+                      {(currentStage === "queue" || currentStage === "unassigned") && (
+                        <Button
+                          onClick={() => handleClaimChat(selectedChat.id || selectedChat._id)}
+                          className="bg-[#155D5F] hover:bg-[#124e50] text-white font-bold text-xs h-9 px-4 rounded-xl shadow-sm flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                        >
+                          <UserCheck className="h-4 w-4" />
+                          Claim Ticket
+                        </Button>
+                      )}
+
+                      {currentStage === "active" && (
+                        <Button
+                          onClick={() => handleCloseChat(selectedChat.id || selectedChat._id)}
+                          variant="outline"
+                          className="border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs h-9 px-4 rounded-xl flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                        >
+                          <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                          Resolve Ticket
+                        </Button>
+                      )}
+
+                      {currentStage === "resolved" && (
+                        <Button
+                          onClick={() => handleReopenChat(selectedChat.id || selectedChat._id)}
+                          variant="outline"
+                          className="border-[#155D5F]/30 bg-[#E8F3F3] hover:bg-[#d4ecec] text-[#155D5F] font-bold text-xs h-9 px-4 rounded-xl flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                        >
+                          <RotateCcw className="h-4 w-4 text-[#155D5F]" />
+                          Reopen Ticket
+                        </Button>
+                      )}
+
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="text-slate/40 hover:text-dark rounded-full transition-colors outline-none cursor-pointer h-9 w-9"
+                          >
+                            <MoreVertical className="h-5 w-5" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent
+                          align="end"
+                          className="bg-white rounded-xl shadow-lg border-border/50 w-48 p-2"
+                        >
+                          {(currentStage === "queue" || currentStage === "unassigned") && (
+                            <DropdownMenuItem
+                              onClick={() => handleClaimChat(selectedChat.id || selectedChat._id)}
+                              className="cursor-pointer font-bold text-xs text-[#155D5F] hover:bg-surface py-2.5 rounded-lg px-3"
+                            >
+                              Claim Ticket
+                            </DropdownMenuItem>
+                          )}
+                          {currentStage === "active" && (
+                            <DropdownMenuItem
+                              onClick={() => handleCloseChat(selectedChat.id || selectedChat._id)}
+                              className="cursor-pointer font-bold text-xs text-red-600 hover:bg-surface py-2.5 rounded-lg px-3"
+                            >
+                              Close / Resolve Ticket
+                            </DropdownMenuItem>
+                          )}
+                          {currentStage === "resolved" && (
+                            <DropdownMenuItem
+                              onClick={() => handleReopenChat(selectedChat.id || selectedChat._id)}
+                              className="cursor-pointer font-bold text-xs text-[#155D5F] hover:bg-surface py-2.5 rounded-lg px-3"
+                            >
+                              Reopen Ticket
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  )}
+                </header>
+
+                {/* Messages Area */}
+                <div className="flex-1 overflow-y-auto p-8 space-y-6 custom-scrollbar bg-white">
+                  {isChatLoading && formattedMessages.length === 0 ? (
+                    <div className="space-y-6 animate-pulse">
+                      <div className="flex justify-center my-4">
+                        <Skeleton className="h-6 w-24 rounded-full bg-slate-100" />
+                      </div>
+                      <div className="flex gap-3 items-start">
+                        <Skeleton className="h-8 w-8 rounded-full bg-slate-200 shrink-0" />
+                        <div className="space-y-2 max-w-[65%] w-full">
+                          <Skeleton className="h-3 w-20 bg-slate-200 rounded" />
+                          <Skeleton className="h-16 w-full rounded-2xl rounded-tl-none bg-slate-100" />
+                        </div>
+                      </div>
+                      <div className="flex gap-3 items-start justify-end flex-row-reverse">
+                        <Skeleton className="h-8 w-8 rounded-full bg-slate-200 shrink-0" />
+                        <div className="space-y-2 max-w-[60%] w-full flex flex-col items-end">
+                          <Skeleton className="h-12 w-full rounded-2xl rounded-tr-none bg-[#E8F3F3]/80" />
+                        </div>
+                      </div>
+                      <div className="flex gap-3 items-start">
+                        <Skeleton className="h-8 w-8 rounded-full bg-slate-200 shrink-0" />
+                        <div className="space-y-2 max-w-[50%] w-full">
+                          <Skeleton className="h-10 w-full rounded-2xl rounded-tl-none bg-slate-100" />
+                        </div>
+                      </div>
+                    </div>
+                  ) : formattedMessages.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-center opacity-40 space-y-2">
+                      <p className="text-xs font-bold font-outfit">
+                        No messages in this chat thread yet. Send a response to start.
+                      </p>
+                    </div>
+                  ) : (
+                    formattedMessages.map((msg: any, idx: number) => {
+                      const currentDate = msg.time || msg.createdAt ? new Date(msg.time || msg.createdAt).toDateString() : "";
+                      const prevMsg = idx > 0 ? formattedMessages[idx - 1] : null;
+                      const prevDate = prevMsg && (prevMsg.time || prevMsg.createdAt) ? new Date(prevMsg.time || prevMsg.createdAt).toDateString() : "";
+                      const showDate = !prevDate || currentDate !== prevDate;
+                      const dateLabel = showDate ? getDateLabel(msg.time || msg.createdAt) : "";
+
+                      const isTypeTransition = prevMsg && prevMsg.isMe !== msg.isMe && !showDate;
+
+                      return (
+                        <div key={msg.id || idx} className={isTypeTransition ? "mt-6" : "mt-2"}>
+                          {showDate && dateLabel && (
+                            <div className="flex items-center justify-center my-6">
+                              <span className="bg-surface border border-border/50 text-slate/50 text-[10px] font-bold px-3.5 py-1 rounded-full uppercase tracking-wider shadow-sm">
+                                {dateLabel}
+                              </span>
+                            </div>
+                          )}
+
+                          <div
+                            className={`flex gap-3 group ${
+                              msg.isMe ? "flex-row-reverse" : "flex-row"
+                            } animate-in slide-in-from-bottom-2 duration-300`}
+                          >
+                            <Avatar
+                              className={`h-8 w-8 mt-1 shrink-0 ring-1 ring-border/10 ${
+                                msg.isMe ? "bg-white p-0.5" : ""
+                              }`}
+                            >
+                              {msg.isMe ? (
+                                <Image
+                                  src="/logo.png"
+                                  alt="Wealthconomy"
+                                  width={32}
+                                  height={32}
+                                  className="cover"
+                                />
+                              ) : (
+                                <>
+                                  <AvatarImage
+                                    src={
+                                      msg.senderImage ||
+                                      selectedChat.avatarUrl ||
+                                      selectedChat.image
+                                    }
+                                  />
+                                  <AvatarFallback className="bg-primary/5 text-[10px] font-bold text-[#155D5F]">
+                                    {(msg.sender || "C")[0]}
+                                  </AvatarFallback>
+                                </>
+                              )}
+                            </Avatar>
+
+                            <div
+                              className={`flex flex-col space-y-1.5 max-w-[70%] ${
+                                msg.isMe ? "items-end" : "items-start"
+                              }`}
+                            >
+                              {!msg.isMe && (
+                                <span className="text-[11px] font-bold text-[#155D5F] ml-1">
+                                  {msg.sender}
+                                </span>
+                              )}
+                              <div className="relative group/bubble flex items-center gap-2">
+                                <div
+                                  className={`p-4 rounded-2xl text-[13.5px] font-medium leading-relaxed shadow-[0_2px_8px_-3px_rgba(0,0,0,0.05)] transition-all ${
+                                    msg.isMe
+                                      ? "bg-[#E8F3F3] text-dark rounded-tr-none hover:shadow-md"
+                                      : "bg-[#F3F4F6] text-dark/85 rounded-tl-none hover:shadow-md"
+                                  }`}
+                                >
+                                  <p className="whitespace-pre-wrap">{msg.text}</p>
+                                </div>
+
+                                <button
+                                  onClick={() => copyToClipboard(msg.text)}
+                                  title="Copy message"
+                                  className="opacity-0 group-hover/bubble:opacity-100 transition-opacity p-1.5 rounded-lg hover:bg-surface text-slate/40 hover:text-dark cursor-pointer"
+                                >
+                                  <Copy className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+
+                              <div className="flex items-center gap-1.5 px-1">
+                                <span className="text-[10px] font-semibold text-slate/30 uppercase tracking-tighter">
+                                  {msg.time}
+                                </span>
+                                {msg.isMe && (
+                                  <CheckCheck className="h-3 w-3 text-[#155D5F] opacity-70 shrink-0" />
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                  <div ref={messagesEndRef} />
+                </div>
+
+                {/* Quick Topics & Canned Replies Bar */}
+                <div className="px-8 py-2.5 border-t border-border/40 bg-white flex items-center gap-3 overflow-x-auto custom-scrollbar">
+                  <button
+                    onClick={() => setShowCanned(!showCanned)}
+                    className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold text-[#155D5F] bg-[#E8F3F3] hover:bg-[#d6ecec] shrink-0 transition-colors cursor-pointer"
+                  >
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Topics
+                  </button>
+
+                  {CANNED_TOPICS.map((item, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setInputText(item.text)}
+                      className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-medium text-slate/70 hover:text-dark bg-surface hover:bg-slate-100 border border-border/60 shrink-0 transition-all cursor-pointer group"
+                    >
+                      <span>{item.icon}</span>
+                      <span className="font-bold text-[#155D5F] text-[11px] group-hover:text-[#124e50]">
+                        {item.topic}:
+                      </span>
+                      <span className="truncate max-w-[200px] text-slate/60 group-hover:text-dark">
+                        {item.text}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Input Area */}
+                <div className="p-8 pt-2">
+                  <div className="relative group transition-all duration-300">
+                    <div className="absolute inset-0 bg-primary/5 rounded-2xl blur-lg group-focus-within:blur-xl transition-all opacity-0 group-focus-within:opacity-100" />
+                    <div className="relative flex items-center gap-3 bg-white border border-border/50 rounded-2xl p-2 px-4 shadow-[0_8px_30px_rgb(0,0,0,0.04)] focus-within:border-[#155D5F]/40 transition-all">
+                      <Input
+                        value={inputText}
+                        onChange={(e) => setInputText(e.target.value)}
+                        onKeyDown={(e) =>
+                          e.key === "Enter" && !e.shiftKey && handleSendMessage()
+                        }
+                        placeholder="Write a message to the customer..."
+                        disabled={isSending}
+                        className="flex-1 border-none shadow-none focus-visible:ring-0 text-sm font-medium h-12 bg-transparent disabled:opacity-50"
+                      />
+                      <Button
+                        size="icon"
+                        onClick={() => handleSendMessage()}
+                        disabled={!inputText.trim() || isSending}
+                        className="bg-[#155D5F] hover:bg-[#124e50] text-white rounded-xl h-10 w-10 shrink-0 transition-all active:scale-95 cursor-pointer disabled:opacity-40"
+                      >
+                        <Send className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </main>
+        </div>
+      )}
+
+      {/* TAB 2: Wealth Group Reports Moderation View */}
+      {mainTab === "reports" && (
+        <div className="space-y-6 animate-in fade-in duration-300">
+          {/* Wealthconomy Authentic KPI Metrics Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Total Reports */}
+            <div className="h-[135px] bg-[#F2FFFF] border border-[#155D5F4D] rounded-[20px] p-5 flex flex-col justify-between hover:bg-[#E8FAFA] hover:shadow-md transition-all duration-300">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-2xl font-bold font-outfit text-primary leading-none">
+                    {reportsMetrics.total}
+                  </p>
+                  <p className="text-[11px] font-semibold text-primary/80 mt-2">
+                    Total Reports
+                  </p>
+                </div>
+                <div className="h-9 w-9 rounded-full bg-[#155D5F] flex items-center justify-center shrink-0 shadow-sm">
+                  <Flag className="h-4 w-4 text-white" />
+                </div>
+              </div>
+              <div className="pt-2 border-t border-[#155D5F1A] flex items-center gap-1.5 text-[10px] text-slate/50 font-bold">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                {reportsMetrics.total} total incident filings
+              </div>
+            </div>
+
+            {/* Pending Action */}
+            <div className="h-[135px] bg-[#FFFBF0] border border-[#F59E0B4D] rounded-[20px] p-5 flex flex-col justify-between hover:bg-[#FFF8E7] hover:shadow-md transition-all duration-300">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-2xl font-bold font-outfit text-amber-600 leading-none">
+                    {reportsMetrics.pending}
+                  </p>
+                  <p className="text-[11px] font-semibold text-amber-700/80 mt-2">
+                    Pending Action
+                  </p>
+                </div>
+                <div className="h-9 w-9 rounded-full bg-amber-500 flex items-center justify-center shrink-0 shadow-sm">
+                  <AlertTriangle className="h-4 w-4 text-white" />
+                </div>
+              </div>
+              <div className="pt-2 border-t border-amber-200/50 flex items-center gap-1.5 text-[10px] text-amber-600 font-bold">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+                Requires moderator review
+              </div>
+            </div>
+
+            {/* Resolved */}
+            <div className="h-[135px] bg-[#F0FDF4] border border-[#10B9814D] rounded-[20px] p-5 flex flex-col justify-between hover:bg-[#DCFCE7] hover:shadow-md transition-all duration-300">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-2xl font-bold font-outfit text-emerald-700 leading-none">
+                    {reportsMetrics.resolved}
+                  </p>
+                  <p className="text-[11px] font-semibold text-emerald-800/80 mt-2">
+                    Resolved
+                  </p>
+                </div>
+                <div className="h-9 w-9 rounded-full bg-emerald-600 flex items-center justify-center shrink-0 shadow-sm">
+                  <CheckCircle2 className="h-4 w-4 text-white" />
+                </div>
+              </div>
+              <div className="pt-2 border-t border-emerald-200/50 flex items-center gap-1.5 text-[10px] text-emerald-600 font-bold">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                {reportsMetrics.total > 0 ? ((reportsMetrics.resolved / reportsMetrics.total) * 100).toFixed(0) : 0}% resolution rate
+              </div>
+            </div>
+
+            {/* Dismissed */}
+            <div className="h-[135px] bg-[#F8FAFC] border border-[#64748B4D] rounded-[20px] p-5 flex flex-col justify-between hover:bg-[#F1F5F9] hover:shadow-md transition-all duration-300">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-2xl font-bold font-outfit text-slate-700 leading-none">
+                    {reportsMetrics.dismissed}
+                  </p>
+                  <p className="text-[11px] font-semibold text-slate-600 mt-2">
+                    Dismissed
+                  </p>
+                </div>
+                <div className="h-9 w-9 rounded-full bg-slate-600 flex items-center justify-center shrink-0 shadow-sm">
+                  <Ban className="h-4 w-4 text-white" />
+                </div>
+              </div>
+              <div className="pt-2 border-t border-slate-200 flex items-center gap-1.5 text-[10px] text-slate-500 font-bold">
+                <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+                No violation found
+              </div>
+            </div>
+          </div>
+
+          {/* Filter & Search Toolbar */}
+          <div className="bg-white p-4 rounded-2xl border border-border/60 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-1.5 bg-surface p-1 rounded-xl border border-border/40 w-full sm:w-auto overflow-x-auto">
+              {(['ALL', 'PENDING', 'RESOLVED', 'DISMISSED'] as const).map((st) => (
+                <button
+                  key={st}
+                  onClick={() => setReportStatusFilter(st)}
+                  className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0 ${
+                    reportStatusFilter === st
+                      ? 'bg-[#E8F3F3] text-[#155D5F] shadow-xs'
+                      : 'text-slate/60 hover:text-dark hover:bg-white/50'
+                  }`}
+                >
+                  {st === 'ALL' ? 'All Reports' : st.charAt(0) + st.slice(1).toLowerCase()}
+                  {st === 'PENDING' && reportsMetrics.pending > 0 && (
+                    <span className="ml-1.5 px-1.5 py-0.2 rounded-full text-[9px] font-extrabold bg-amber-500 text-white">
+                      {reportsMetrics.pending}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+              <div className="relative flex-1 sm:w-72">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate/40" />
+                <Input
+                  value={reportSearch}
+                  onChange={(e) => setReportSearch(e.target.value)}
+                  placeholder="Search groups, reporters, or reasons..."
+                  className="pl-9 text-xs h-9 rounded-xl border-border/50 bg-surface/50 focus-visible:ring-[#155D5F]/20"
+                />
+              </div>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => refetchReports()}
+                disabled={isReportsFetching}
+                className="h-9 w-9 rounded-xl border-border/50 hover:bg-surface cursor-pointer shrink-0"
+                title="Refresh Reports"
+              >
+                <RefreshCw
+                  className={`h-4 w-4 text-[#155D5F] ${
+                    isReportsFetching ? 'animate-spin' : ''
+                  }`}
+                />
+              </Button>
+            </div>
+          </div>
+
+          {/* Authentic Wealthconomy Signature Table */}
+          <div className="bg-white rounded-2xl border border-border/60 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto custom-scrollbar">
+              <Table>
+                <TableHeader className="bg-surface/50">
+                  <TableRow className="border-border/50 hover:bg-transparent">
+                    <TableHead className="py-3.5 px-4 text-slate/50 font-bold text-[10px] uppercase tracking-widest text-left whitespace-nowrap">Reported Group</TableHead>
+                    <TableHead className="py-3.5 px-4 text-slate/50 font-bold text-[10px] uppercase tracking-widest whitespace-nowrap">Reporter</TableHead>
+                    <TableHead className="py-3.5 px-4 text-slate/50 font-bold text-[10px] uppercase tracking-widest whitespace-nowrap">Violation / Reason</TableHead>
+                    <TableHead className="py-3.5 px-4 text-slate/50 font-bold text-[10px] uppercase tracking-widest whitespace-nowrap">Date Filed</TableHead>
+                    <TableHead className="py-3.5 px-4 text-slate/50 font-bold text-[10px] uppercase tracking-widest text-center whitespace-nowrap">Status</TableHead>
+                    <TableHead className="py-3.5 px-4 text-slate/50 font-bold text-[10px] uppercase tracking-widest text-right whitespace-nowrap">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {isReportsLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="h-44 text-center">
+                        <div className="flex flex-col items-center justify-center gap-2">
+                          <RefreshCw className="h-6 w-6 text-[#155D5F] animate-spin" />
+                          <p className="text-xs font-medium text-slate/60">Loading group reports...</p>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : reportsList.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="h-44 text-center">
+                        <div className="flex flex-col items-center justify-center gap-2 text-slate/40">
+                          <ShieldAlert className="h-8 w-8 text-slate/30" />
+                          <p className="text-xs font-bold text-dark/70">No group reports found</p>
+                          <p className="text-[11px] text-slate/40">
+                            {reportSearch
+                              ? 'No reports match your search query.'
+                              : 'There are currently no reported wealth groups in this category.'}
+                          </p>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    reportsList.map((report) => {
+                      const statusUpper = (report.status || 'PENDING').toUpperCase();
+                      const groupName = report.group?.name || 'Wealth Group';
+                      const groupCategory = report.group?.category || 'SAVINGS';
+                      const reporterName = report.reporter
+                        ? report.reporter.name ||
+                          report.reporter.fullName ||
+                          `${report.reporter.firstName || ''} ${report.reporter.lastName || ''}`.trim() ||
+                          report.reporter.email
+                        : 'Anonymous User';
+                      const reporterAvatar =
+                        report.reporter?.avatarUrl ||
+                        report.reporter?.imageUrl ||
+                        report.reporter?.image ||
+                        report.reporter?.photoUrl ||
+                        report.reporter?.picture ||
+                        report.reporter?.avatar ||
+                        '';
+                      const reporterEmail = report.reporter?.email;
+
+                      return (
+                        <TableRow
+                          key={report.id}
+                          className="group border-border/50 hover:bg-surface/40 transition-all duration-200"
+                        >
+                          {/* Reported Group */}
+                          <TableCell className="py-3.5 px-4 whitespace-nowrap">
+                            <div className="flex items-center gap-3">
+                              <div className="h-9 w-9 rounded-xl bg-[#E8F3F3] text-[#155D5F] flex items-center justify-center font-bold text-xs uppercase shrink-0 border border-[#155D5F20]">
+                                {groupName.charAt(0)}
+                              </div>
+                              <div className="flex flex-col min-w-0">
+                                <span className="font-bold text-[13px] text-dark truncate">
+                                  {groupName}
+                                </span>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  <span className="text-[10px] font-semibold px-2 py-0.2 rounded-md bg-surface text-slate/70 border border-border/30">
+                                    {groupCategory}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          </TableCell>
+
+                          {/* Reporter */}
+                          <TableCell className="py-3.5 px-4 whitespace-nowrap">
+                            <div className="flex items-center gap-2.5">
+                              <Avatar className="h-8 w-8 ring-1 ring-border/20 shadow-xs border border-white shrink-0">
+                                <AvatarImage src={reporterAvatar} alt={reporterName} className="object-cover" />
+                                <AvatarFallback className="bg-primary/5 text-primary font-bold text-[11px] uppercase">
+                                  {reporterName.charAt(0)}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className="flex flex-col min-w-0">
+                                <span className="font-semibold text-[12px] text-dark truncate">
+                                  {reporterName}
+                                </span>
+                                {reporterEmail && (
+                                  <span className="text-[10px] text-slate/50 truncate">
+                                    {reporterEmail}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </TableCell>
+
+                          {/* Violation / Reason */}
+                          <TableCell className="py-3.5 px-4">
+                            <div className="max-w-[280px] truncate font-medium text-[11px] text-amber-900 bg-[#FFF8E7] border border-amber-200/60 px-2.5 py-1 rounded-lg flex items-center gap-1.5">
+                              <AlertCircle className="h-3 w-3 text-amber-600 shrink-0" />
+                              <span className="truncate">{report.reason || 'Policy violation reported'}</span>
+                            </div>
+                          </TableCell>
+
+                          {/* Date Filed */}
+                          <TableCell className="py-3.5 px-4 whitespace-nowrap">
+                            <div className="flex flex-col">
+                              <span className="text-[11px] font-semibold text-dark">
+                                {new Date(report.createdAt).toLocaleDateString([], {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric',
+                                })}
+                              </span>
+                              <span className="text-[10px] text-slate/40">
+                                {formatRelativeTime(report.createdAt)}
+                              </span>
+                            </div>
+                          </TableCell>
+
+                          {/* Status Badge */}
+                          <TableCell className="py-3.5 px-4 text-center whitespace-nowrap">
+                            <Badge
+                              className={`${
+                                statusUpper === 'RESOLVED'
+                                  ? 'bg-emerald-50 text-emerald-600 border-emerald-100/60'
+                                  : statusUpper === 'DISMISSED'
+                                  ? 'bg-slate-100 text-slate-700 border-slate-200'
+                                  : 'bg-amber-50 text-amber-700 border-amber-200/60'
+                              } px-2.5 py-0.5 rounded-lg gap-1.5 font-bold text-[9px] items-center border shadow-none`}
+                            >
+                              <div
+                                className={`w-1.5 h-1.5 rounded-full ${
+                                  statusUpper === 'RESOLVED'
+                                    ? 'bg-emerald-500'
+                                    : statusUpper === 'DISMISSED'
+                                    ? 'bg-slate-500'
+                                    : 'bg-amber-500 animate-pulse'
+                                }`}
+                              />
+                              {statusUpper === 'PENDING'
+                                ? 'Pending Review'
+                                : statusUpper.charAt(0) + statusUpper.slice(1).toLowerCase()}
+                            </Badge>
+                          </TableCell>
+
+                          {/* Actions */}
+                          <TableCell className="py-3.5 px-4 text-right whitespace-nowrap">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setSelectedReport(report)}
+                                className="h-8 px-2.5 rounded-xl border-border/50 text-[11px] font-bold text-slate hover:bg-surface transition-all gap-1 cursor-pointer"
+                              >
+                                <Eye className="h-3.5 w-3.5 text-[#155D5F]" />
+                                Inspect
+                              </Button>
+
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    className="h-8 w-8 p-0 hover:bg-surface rounded-full transition-all active:scale-90"
+                                  >
+                                    <MoreVertical className="h-4 w-4 text-slate/40" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent
+                                  align="end"
+                                  className="w-48 rounded-2xl border-border/50 shadow-xl p-1 animate-in slide-in-from-top-1 duration-200"
+                                >
+                                  <DropdownMenuItem
+                                    onClick={() => setSelectedReport(report)}
+                                    className="py-2.5 px-3 text-xs font-bold focus:bg-surface text-dark cursor-pointer rounded-xl gap-2"
+                                  >
+                                    <Eye className="h-3.5 w-3.5 text-[#155D5F]" />
+                                    Inspect Full Report
+                                  </DropdownMenuItem>
+
+                                  <DropdownMenuItem
+                                    onClick={() => handleUpdateReportStatus(report.id, 'RESOLVED')}
+                                    className="py-2.5 px-3 text-xs font-bold text-emerald-600 focus:bg-emerald-50 cursor-pointer rounded-xl gap-2"
+                                  >
+                                    <CheckCircle2 className="h-3.5 w-3.5" />
+                                    Mark as Resolved
+                                  </DropdownMenuItem>
+
+                                  <DropdownMenuItem
+                                    onClick={() => handleUpdateReportStatus(report.id, 'DISMISSED')}
+                                    className="py-2.5 px-3 text-xs font-bold text-slate-700 focus:bg-surface cursor-pointer rounded-xl gap-2"
+                                  >
+                                    <Ban className="h-3.5 w-3.5 text-slate-500" />
+                                    Dismiss Report
+                                  </DropdownMenuItem>
+
+                                  <DropdownMenuItem
+                                    onClick={() => handleDeleteReport(report.id)}
+                                    className="py-2.5 px-3 text-xs font-bold text-red-600 focus:bg-red-50 cursor-pointer rounded-xl gap-2"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                    Delete Record
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
             </div>
           </div>
         </div>
-      </aside>
+      )}
 
-      {/* Chat Area */}
-      <main className="flex-1 flex flex-col bg-white min-w-0">
-        {!selectedChat ? (
-          <div className="flex-1 flex flex-col items-center justify-center text-center p-12 space-y-8 animate-in fade-in zoom-in-95 duration-500">
-            <div className="p-.5 bg-surface/50 rounded-full shadow-inner relative">
-              <Image
-                src="/logo1.png"
-                alt="Logo"
-                width={250}
-                height={200}
-                className=""
-              />
-              <div className="absolute -top-1 -right-1 h-3.5 w-3.5 bg-green-500 rounded-full" />
-              <div className="absolute -top-1 -right-1 h-3.5 w-3.5 bg-green-500/50 rounded-full animate-ping" />
-            </div>
-            <div className="space-y-3">
-              <h2 className="text-2xl font-bold font-outfit text-dark/90 tracking-tight">
-                No support chat selected
-              </h2>
-              <p className="text-sm font-medium text-slate/40 max-w-[320px] leading-relaxed">
-                Click on a customer ticket from the list on the left to start a real-time conversation.
-              </p>
-            </div>
-          </div>
-        ) : (
-          <div className="flex-1 flex flex-col min-h-0 animate-in fade-in duration-300">
-            {/* Chat Header */}
-            <header className="px-8 py-5 border-b border-border/50 flex items-center justify-between bg-white/80 backdrop-blur-sm sticky top-0 z-10 transition-all duration-300">
-              <div className="flex items-center gap-4">
-                <div className="relative">
-                  <Avatar className="h-12 w-12 ring-2 ring-primary/5 transition-transform duration-300 hover:scale-105">
-                    <AvatarImage src={selectedChat.image || selectedChat.avatarUrl} />
-                    <AvatarFallback className="bg-primary/5 font-bold text-primary">
-                      {(selectedChat.name || "U")[0]}
-                    </AvatarFallback>
-                  </Avatar>
-                  {selectedChat.status === "online" && (
-                    <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full bg-[#10B981] border-2 border-white" />
-                  )}
+{/* Detailed Report Inspection Modal */}
+      {selectedReport && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-xl w-full border border-border/60 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-border/50 flex items-center justify-between bg-surface/40">
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-xl bg-amber-100 flex items-center justify-center text-amber-800">
+                  <ShieldAlert className="h-5 w-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-dark flex items-center gap-2">
-                    {selectedChat.name || `User ${selectedChat.id?.slice(0, 6)}`}
-                    {selectedChat.isAdmin && (
-                      <Badge className="bg-primary/5 text-primary border-none text-[9.5px] font-extrabold px-2.5 py-0.5 rounded-full hover:bg-primary/5 select-none">
-                        {selectedChat.role}
-                      </Badge>
-                    )}
+                  <h3 className="text-base font-bold font-outfit text-dark">
+                    Group Report Details
                   </h3>
-                  <div className="flex items-center gap-2">
-                    <span className="h-2 w-2 rounded-full bg-[#10B981]" />
-                    <span className="text-[11px] font-bold text-slate/40 uppercase tracking-wider">
-                      Online
+                  <p className="text-[11px] text-slate/50">
+                    Report ID: {selectedReport.id}
+                  </p>
+                </div>
+              </div>
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={() => setSelectedReport(null)}
+                className="rounded-full text-slate/40 hover:text-dark h-8 w-8 cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 space-y-5 max-h-[75vh] overflow-y-auto custom-scrollbar">
+              {/* Status & Date Info Box */}
+              <div className="flex items-center justify-between bg-surface/60 p-3.5 rounded-xl border border-border/40">
+                <div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate/40 block">
+                    Report Status
+                  </span>
+                  <span
+                    className={`text-xs font-extrabold uppercase ${
+                      (selectedReport.status || "").toUpperCase() === "PENDING"
+                        ? "text-amber-700"
+                        : (selectedReport.status || "").toUpperCase() === "RESOLVED"
+                        ? "text-emerald-700"
+                        : "text-slate-600"
+                    }`}
+                  >
+                    {selectedReport.status || "PENDING"}
+                  </span>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate/40 block">
+                    Reported At
+                  </span>
+                  <span className="text-xs font-semibold text-slate-700">
+                    {new Date(selectedReport.createdAt).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+
+              {/* Reported Group Card */}
+              <div className="border border-border/60 rounded-2xl p-4 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate/40">
+                    Reported Wealth Group
+                  </span>
+                  <Badge className="bg-blue-50 text-blue-700 border border-blue-200 text-[10px]">
+                    {selectedReport.group?.category || "SAVINGS"}
+                  </Badge>
+                </div>
+                <p className="text-base font-bold text-dark">
+                  {selectedReport.group?.name || "Group " + selectedReport.groupId}
+                </p>
+                <div className="grid grid-cols-2 gap-2 text-xs text-slate/60 pt-1 border-t border-border/30">
+                  <div>
+                    <span className="text-slate/40 block text-[10px]">Group ID</span>
+                    <span className="font-mono text-[11px] text-slate-700">{selectedReport.groupId}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate/40 block text-[10px]">Group Status</span>
+                    <span className="font-semibold text-emerald-700">
+                      {selectedReport.group?.status || "ACTIVE"}
                     </span>
-                    {!selectedChat.isAdmin && (
-                      <Badge
-                        className={`text-[10px] px-2 py-0.5 rounded-md ${
-                          selectedChat.stage === "queue" || selectedChat.stage === "UNASSIGNED"
-                            ? "bg-orange-100 text-orange-600 hover:bg-orange-100"
-                            : selectedChat.stage === "active" || selectedChat.stage === "ACTIVE"
-                              ? "bg-blue-100 text-blue-600 hover:bg-blue-100"
-                              : "bg-green-100 text-green-600 hover:bg-green-100"
-                        }`}
-                      >
-                        {selectedChat.stage === "queue" || selectedChat.stage === "UNASSIGNED"
-                          ? "In Queue"
-                          : selectedChat.stage === "active" || selectedChat.stage === "ACTIVE"
-                            ? "Active"
-                            : "Resolved"}
-                      </Badge>
+                  </div>
+                  {selectedReport.group?.creatorId && (
+                    <div>
+                      <span className="text-slate/40 block text-[10px]">Creator ID</span>
+                      <span className="font-mono text-[11px] text-slate-700">
+                        {selectedReport.group.creatorId}
+                      </span>
+                    </div>
+                  )}
+                  {selectedReport.group?.createdAt && (
+                    <div>
+                      <span className="text-slate/40 block text-[10px]">Created Date</span>
+                      <span>{new Date(selectedReport.group.createdAt).toLocaleDateString()}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Reporter Profile Card */}
+              <div className="border border-border/60 rounded-2xl p-4 space-y-2.5">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate/40 block">
+                  Reporting User
+                </span>
+                <div className="flex items-center gap-3.5">
+                  <Avatar className="h-12 w-12 ring-2 ring-border/20 shadow-xs border-2 border-white shrink-0">
+                    <AvatarImage
+                      src={
+                        selectedReport.reporter?.avatarUrl ||
+                        selectedReport.reporter?.imageUrl ||
+                        selectedReport.reporter?.image ||
+                        selectedReport.reporter?.photoUrl ||
+                        selectedReport.reporter?.picture ||
+                        selectedReport.reporter?.avatar ||
+                        ""
+                      }
+                      alt={
+                        selectedReport.reporter?.name ||
+                        selectedReport.reporter?.fullName ||
+                        selectedReport.reporter?.firstName ||
+                        "Reporter"
+                      }
+                      className="object-cover"
+                    />
+                    <AvatarFallback className="bg-primary/10 text-[#155D5F] font-bold text-sm uppercase">
+                      {(
+                        selectedReport.reporter?.name ||
+                        selectedReport.reporter?.fullName ||
+                        selectedReport.reporter?.firstName ||
+                        selectedReport.reporter?.email ||
+                        "U"
+                      )[0]}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-bold text-dark">
+                      {selectedReport.reporter?.name ||
+                        selectedReport.reporter?.fullName ||
+                        (selectedReport.reporter?.firstName || selectedReport.reporter?.lastName
+                          ? `${selectedReport.reporter?.firstName || ""} ${selectedReport.reporter?.lastName || ""}`.trim()
+                          : null) ||
+                        selectedReport.reporter?.email ||
+                        "Unknown User"}
+                    </p>
+                    <p className="text-xs text-slate/50 truncate mt-0.5">
+                      {selectedReport.reporter?.email || "No email provided"}
+                    </p>
+                    {selectedReport.reporter?.phone && (
+                      <p className="text-xs text-slate/50 mt-0.5">
+                        Phone: {selectedReport.reporter.phone}
+                      </p>
                     )}
                   </div>
                 </div>
               </div>
 
-              {!selectedChat.isAdmin && (
-                <div className="flex items-center gap-2">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="text-slate/40 hover:text-dark rounded-full transition-colors outline-none cursor-pointer"
-                      >
-                        <MoreVertical className="h-5 w-5" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent
-                      align="end"
-                      className="bg-white rounded-xl shadow-lg border-border/50 w-48 p-2"
-                    >
-                      {(selectedChat.stage === "queue" || selectedChat.stage === "UNASSIGNED") && (
-                        <DropdownMenuItem
-                          onClick={() => handleClaimChat(selectedChat.id)}
-                          className="cursor-pointer font-bold text-xs text-[#155D5F] hover:bg-surface py-2.5 rounded-lg px-3"
-                        >
-                          Claim Chat
-                        </DropdownMenuItem>
-                      )}
-                      {(selectedChat.stage === "active" || selectedChat.stage === "ACTIVE") && (
-                        <DropdownMenuItem
-                          onClick={() => handleCloseChat(selectedChat.id)}
-                          className="cursor-pointer font-bold text-xs text-red-600 hover:bg-surface py-2.5 rounded-lg px-3"
-                        >
-                          Close / Resolve Chat
-                        </DropdownMenuItem>
-                      )}
-                      {(selectedChat.stage === "resolved" || selectedChat.stage === "RESOLVED") && (
-                        <DropdownMenuItem
-                          onClick={() => handleReopenChat(selectedChat.id)}
-                          className="cursor-pointer font-bold text-xs text-[#155D5F] hover:bg-surface py-2.5 rounded-lg px-3"
-                        >
-                          Reopen / Claim Chat
-                        </DropdownMenuItem>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+              {/* Violation Reason Narrative */}
+              <div className="space-y-1.5">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate/40 block">
+                  Violation Reason / Evidence
+                </span>
+                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-3.5 text-xs font-medium text-amber-950 leading-relaxed">
+                  "{selectedReport.reason}"
                 </div>
-              )}
-            </header>
-
-            {/* Messages Area */}
-            <div className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar bg-white">
-              {formattedMessages.map((msg: any, idx: number) => (
-                <div
-                  key={msg.id || idx}
-                  className={`flex gap-4 ${msg.isMe ? "flex-row-reverse" : "flex-row"} animate-in slide-in-from-bottom-2 duration-300`}
-                >
-                  <Avatar
-                    className={`h-8 w-8 mt-1 shrink-0 ring-1 ring-border/10 ${msg.isMe ? "bg-white p-0.5" : ""}`}
-                  >
-                    {msg.isMe ? (
-                      <Image
-                        src="/logo.png"
-                        alt="Wealthconomy"
-                        width={32}
-                        height={32}
-                        className="cover"
-                      />
-                    ) : (
-                      <>
-                        <AvatarImage src={msg.senderImage || selectedChat.image} />
-                        <AvatarFallback className="bg-primary/5 text-[10px] font-bold">
-                          {(msg.sender || "C")[0]}
-                        </AvatarFallback>
-                      </>
-                    )}
-                  </Avatar>
-
-                  <div
-                    className={`flex flex-col space-y-2 max-w-[70%] ${msg.isMe ? "items-end" : "items-start"}`}
-                  >
-                    {!msg.isMe && (
-                      <span className="text-[11px] font-bold text-[#155D5F] ml-1">
-                        {msg.sender}
-                      </span>
-                    )}
-                    <div
-                      className={`p-4 rounded-2xl text-[13px] font-medium leading-relaxed shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] transition-all ${
-                        msg.isMe
-                          ? "bg-[#E8F3F3] text-dark rounded-tr-none hover:shadow-md"
-                          : "bg-[#F3F4F6] text-dark/80 rounded-tl-none hover:shadow-md"
-                      }`}
-                    >
-                      <p className="whitespace-pre-wrap">{msg.text}</p>
-                    </div>
-                    <div className="flex items-center gap-1.5 px-1">
-                      <span className="text-[10px] font-semibold text-slate/30 uppercase tracking-tighter">
-                        {msg.time}
-                      </span>
-                      {msg.isMe && (
-                        <CheckCheck className="h-3 w-3 text-[#155D5F] opacity-40 shrink-0" />
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-              <div ref={messagesEndRef} />
+              </div>
             </div>
 
-            {/* Input Area */}
-            <div className="p-8 pt-4">
-              <div className="relative group transition-all duration-300">
-                <div className="absolute inset-0 bg-primary/5 rounded-2xl blur-lg group-focus-within:blur-xl transition-all opacity-0 group-focus-within:opacity-100" />
-                <div className="relative flex items-center gap-3 bg-white border border-border/40 rounded-2xl p-2 px-4 shadow-[0_8px_30px_rgb(0,0,0,0.04)] focus-within:border-primary/20 transition-all">
-                  <Input
-                    value={inputText}
-                    onChange={(e) => setInputText(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
-                    placeholder="Write a message..."
-                    className="flex-1 border-none shadow-none focus-visible:ring-0 text-sm font-medium h-12 bg-transparent"
-                  />
-                  <Button
-                    size="icon"
-                    onClick={handleSendMessage}
-                    disabled={!inputText.trim()}
-                    className="bg-transparent hover:bg-surface text-[#155D5F] rounded-xl h-10 w-10 shrink-0 transition-all active:scale-90 cursor-pointer"
-                  >
-                    <Send className="h-5 w-5" />
-                  </Button>
-                </div>
+            {/* Modal Action Footer */}
+            <div className="px-6 py-4 border-t border-border/50 bg-surface/30 flex items-center justify-between">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleDeleteReport(selectedReport.id)}
+                disabled={isDeletingReport}
+                className="text-red-600 hover:bg-red-50 text-xs font-bold flex items-center gap-1 cursor-pointer"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Delete Entry
+              </Button>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleUpdateReportStatus(selectedReport.id, "DISMISSED")}
+                  disabled={isUpdatingStatus}
+                  className="text-slate-700 text-xs font-bold rounded-xl h-9 cursor-pointer"
+                >
+                  Dismiss
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => handleUpdateReportStatus(selectedReport.id, "RESOLVED")}
+                  disabled={isUpdatingStatus}
+                  className="bg-[#155D5F] hover:bg-[#124e50] text-white text-xs font-bold rounded-xl h-9 px-4 cursor-pointer"
+                >
+                  Mark Resolved
+                </Button>
               </div>
             </div>
           </div>
-        )}
-      </main>
+        </div>
+      )}
 
       <style jsx global>{`
         .custom-scrollbar::-webkit-scrollbar {
@@ -694,5 +1968,19 @@ export default function SupportCentrePage() {
         }
       `}</style>
     </div>
+  );
+}
+
+export default function SupportCentrePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="w-full max-w-[1200px] mx-auto bg-white rounded-2xl p-12 border border-border/50 shadow-sm flex items-center justify-center min-h-[400px]">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#155D5F]" />
+        </div>
+      }
+    >
+      <SupportCentreContent />
+    </Suspense>
   );
 }

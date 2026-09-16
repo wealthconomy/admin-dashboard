@@ -1,5 +1,98 @@
 import { apiSlice } from "../apiSlice";
 
+export interface SupportMessage {
+  id: string;
+  chatId?: string;
+  senderName?: string;
+  text: string;
+  time: string;
+  isMe: boolean;
+  isRead?: boolean;
+  readAt?: string | null;
+  sender?: string;
+  senderRole?: string;
+  senderImage?: string;
+  createdAt?: string;
+  isAdmin?: boolean;
+}
+
+export interface SupportChat {
+  id: string;
+  userId: string;
+  userName: string;
+  userRole?: string;
+  avatarUrl?: string;
+  status?: "online" | "offline" | string;
+  stage: "queue" | "active" | "resolved" | string;
+  isAdmin?: boolean;
+  lastMessage?: string;
+  lastMessageTime?: string;
+  adminUnreadCount?: number;
+  clientUnreadCount?: number;
+  unreadCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
+  messages?: SupportMessage[];
+  name?: string;
+  image?: string;
+}
+
+export interface SupportAdmin {
+  id: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  imageUrl?: string | null;
+  role: string;
+  online: boolean;
+}
+
+export interface WealthGroupReportGroup {
+  id: string;
+  name: string;
+  category: string;
+  status: string;
+  creatorId?: string;
+  createdAt?: string;
+  membersCount?: number;
+  members?: any[];
+}
+
+export interface WealthGroupReportReporter {
+  id: string;
+  name?: string;
+  fullName?: string;
+  firstName?: string;
+  lastName?: string;
+  email: string;
+  phone?: string;
+  avatarUrl?: string | null;
+  imageUrl?: string | null;
+  image?: string | null;
+  photoUrl?: string | null;
+}
+
+export interface WealthGroupReport {
+  id: string;
+  groupId: string;
+  reporterId: string;
+  reason: string;
+  status: "PENDING" | "RESOLVED" | "DISMISSED" | string;
+  createdAt: string;
+  group?: WealthGroupReportGroup;
+  reporter?: WealthGroupReportReporter;
+}
+
+export interface WealthGroupReportsResponse {
+  items: WealthGroupReport[];
+  totalCount: number;
+  pageSize: number;
+  hasNext: boolean;
+  hasPrev: boolean;
+  nextCursor?: string | null;
+  prevCursor?: string | null;
+}
+
 export const supportApi = apiSlice.injectEndpoints({
   endpoints: (builder) => ({
     getSupportChats: builder.query<any, { stage?: string; search?: string; q?: string }>({
@@ -26,7 +119,7 @@ export const supportApi = apiSlice.injectEndpoints({
         method: "POST",
         body,
       }),
-      invalidatesTags: (result, error, { id }) => [{ type: "Support", id }],
+      invalidatesTags: (result, error, { id }) => [{ type: "Support", id }, "Support"],
     }),
     claimSupportChat: builder.mutation<any, string>({
       query: (id) => ({
@@ -67,6 +160,59 @@ export const supportApi = apiSlice.injectEndpoints({
       }),
       invalidatesTags: (result, error, id) => [{ type: "Support", id }, "Support"],
     }),
+    // Wealth Group Reports Endpoints
+    getWealthGroupReports: builder.query<
+      any,
+      {
+        populate?: string;
+        status?: string;
+        search?: string;
+        limit?: number;
+        page?: number;
+      } | void
+    >({
+      query: (params) => {
+        const queryParams = new URLSearchParams();
+        queryParams.append("populate", params?.populate || "reporter,group");
+        if (params?.status && params.status !== "ALL") {
+          queryParams.append("status", params.status);
+        }
+        if (params?.search) {
+          queryParams.append("search", params.search);
+        }
+        if (params?.limit) {
+          queryParams.append("limit", String(params.limit));
+        }
+        if (params?.page) {
+          queryParams.append("page", String(params.page));
+        }
+        const qs = queryParams.toString();
+        return `/admin/wealth-groups/reports${qs ? `?${qs}` : ""}`;
+      },
+      providesTags: ["Support"],
+    }),
+    getWealthGroupReportDetail: builder.query<any, string>({
+      query: (id) => `/admin/wealth-groups/reports/${id}`,
+      providesTags: (result, error, id) => [{ type: "Support", id }],
+    }),
+    updateWealthGroupReportStatus: builder.mutation<
+      any,
+      { id: string; status: "PENDING" | "RESOLVED" | "DISMISSED" | string }
+    >({
+      query: ({ id, status }) => ({
+        url: `/admin/wealth-groups/reports/${id}/status`,
+        method: "PATCH",
+        body: { status },
+      }),
+      invalidatesTags: ["Support"],
+    }),
+    deleteWealthGroupReport: builder.mutation<any, string>({
+      query: (id) => ({
+        url: `/admin/wealth-groups/reports/${id}`,
+        method: "DELETE",
+      }),
+      invalidatesTags: ["Support"],
+    }),
   }),
 });
 
@@ -80,4 +226,9 @@ export const {
   useGetSupportAdminsQuery,
   useMarkSupportChatReadMutation,
   useMarkClientReadMutation,
+  useGetWealthGroupReportsQuery,
+  useGetWealthGroupReportDetailQuery,
+  useUpdateWealthGroupReportStatusMutation,
+  useDeleteWealthGroupReportMutation,
 } = supportApi;
+
