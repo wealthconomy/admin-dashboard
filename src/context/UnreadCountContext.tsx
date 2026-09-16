@@ -40,12 +40,18 @@ export function UnreadCountProvider({ children }: { children: React.ReactNode })
 
   // Sync REST summary whenever data updates
   useEffect(() => {
-    if (summaryData?.data) {
-      if (typeof summaryData.data.totalInternalUnread === "number") {
-        setTotalInternalUnread(summaryData.data.totalInternalUnread);
-      }
-      if (typeof summaryData.data.totalSupportUnread === "number") {
-        setTotalSupportUnread(summaryData.data.totalSupportUnread);
+    if (summaryData !== undefined && summaryData !== null) {
+      if (typeof summaryData === "number") {
+        setTotalSupportUnread(summaryData);
+      } else if (typeof summaryData.data === "number") {
+        setTotalSupportUnread(summaryData.data);
+      } else if (summaryData.data) {
+        if (typeof summaryData.data.totalInternalUnread === "number") {
+          setTotalInternalUnread(summaryData.data.totalInternalUnread);
+        }
+        if (typeof summaryData.data.totalSupportUnread === "number") {
+          setTotalSupportUnread(summaryData.data.totalSupportUnread);
+        }
       }
     }
   }, [summaryData]);
