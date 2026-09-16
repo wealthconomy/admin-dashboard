@@ -567,40 +567,45 @@ export default function PlanUsersPage() {
       const fullName = `${firstName} ${lastName}`.trim();
       const memberName =
         fullName ||
-        u.name ||
-        u.fullName ||
-        u.memberName ||
+        memberObj.name ||
+        memberObj.fullName ||
         userObj.name ||
         userObj.fullName ||
-        memberObj.name ||
         matchedUser.name ||
+        u.memberName ||
+        u.fullName ||
+        (u.name && !u.name.includes("-") ? u.name : "") ||
         "Member";
 
       const email =
-        u.email ||
-        userObj.email ||
         memberObj.email ||
+        userObj.email ||
+        u.email ||
         matchedUser.email ||
         "—";
 
       const phone =
+        memberObj.phone ||
+        memberObj.phoneNumber ||
+        memberObj.phone_number ||
+        userObj.phone ||
+        userObj.phoneNumber ||
         u.phone ||
         u.phoneNumber ||
         u.phone_number ||
-        userObj.phone ||
-        memberObj.phone ||
         matchedUser.phone ||
         "—";
 
       const avatar =
-        u.avatar ||
-        u.avatarUrl ||
-        u.imageUrl ||
-        userObj.avatar ||
-        userObj.avatarUrl ||
-        userObj.imageUrl ||
-        memberObj.avatar ||
         memberObj.avatarUrl ||
+        memberObj.avatar ||
+        memberObj.imageUrl ||
+        userObj.avatarUrl ||
+        userObj.avatar ||
+        userObj.imageUrl ||
+        u.avatarUrl ||
+        u.avatar ||
+        u.imageUrl ||
         matchedUser.imageUrl ||
         matchedUser.avatarUrl ||
         "";
@@ -614,6 +619,8 @@ export default function PlanUsersPage() {
         0;
 
       const rawSavingType = String(
+        memberObj.savingType ||
+        userObj.savingType ||
         u.savingType ||
         u.type ||
         u.planType ||

@@ -28,6 +28,7 @@ interface InterestRatesForm {
   PENALTY_RATE_WEALTH_GOAL: string;
   PENALTY_RATE_WEALTH_FAM: string;
   PENALTY_RATE_WEALTH_FLOW: string;
+  PENALTY_RATE_WEALTH_GROUP: string;
   EARLY_TERMINATION_PENALTY_PCT: string;
   INTEREST_DISBURSEMENT_FREQUENCY: string;
   WALLET_FEE_KOBO: string;
@@ -99,6 +100,7 @@ const PENALTY_FIELDS: Array<{
     | "EARLY_TERMINATION_PENALTY_PCT"
     | "PENALTY_RATE_WEALTH_FAM"
     | "PENALTY_RATE_WEALTH_FLOW"
+    | "PENALTY_RATE_WEALTH_GROUP"
   >;
   label: string;
   planName: string;
@@ -133,6 +135,13 @@ const PENALTY_FIELDS: Array<{
     badgeColor: "bg-blue-50 text-blue-600 border-blue-200",
     description: "Penalty fee percentage applied when terminating an automated cashflow savings plan before scheduled term.",
   },
+  {
+    key: "PENALTY_RATE_WEALTH_GROUP",
+    label: "WealthGroup Early Termination Penalty (%)",
+    planName: "WealthGroup",
+    badgeColor: "bg-indigo-50 text-indigo-600 border-indigo-200",
+    description: "Penalty fee percentage applied when a member exits or terminates a cooperative savings group before the target date.",
+  },
 ];
 
 export default function SystemConfigPage() {
@@ -164,6 +173,7 @@ export default function SystemConfigPage() {
     PENALTY_RATE_WEALTH_GOAL: "",
     PENALTY_RATE_WEALTH_FAM: "",
     PENALTY_RATE_WEALTH_FLOW: "",
+    PENALTY_RATE_WEALTH_GROUP: "",
     EARLY_TERMINATION_PENALTY_PCT: "",
     INTEREST_DISBURSEMENT_FREQUENCY: "MONTHLY",
     WALLET_FEE_KOBO: "",
@@ -224,6 +234,7 @@ export default function SystemConfigPage() {
         PENALTY_RATE_WEALTH_GOAL: map["PENALTY_RATE_WEALTH_GOAL"] ?? "",
         PENALTY_RATE_WEALTH_FAM: map["PENALTY_RATE_WEALTH_FAM"] ?? "",
         PENALTY_RATE_WEALTH_FLOW: map["PENALTY_RATE_WEALTH_FLOW"] ?? "",
+        PENALTY_RATE_WEALTH_GROUP: map["PENALTY_RATE_WEALTH_GROUP"] ?? "",
         EARLY_TERMINATION_PENALTY_PCT: map["EARLY_TERMINATION_PENALTY_PCT"] ?? "",
         INTEREST_DISBURSEMENT_FREQUENCY: map["INTEREST_DISBURSEMENT_FREQUENCY"] || "MONTHLY",
         WALLET_FEE_KOBO: map["WALLET_FEE_KOBO"] ?? "",
@@ -356,6 +367,7 @@ export default function SystemConfigPage() {
       "EARLY_TERMINATION_PENALTY_PCT",
       "PENALTY_RATE_WEALTH_FAM",
       "PENALTY_RATE_WEALTH_FLOW",
+      "PENALTY_RATE_WEALTH_GROUP",
     ];
 
     const changedKeys = penaltyKeys.filter(
