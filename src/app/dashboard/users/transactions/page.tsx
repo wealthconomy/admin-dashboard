@@ -92,14 +92,22 @@ const getTransactionActionInfo = (tx: any): TransactionActionInfo => {
     };
   }
 
-  // 4. WealthGroup Contribution
+  // 4. WealthGroup transactions — contributions (debit) OR payouts (credit)
   if (ref.startsWith("WGC_") || desc.includes("wealthgroup") || desc.includes("contribution to")) {
+    // A payout (rotational pot payout, maturity payout, etc.) is a credit to the user.
+    const isPayout =
+      ref.startsWith("WGC_PAYOUT") ||
+      desc.includes("payout") ||
+      desc.includes("disbursement") ||
+      rawAction === "CREDIT";
     return {
       category: "GROUP_CONTRIBUTION",
-      label: "Group Contribution",
-      badgeClass: "bg-violet-50 text-violet-700 border-violet-200",
-      subtext: tx?.description || "WealthGroup Contribution",
-      isCredit: false,
+      label: isPayout ? "Group Payout" : "Group Contribution",
+      badgeClass: isPayout
+        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+        : "bg-violet-50 text-violet-700 border-violet-200",
+      subtext: tx?.description || (isPayout ? "WealthGroup Payout" : "WealthGroup Contribution"),
+      isCredit: isPayout,
     };
   }
 

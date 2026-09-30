@@ -37,6 +37,23 @@ export function PortfolioStats({ timeFilter }: PortfolioStatsProps) {
     ];
 
     const tribesData = tribesRes?.data || tribesRes || {};
+    const groupItems = Array.isArray(tribesRes)
+      ? tribesRes
+      : Array.isArray(tribesRes?.data)
+        ? tribesRes.data
+        : Array.isArray(tribesRes?.data?.items)
+          ? tribesRes.data.items
+          : Array.isArray(tribesRes?.data?.tribes)
+            ? tribesRes.data.tribes
+            : Array.isArray(tribesRes?.data?.groups)
+              ? tribesRes.data.groups
+              : Array.isArray(tribesRes?.items)
+                ? tribesRes.items
+                : Array.isArray(tribesRes?.tribes)
+                  ? tribesRes.tribes
+                  : Array.isArray(tribesData?.items)
+                    ? tribesData.items
+                    : [];
 
     return baseCards.map((card) => {
       // Safely handle if backend wraps response in { success: true, data: [...] } or { data: { items: [...] } }
@@ -67,17 +84,42 @@ export function PortfolioStats({ timeFilter }: PortfolioStatsProps) {
 
       const isGroupCard = cardNorm === "wealthgroup";
 
-      const rawAmt = Number(
-        apiData?.amount ??
-        apiData?.totalBalance ??
-        apiData?.balance ??
-        apiData?.totalAmount ??
-        apiData?.totalSavings ??
-        (isGroupCard ? (tribesData?.totalSavings ?? tribesData?.totalBalance ?? 0) : 0)
-      );
+      let groupTotalSavingsKobo = 0;
+      if (isGroupCard) {
+        if (groupItems.length > 0) {
+          groupTotalSavingsKobo = groupItems.reduce((sum: number, g: any) => {
+            const rawStatus = String(g.status || g.state || "").toUpperCase();
+            if (g.isTerminated || rawStatus.includes("TERMINAT") || rawStatus.includes("CANCEL")) {
+              return sum;
+            }
+            const rawType = String(g.type || g.groupType || "").toUpperCase();
+            const isRotational = g.type === "ROTATIONAL" || rawType.includes("ROTAT");
+            const rawCycleSavings = g.currentCycleSavings ?? g.currentCyclePot ?? g.cycleSavings;
+            const hasCycleSavings = rawCycleSavings !== undefined && rawCycleSavings !== null;
+
+            const savingsKobo = isRotational
+              ? (hasCycleSavings ? Number(rawCycleSavings) || 0 : 0)
+              : Number(g.totalSaved ?? g.totalSavings ?? g.totalBalance ?? 0);
+
+            return sum + savingsKobo;
+          }, 0);
+        } else {
+          groupTotalSavingsKobo = Number(tribesData?.totalSavings ?? tribesData?.totalBalance ?? 0);
+        }
+      }
+
+      const rawAmt = isGroupCard
+        ? groupTotalSavingsKobo
+        : Number(
+            apiData?.amount ??
+            apiData?.totalBalance ??
+            apiData?.balance ??
+            apiData?.totalAmount ??
+            apiData?.totalSavings ??
+            0
+          );
       const nairaAmt = rawAmt / 100;
 
-      const groupItems = Array.isArray(tribesData?.items) ? tribesData.items : [];
       const groupActiveCount = isGroupCard
         ? (groupItems.length > 0
             ? groupItems.filter((g: any) => {

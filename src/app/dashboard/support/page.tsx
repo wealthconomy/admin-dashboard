@@ -151,9 +151,16 @@ function SupportCentreContent() {
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   // Wealth Group Reports States
-  const [reportStatusFilter, setReportStatusFilter] = useState<"ALL" | "PENDING" | "RESOLVED" | "DISMISSED">("ALL");
+  const [reportStatusFilter, setReportStatusFilter] = useState<"ALL" | "PENDING" | "INVESTIGATING" | "RESOLVED" | "DISMISSED">("ALL");
   const [reportSearch, setReportSearch] = useState("");
   const [selectedReport, setSelectedReport] = useState<WealthGroupReport | any | null>(null);
+  const [resolutionNoteInput, setResolutionNoteInput] = useState("");
+
+  useEffect(() => {
+    if (selectedReport) {
+      setResolutionNoteInput(selectedReport.resolutionNote || "");
+    }
+  }, [selectedReport]);
 
   // Handle URL deep-linking (?tab=reports&reportId=...)
   useEffect(() => {
@@ -244,18 +251,20 @@ function SupportCentreContent() {
 
   const reportsMetrics = useMemo(() => {
     let pending = 0;
+    let investigating = 0;
     let resolved = 0;
     let dismissed = 0;
 
     rawReportsList.forEach((r: any) => {
       const s = (r.status || "").toUpperCase();
       if (s === "PENDING") pending++;
+      else if (s === "INVESTIGATING") investigating++;
       else if (s === "RESOLVED") resolved++;
       else if (s === "DISMISSED") dismissed++;
     });
 
     const total = reportsResponse?.data?.totalCount ?? rawReportsList.length;
-    return { total, pending, resolved, dismissed };
+    return { total, pending, investigating, resolved, dismissed };
   }, [reportsResponse, rawReportsList]);
 
   const totalChatUnread = useMemo(() => {
@@ -680,13 +689,15 @@ function SupportCentreContent() {
 
   const handleUpdateReportStatus = async (
     id: string,
-    status: "RESOLVED" | "DISMISSED" | "PENDING"
+    status: "RESOLVED" | "DISMISSED" | "INVESTIGATING" | "PENDING",
+    customNote?: string
   ) => {
     try {
-      await updateReportStatus({ id, status }).unwrap();
-      toast.success(`Report marked as ${status.toLowerCase()}`);
+      const noteToSubmit = customNote !== undefined ? customNote : resolutionNoteInput;
+      await updateReportStatus({ id, status, resolutionNote: noteToSubmit }).unwrap();
+      toast.success(`Report status updated to ${status.toLowerCase()}`);
       if (selectedReport?.id === id) {
-        setSelectedReport((prev: any) => (prev ? { ...prev, status } : null));
+        setSelectedReport((prev: any) => (prev ? { ...prev, status, resolutionNote: noteToSubmit } : null));
       }
       refetchReports();
     } catch (err: any) {
@@ -1469,7 +1480,7 @@ function SupportCentreContent() {
           {/* Filter & Search Toolbar */}
           <div className="bg-white p-4 rounded-2xl border border-border/60 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-1.5 bg-surface p-1 rounded-xl border border-border/40 w-full sm:w-auto overflow-x-auto">
-              {(['ALL', 'PENDING', 'RESOLVED', 'DISMISSED'] as const).map((st) => (
+              {(['ALL', 'PENDING', 'INVESTIGATING', 'RESOLVED', 'DISMISSED'] as const).map((st) => (
                 <button
                   key={st}
                   onClick={() => setReportStatusFilter(st)}
@@ -1483,6 +1494,11 @@ function SupportCentreContent() {
                   {st === 'PENDING' && reportsMetrics.pending > 0 && (
                     <span className="ml-1.5 px-1.5 py-0.2 rounded-full text-[9px] font-extrabold bg-amber-500 text-white">
                       {reportsMetrics.pending}
+                    </span>
+                  )}
+                  {st === 'INVESTIGATING' && reportsMetrics.investigating > 0 && (
+                    <span className="ml-1.5 px-1.5 py-0.2 rounded-full text-[9px] font-extrabold bg-blue-500 text-white">
+                      {reportsMetrics.investigating}
                     </span>
                   )}
                 </button>
@@ -1706,6 +1722,14 @@ function SupportCentreContent() {
                                   </DropdownMenuItem>
 
                                   <DropdownMenuItem
+                                    onClick={() => handleUpdateReportStatus(report.id, 'INVESTIGATING')}
+                                    className="py-2.5 px-3 text-xs font-bold text-blue-600 focus:bg-blue-50 cursor-pointer rounded-xl gap-2"
+                                  >
+                                    <Clock className="h-3.5 w-3.5 text-blue-500" />
+                                    Mark as Investigating
+                                  </DropdownMenuItem>
+
+                                  <DropdownMenuItem
                                     onClick={() => handleUpdateReportStatus(report.id, 'RESOLVED')}
                                     className="py-2.5 px-3 text-xs font-bold text-emerald-600 focus:bg-emerald-50 cursor-pointer rounded-xl gap-2"
                                   >
@@ -1909,10 +1933,29 @@ function SupportCentreContent() {
                   "{selectedReport.reason}"
                 </div>
               </div>
+
+              {/* Resolution Note / Admin Feedback Input */}
+              <div className="space-y-1.5 pt-2 border-t border-border/40">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate/50 block">
+                  Admin Resolution Note / User Feedback
+                </span>
+                <textarea
+                  rows={3}
+                  value={resolutionNoteInput}
+                  onChange={(e) => setResolutionNoteInput(e.target.value)}
+                  placeholder="Enter a resolution message or feedback for the reporting user (e.g. 'We investigated this group and issued a warning to the group owner.')..."
+                  className="w-full text-xs p-3 rounded-2xl border border-border/60 bg-surface/30 focus:outline-none focus:ring-1 focus:ring-primary/40 font-medium text-dark leading-relaxed resize-none"
+                />
+                {selectedReport.resolutionNote && (
+                  <p className="text-[10px] text-slate/50 font-medium">
+                    Current saved resolution note: <span className="text-dark italic">"{selectedReport.resolutionNote}"</span>
+                  </p>
+                )}
+              </div>
             </div>
 
             {/* Modal Action Footer */}
-            <div className="px-6 py-4 border-t border-border/50 bg-surface/30 flex items-center justify-between">
+            <div className="px-6 py-4 border-t border-border/50 bg-surface/30 flex items-center justify-between gap-2 flex-wrap sm:flex-nowrap">
               <Button
                 variant="ghost"
                 size="sm"
@@ -1924,7 +1967,16 @@ function SupportCentreContent() {
                 Delete Entry
               </Button>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleUpdateReportStatus(selectedReport.id, "INVESTIGATING")}
+                  disabled={isUpdatingStatus}
+                  className="text-blue-700 border-blue-200 hover:bg-blue-50 text-xs font-bold rounded-xl h-9 cursor-pointer"
+                >
+                  Investigating
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"

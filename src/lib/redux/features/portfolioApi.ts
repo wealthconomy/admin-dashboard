@@ -1,5 +1,46 @@
 import { apiSlice } from "../apiSlice";
 
+export type GroupType = "FIXED" | "FLEX" | "ROTATIONAL";
+
+export interface TribeGroupItem {
+  id: string;
+  groupName?: string;
+  name?: string;
+  title?: string;
+  type?: GroupType;
+  status?: string;
+  groupTarget?: number;
+  totalSaved?: number;
+  totalSavings?: number;
+  startDate?: string;
+  endDate?: string;
+  members?: any[];
+  [key: string]: any;
+}
+
+export interface TribesResponse {
+  success?: boolean;
+  message?: string;
+  data?: {
+    items?: TribeGroupItem[];
+    totalGroups?: number;
+    totalSavings?: number;
+    totalBalance?: number;
+    totalMembers?: number;
+    totalInterest?: number;
+    totalWealthpact?: number;
+    [key: string]: any;
+  } | any;
+  items?: TribeGroupItem[];
+  totalGroups?: number;
+  totalSavings?: number;
+  totalBalance?: number;
+  totalMembers?: number;
+  totalInterest?: number;
+  totalWealthpact?: number;
+  [key: string]: any;
+}
+
 export const portfolioApi = apiSlice.injectEndpoints({
   endpoints: (builder) => ({
     // Get portfolios by type (WEALTH_FLEX, WEALTH_FIX, etc)

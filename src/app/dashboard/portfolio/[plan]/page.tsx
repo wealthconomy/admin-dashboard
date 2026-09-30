@@ -14,6 +14,7 @@ import {
   useGetTribesQuery,
   useLazyExportTribesQuery,
   useLazyExportPortfoliosByTypeQuery,
+  GroupType,
 } from "@/lib/redux/features/portfolioApi";
 import { useGetUsersQuery } from "@/lib/redux/features/usersApi";
 import { toast } from "sonner";
@@ -86,6 +87,7 @@ type WealthGroupData = {
   id: string;
   groupName: string;
   image?: string;
+  type?: GroupType;
   groupTarget: number;
   startDate: string;
   endDate: string;
@@ -153,7 +155,7 @@ function formatCurrency(n: number | string) {
 }
 function formatDate(d: string) {
   try {
-    return new Date(d).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" });
+    return new Date(d).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
   } catch (e) {
     return d;
   }
@@ -211,6 +213,35 @@ function InterestEarnedCell({ savingType, interestAmount, wealthPactAmount }: { 
   );
 }
 
+// ─── Group-type badge ─────────────────────────────────────────────────────────
+
+function GroupTypeBadge({ type }: { type?: GroupType }) {
+  if (!type) return null;
+
+  if (type === "ROTATIONAL") {
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200 whitespace-nowrap">
+        <RotateCw className="w-3 h-3 text-purple-600" />
+        Rotational (Ajo/Esusu)
+      </span>
+    );
+  }
+
+  if (type === "FLEX") {
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200 whitespace-nowrap">
+        Flex Contribution
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200 whitespace-nowrap">
+      Fixed Contribution
+    </span>
+  );
+}
+
 // ─── Download helpers ─────────────────────────────────────────────────────────
 
 function buildCsvRows(plan: string, users: PlanUser[], isWealthFix: boolean, isWealthGoal: boolean) {
@@ -236,7 +267,7 @@ function buildCsvRows(plan: string, users: PlanUser[], isWealthFix: boolean, isW
 }
 
 function buildGroupCsvRows(groups: WealthGroupData[]) {
-  const headers = ["Group Name", "Group Target (₦)", "Start Date", "End Date", "Days Remaining", "Role", "Member Name", "Email", "Phone", "Saving Type", "Individual Contribution (₦)", "Interest Rate (%)", "Interest Earned (₦)", "Group Total (₦)"];
+  const headers = ["Group Name", "Group Type", "Group Target (₦)", "Start Date", "End Date", "Days Remaining", "Role", "Member Name", "Email", "Phone", "Saving Type", "Individual Contribution (₦)", "Interest Rate (%)", "Interest Earned (₦)", "Group Total (₦)"];
   const rows: string[][] = [];
   for (const g of groups) {
     const total = g.members.reduce((s, m) => s + (Number(m.contribution) || 0), 0);
@@ -244,6 +275,7 @@ function buildGroupCsvRows(groups: WealthGroupData[]) {
     for (const m of g.members) {
       rows.push([
         g.groupName,
+        g.type || "FIXED",
         (Number(g.groupTarget) || 0).toFixed(2),
         formatDate(g.startDate),
         formatDate(g.endDate),
@@ -286,7 +318,7 @@ async function downloadPDF(plan: string, users: PlanUser[], groups: WealthGroupD
 function GroupCard({ group }: { group: WealthGroupData }) {
   const [expanded, setExpanded] = useState(true);
   const membersSaved = group.members.reduce((s, m) => s + (Number(m.contribution) || 0), 0);
-  const total = group.totalSaved != null && group.totalSaved > 0 ? group.totalSaved : membersSaved;
+  const total = group.totalSaved !== undefined && group.totalSaved !== null ? group.totalSaved : membersSaved;
 
   const membersInterest = group.members.reduce((s, m) => s + (Number(m.interestAmount) || 0), 0);
   const totalInterest = group.interestEarned != null && group.interestEarned > 0 ? group.interestEarned : membersInterest;
@@ -311,7 +343,7 @@ function GroupCard({ group }: { group: WealthGroupData }) {
             </div>
           )}
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <p className="text-[14px] font-black text-dark font-outfit">{group.groupName}</p>
               {group.isTerminated ? (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-50 text-red-700 border border-red-200">
@@ -329,6 +361,7 @@ function GroupCard({ group }: { group: WealthGroupData }) {
                   Active
                 </span>
               )}
+              <GroupTypeBadge type={group.type} />
             </div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5">
               <span className="text-[11px] text-slate/50 font-medium">
@@ -735,12 +768,33 @@ export default function PlanUsersPage() {
     return items.map((g: any) => {
       const rawStatus = String(g.status || g.state || "").toUpperCase();
       const membersCount = Number(g.membersCount ?? g.members?.length ?? 0);
-      const totalSaved = fromKobo(g.totalSaved ?? g.totalSavings ?? g.totalBalance ?? 0);
       const groupTarget = fromKobo(g.groupTarget ?? g.targetAmount ?? g.target ?? 0);
       const endDate = g.endDate || g.deadline || new Date().toISOString();
 
+      // Parse group type (FIXED, FLEX, ROTATIONAL)
+      const rawType = String(g.type || g.groupType || "").toUpperCase();
+      let groupType: GroupType | undefined = undefined;
+      if (g.type === "ROTATIONAL" || g.type === "FIXED" || g.type === "FLEX") {
+        groupType = g.type;
+      } else if (rawType.includes("ROTAT")) {
+        groupType = "ROTATIONAL";
+      } else if (rawType.includes("FLEX")) {
+        groupType = "FLEX";
+      } else if (rawType.includes("FIX")) {
+        groupType = "FIXED";
+      }
+
+      // For ROTATIONAL groups, use currentCycleSavings if present, else 0 when payout has occurred.
+      const rawCycleSavings = g.currentCycleSavings ?? g.currentCyclePot ?? g.cycleSavings;
+      const hasCycleSavings = rawCycleSavings !== undefined && rawCycleSavings !== null;
+
+      const totalSaved = groupType === "ROTATIONAL"
+        ? (hasCycleSavings ? fromKobo(rawCycleSavings) : 0)
+        : fromKobo(g.totalSaved ?? g.totalSavings ?? g.totalBalance ?? 0);
+
+      // A group is "ended" only when its end date has elapsed — reaching the
+      // savings target alone does NOT mark it as completed.
       const isEnded = endDate ? new Date(endDate).getTime() < Date.now() : false;
-      const isGoalMet = groupTarget > 0 && totalSaved >= groupTarget;
 
       const isTerminated = Boolean(
         g.isTerminated ||
@@ -752,16 +806,18 @@ export default function PlanUsersPage() {
         (membersCount === 0 && totalSaved === 0)
       );
 
+      // Completed = backend explicitly says COMPLETED, or the end date has passed.
+      // Reaching the target amount is NOT sufficient — the group runs until its end date.
       const isCompleted = !isTerminated && (
         rawStatus.includes("COMPLET") ||
-        isEnded ||
-        isGoalMet
+        isEnded
       );
 
       return {
         id: String(g.id || g._id || Math.random()),
         groupName: g.groupName || g.name || g.title || "Group",
         image: g.image || g.icon || g.avatar || null,
+        type: groupType,
         groupTarget,
         totalSaved,
         interestEarned: fromKobo(g.interestEarned ?? g.totalInterest ?? g.interestAmount ?? 0),
@@ -866,7 +922,7 @@ export default function PlanUsersPage() {
     : Number(resData?.totalMembers ?? resData?.totalUsers ?? resData?.totalCount ?? resData?.total ?? users.length);
 
   const totalBalance = isWealthGroup
-    ? (tribesData?.totalSavings != null ? fromKobo(tribesData.totalSavings) : (tribesData?.totalBalance != null ? fromKobo(tribesData.totalBalance) : validGroups.reduce((s, g) => s + g.members.reduce((sm, m) => sm + m.contribution, 0), 0)))
+    ? validGroups.reduce((s, g) => s + (g.totalSaved || 0), 0)
     : (resData?.totalBalance != null ? fromKobo(resData.totalBalance) : (resData?.totalAmount != null ? fromKobo(resData.totalAmount) : (resData?.totalSavings != null ? fromKobo(resData.totalSavings) : users.reduce((s, u) => s + u.balance, 0))));
 
   const totalInterest = isWealthGroup
@@ -1268,11 +1324,12 @@ function downloadCSV(plan: string, users: PlanUser[], groups: WealthGroupData[],
   try {
     let rows: string[][] = [];
     if (isWealthGroup) {
-      rows.push(["Group Name", "Member Name", "Member Email", "Phone", "Role", "Group Status", "Saving Type", "Contribution", "Interest Amount", "Impact Amount"]);
+      rows.push(["Group Name", "Group Type", "Member Name", "Member Email", "Phone", "Role", "Group Status", "Saving Type", "Contribution", "Interest Amount", "Impact Amount"]);
       groups.forEach((g) => {
         g.members.forEach((m) => {
           rows.push([
             g.groupName,
+            g.type || "FIXED",
             m.name,
             m.email,
             m.phone,
