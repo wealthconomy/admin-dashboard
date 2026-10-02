@@ -88,7 +88,7 @@ export const portfolioApi = apiSlice.injectEndpoints({
       }),
     }),
   }),
-  overrideExisting: false,
+  overrideExisting: true,
 });
 
 export const {

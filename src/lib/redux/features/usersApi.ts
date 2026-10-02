@@ -204,6 +204,7 @@ export const usersApi = apiSlice.injectEndpoints({
       providesTags: (_result, _error, id) => [{ type: "Activities", id }],
     }),
   }),
+  overrideExisting: true,
 });
 
 export const {

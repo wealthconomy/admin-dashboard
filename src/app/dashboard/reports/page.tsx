@@ -20,27 +20,54 @@ import {
 
 const timeFilters = ["All dates", "12 months", "7 days", "Today"];
 
+const getMappedFilter = (filterStr: string) => {
+  switch (filterStr.toLowerCase()) {
+    case "today":
+      return "today";
+    case "7 days":
+    case "week":
+    case "1 week":
+      return "week";
+    case "12 months":
+    case "1 year":
+    case "year":
+      return "year";
+    case "all dates":
+    case "all time":
+    case "all_time":
+      return "all_time";
+    default:
+      return "week";
+  }
+};
+
+const formatCurrencyTooltip = (value: any) => {
+  const num = Number(value) || 0;
+  return [`₦${num.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, "Amount"];
+};
+
 export default function ReportsPage() {
   const [activeFilter, setActiveFilter] = useState("7 days");
+  const apiFilter = getMappedFilter(activeFilter);
 
-  const { data: savingsData, isLoading: savingsLoading } = useGetSavingsReportQuery();
-  const { data: transactionData, isLoading: transLoading } = useGetTransactionsReportQuery();
-  const { data: interestData, isLoading: interestLoading } = useGetInterestReportQuery();
-  const { data: revenueData, isLoading: revenueLoading } = useGetRevenueReportQuery();
-  const { data: retentionData, isLoading: retentionLoading } = useGetRetentionReportQuery();
+  const { data: savingsData, isLoading: savingsLoading } = useGetSavingsReportQuery(apiFilter);
+  const { data: transactionData, isLoading: transLoading } = useGetTransactionsReportQuery(apiFilter);
+  const { data: interestData, isLoading: interestLoading } = useGetInterestReportQuery(apiFilter);
+  const { data: revenueData, isLoading: revenueLoading } = useGetRevenueReportQuery(apiFilter);
+  const { data: retentionData, isLoading: retentionLoading } = useGetRetentionReportQuery(apiFilter);
 
   // Helper to map generic `{ label, value, secondValue }` to chart-ready format
-  // Financial metrics sent in kobo are divided by 100 to convert to Naira
+  // Financial metrics sent in kobo (lowest currency unit) are divided by 100 to convert to Naira
   const formatData = (apiResponse: any, valKey: string, lineKey?: string, isCurrency = true) => {
     const dataArray = Array.isArray(apiResponse) ? apiResponse : Array.isArray(apiResponse?.data) ? apiResponse.data : [];
     if (!dataArray || dataArray.length === 0) return [];
     
     return dataArray.map((item: any) => {
-      const rawVal = Number(item.value?.value || item.value || 0);
-      const val = isCurrency && rawVal >= 100 ? rawVal / 100 : rawVal;
+      const rawVal = Number(item.value?.value ?? item.value ?? 0);
+      const val = isCurrency ? rawVal / 100 : rawVal;
 
-      const rawLine = Number(item.secondValue?.value || item.secondValue || 0);
-      const lineVal = isCurrency && rawLine >= 100 ? rawLine / 100 : rawLine;
+      const rawLine = Number(item.secondValue?.value ?? item.secondValue ?? 0);
+      const lineVal = isCurrency ? rawLine / 100 : rawLine;
 
       return {
         name: item.label,
@@ -66,10 +93,12 @@ export default function ReportsPage() {
 
   const formatCompactNumber = (value: number, isCurrency = true) => {
     const prefix = isCurrency ? '₦' : '';
-    if (value >= 1_000_000_000) return `${prefix}${(value / 1_000_000_000).toFixed(1).replace(/\.0$/, '')}B`;
-    if (value >= 1_000_000) return `${prefix}${(value / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
-    if (value >= 1_000) return `${prefix}${(value / 1_000).toFixed(1).replace(/\.0$/, '')}K`;
-    return `${prefix}${value}`;
+    const absVal = Math.abs(value);
+    const sign = value < 0 ? '-' : '';
+    if (absVal >= 1_000_000_000) return `${sign}${prefix}${(absVal / 1_000_000_000).toFixed(1).replace(/\.0$/, '')}B`;
+    if (absVal >= 1_000_000) return `${sign}${prefix}${(absVal / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
+    if (absVal >= 1_000) return `${sign}${prefix}${(absVal / 1_000).toFixed(1).replace(/\.0$/, '')}K`;
+    return `${sign}${prefix}${absVal}`;
   };
 
   return (
@@ -93,12 +122,12 @@ export default function ReportsPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex gap-4">
+      <div className="flex gap-4 flex-wrap">
         {timeFilters.map((filter) => (
           <button
             key={filter}
             onClick={() => setActiveFilter(filter)}
-            className={`px-6 py-2 rounded-full text-xs font-bold transition-colors ${
+            className={`px-6 py-2 rounded-full text-xs font-bold transition-colors cursor-pointer ${
               activeFilter === filter
                 ? "bg-[#A5EDB4] text-[#155D5F]"
                 : "bg-transparent border border-border/50 text-slate hover:bg-surface"
@@ -133,7 +162,7 @@ export default function ReportsPage() {
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
                     <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748B' }} dy={10} />
                     <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748B' }} tickFormatter={(val) => formatCompactNumber(val)} />
-                    <Tooltip cursor={{ stroke: '#94A3B8', strokeWidth: 1, strokeDasharray: '4 4' }} />
+                    <Tooltip cursor={{ stroke: '#94A3B8', strokeWidth: 1, strokeDasharray: '4 4' }} formatter={formatCurrencyTooltip} />
                     <Line type="monotone" dataKey="value" stroke="#65D36A" strokeWidth={2} dot={{ r: 3, fill: '#65D36A' }} activeDot={{ r: 5 }} />
                   </LineChart>
                 )}
@@ -163,8 +192,8 @@ export default function ReportsPage() {
                   <BarChart data={formattedTransactions} margin={{ top: 20, right: 10, left: -20, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
                     <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748B' }} dy={10} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748B' }} tickFormatter={(val) => formatCompactNumber(val, false)} />
-                    <Tooltip cursor={{ fill: 'rgba(0,0,0,0.05)' }} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748B' }} tickFormatter={(val) => formatCompactNumber(val, true)} />
+                    <Tooltip cursor={{ fill: 'rgba(0,0,0,0.05)' }} formatter={formatCurrencyTooltip} />
                     <Bar dataKey="value" fill="#A5EDB4" radius={[4, 4, 0, 0]} barSize={24} />
                   </BarChart>
                 )}
@@ -201,12 +230,12 @@ export default function ReportsPage() {
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
                     <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748B' }} dy={10} />
                     <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748B' }} tickFormatter={(val) => formatCompactNumber(val)} />
-                    <Tooltip cursor={{ stroke: '#94A3B8', strokeWidth: 1, strokeDasharray: '4 4' }} />
+                    <Tooltip cursor={{ stroke: '#94A3B8', strokeWidth: 1, strokeDasharray: '4 4' }} formatter={formatCurrencyTooltip} />
                     <Area type="monotone" dataKey="value" stroke="#81E0DB" strokeWidth={2} fillOpacity={1} fill="url(#colorInterest)" dot={{ r: 3, fill: '#155D5F', strokeWidth: 0 }} activeDot={{ r: 5 }} />
                   </AreaChart>
                 )}
               </ResponsiveContainer>
-              <div className="absolute left-[-20px] top-1/2 -translate-y-1/2 -rotate-90 text-[10px] font-medium text-slate whitespace-nowrap">Users(Millions)</div>
+              <div className="absolute left-[-20px] top-1/2 -translate-y-1/2 -rotate-90 text-[10px] font-medium text-slate whitespace-nowrap">Interest Earned</div>
             </div>
           </CardContent>
         </Card>
@@ -232,7 +261,7 @@ export default function ReportsPage() {
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
                     <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748B' }} dy={10} />
                     <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748B' }} tickFormatter={(val) => formatCompactNumber(val)} />
-                    <Tooltip cursor={{ fill: 'rgba(0,0,0,0.05)' }} />
+                    <Tooltip cursor={{ fill: 'rgba(0,0,0,0.05)' }} formatter={formatCurrencyTooltip} />
                     <Bar dataKey="value" fill="#E2E8F0" radius={[4, 4, 0, 0]} barSize={24} />
                     <Line type="monotone" dataKey="line" stroke="#155D5F" strokeWidth={2} dot={{ r: 3, fill: '#155D5F' }} activeDot={{ r: 5 }} />
                   </ComposedChart>
@@ -263,7 +292,7 @@ export default function ReportsPage() {
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
                     <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748B' }} dy={10} />
                     <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#64748B' }} domain={[0, 100]} tickFormatter={(val) => `${val}%`} />
-                    <Tooltip cursor={{ stroke: '#94A3B8', strokeWidth: 1, strokeDasharray: '4 4' }} />
+                    <Tooltip cursor={{ stroke: '#94A3B8', strokeWidth: 1, strokeDasharray: '4 4' }} formatter={(val: any) => [`${val}%`, "Retention Rate"]} />
                     <Line type="monotone" dataKey="value" stroke="#65D36A" strokeWidth={2} dot={false} activeDot={{ r: 5 }} />
                   </LineChart>
                 )}

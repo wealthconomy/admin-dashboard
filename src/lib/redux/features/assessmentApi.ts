@@ -156,6 +156,7 @@ export const assessmentApi = apiSlice.injectEndpoints({
       providesTags: ["AssessmentSubmission"],
     }),
   }),
+  overrideExisting: true,
 });
 
 export const {

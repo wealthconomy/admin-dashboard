@@ -80,6 +80,7 @@ export const libraryApi = apiSlice.injectEndpoints({
       invalidatesTags: ["Library"],
     }),
   }),
+  overrideExisting: true,
 });
 
 export const {

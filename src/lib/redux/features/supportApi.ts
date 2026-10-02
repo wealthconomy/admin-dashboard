@@ -216,6 +216,7 @@ export const supportApi = apiSlice.injectEndpoints({
       invalidatesTags: ["Support"],
     }),
   }),
+  overrideExisting: true,
 });
 
 export const {

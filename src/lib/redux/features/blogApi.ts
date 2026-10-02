@@ -73,6 +73,7 @@ export const blogApi = apiSlice.injectEndpoints({
       providesTags: (_result, _error, id) => [{ type: "Blogs", id }],
     }),
   }),
+  overrideExisting: true,
 });
 
 export const {

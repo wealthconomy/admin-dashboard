@@ -17,6 +17,7 @@ export const DASHBOARD_PAGES: DashboardPage[] = [
   { path: "/dashboard/library", label: "Library Management", permissions: ["library:view", "library:edit"] },
   { path: "/dashboard/assessments", label: "Financial Assessments", permissions: ["assessments:view", "assessments:edit"] },
   { path: "/dashboard/reports", label: "Reports & Analytics", permissions: ["reports:view"] },
+  { path: "/dashboard/group-reports", label: "Group Reports", permissions: ["support:view", "groups:view"] },
   { path: "/dashboard/admin", label: "Admin Management", permissions: ["admins:view", "admins:edit"] },
   { path: "/dashboard/audit-logs", label: "System Audit Logs", permissions: ["audit:view"] },
   { path: "/dashboard/referrals", label: "Users Referrals", permissions: ["referrals:view"] },
