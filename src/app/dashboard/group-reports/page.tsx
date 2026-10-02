@@ -150,8 +150,13 @@ export default function GroupReportsPage() {
     status: "RESOLVED" | "DISMISSED" | "INVESTIGATING" | "PENDING",
     customNote?: string
   ) => {
+    const noteToSubmit = (customNote !== undefined ? customNote : resolutionNoteInput).trim();
+    if (!noteToSubmit) {
+      toast.error("Please enter a resolution note or user feedback before proceeding.");
+      return;
+    }
+
     try {
-      const noteToSubmit = customNote !== undefined ? customNote : resolutionNoteInput;
       await updateReportStatus({ id, status, resolutionNote: noteToSubmit }).unwrap();
       toast.success(`Report status updated to ${status.toLowerCase()}`);
       setSelectedReport(null);
@@ -560,7 +565,7 @@ export default function GroupReportsPage() {
                 {/* Admin Resolution Note / User Feedback */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-dark block">
-                    {isWorkedOn ? "Admin Resolution Note / Notes Left for User" : "Admin Resolution Note / User Feedback"}
+                    {isWorkedOn ? "Admin Resolution Note / Notes Left for User" : "Admin Resolution Note / User Feedback"} {!isWorkedOn && <span className="text-red-500">*</span>}
                   </label>
                   {isWorkedOn ? (
                     <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 text-xs font-medium text-slate-700 leading-relaxed">
@@ -617,8 +622,7 @@ export default function GroupReportsPage() {
                     <Button
                       onClick={() => handleUpdateStatus(selectedReport.id, "DISMISSED")}
                       disabled={isUpdatingStatus}
-                      variant="outline"
-                      className="h-10 rounded-xl border-slate-300 text-slate-700 font-bold text-xs hover:bg-slate-100 cursor-pointer"
+                      className="h-10 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs cursor-pointer shadow-sm"
                     >
                       Dismiss
                     </Button>
