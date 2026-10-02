@@ -16,6 +16,7 @@ import {
   ShieldAlert,
   X,
   FileText,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -47,6 +48,35 @@ function getInitials(name?: string): string {
   return name.slice(0, 2).toUpperCase();
 }
 
+function getGroupImage(group?: any): string | undefined {
+  if (!group || typeof group !== "object") return undefined;
+  const img =
+    group.coverImage ||
+    group.image ||
+    group.imageUrl ||
+    group.groupImage ||
+    group.groupImageUrl ||
+    group.icon ||
+    group.iconUrl ||
+    group.avatarUrl ||
+    group.avatar ||
+    group.photo ||
+    group.photoUrl ||
+    group.logo;
+  return typeof img === "string" && img.trim() ? img.trim() : undefined;
+}
+
+function getReporterAvatar(reporter?: any): string | undefined {
+  if (!reporter || typeof reporter !== "object") return undefined;
+  const img =
+    reporter.avatarUrl ||
+    reporter.imageUrl ||
+    reporter.image ||
+    reporter.photoUrl ||
+    reporter.photo;
+  return typeof img === "string" && img.trim() ? img.trim() : undefined;
+}
+
 function formatDate(dateStr?: string): string {
   if (!dateStr) return "—";
   try {
@@ -71,6 +101,7 @@ export default function GroupReportsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedReport, setSelectedReport] = useState<WealthGroupReport | any | null>(null);
   const [resolutionNoteInput, setResolutionNoteInput] = useState("");
+  const [updatingTargetStatus, setUpdatingTargetStatus] = useState<string | null>(null);
 
   const {
     data: reportsResponse,
@@ -157,6 +188,7 @@ export default function GroupReportsPage() {
     }
 
     try {
+      setUpdatingTargetStatus(status);
       await updateReportStatus({ id, status, resolutionNote: noteToSubmit }).unwrap();
       toast.success(`Report status updated to ${status.toLowerCase()}`);
       setSelectedReport(null);
@@ -164,6 +196,8 @@ export default function GroupReportsPage() {
       refetch();
     } catch (err: any) {
       toast.error(err?.data?.message || `Failed to update report status`);
+    } finally {
+      setUpdatingTargetStatus(null);
     }
   };
 
@@ -317,13 +351,16 @@ export default function GroupReportsPage() {
                 const reporterEmail = report.reporter?.email || "—";
                 const statusStr = (report.status || "PENDING").toUpperCase();
 
+                const groupImg = getGroupImage(report.group);
+                const reporterAvatar = getReporterAvatar(report.reporter);
+
                 return (
                   <TableRow key={report.id || report._id} className="hover:bg-surface/30 transition-colors">
                     <TableCell className="py-4">
                       <div className="flex items-center gap-3">
-                        {report.group?.image || report.group?.icon || report.group?.avatarUrl ? (
-                          <Avatar className="h-9 w-9 border rounded-xl shrink-0">
-                            <AvatarImage src={report.group?.image || report.group?.icon || report.group?.avatarUrl} className="object-cover" />
+                        {groupImg ? (
+                          <Avatar className="h-9 w-9 border rounded-xl shrink-0 overflow-hidden">
+                            <AvatarImage src={groupImg} alt={groupName} className="object-cover" />
                             <AvatarFallback className="bg-[#155D5F]/10 text-[#155D5F] font-bold text-xs rounded-xl">
                               <Flag className="h-4 w-4" />
                             </AvatarFallback>
@@ -343,7 +380,7 @@ export default function GroupReportsPage() {
                     <TableCell className="py-4">
                       <div className="flex items-center gap-2.5">
                         <Avatar className="h-7 w-7 border">
-                          <AvatarImage src={report.reporter?.avatarUrl || report.reporter?.image} />
+                          <AvatarImage src={reporterAvatar} alt={reporterName} />
                           <AvatarFallback className="bg-primary/10 text-primary text-[10px] font-bold">
                             {getInitials(reporterName)}
                           </AvatarFallback>
@@ -416,6 +453,8 @@ export default function GroupReportsPage() {
         const isWorkedOn = currentReportStatus === "RESOLVED" || currentReportStatus === "DISMISSED";
         const groupObj = selectedReport.group || {};
         const reporterObj = selectedReport.reporter || {};
+        const groupImg = getGroupImage(groupObj);
+        const reporterAvatar = getReporterAvatar(reporterObj);
 
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
@@ -485,9 +524,9 @@ export default function GroupReportsPage() {
                   </div>
 
                   <div className="flex items-center gap-3">
-                    {groupObj.image || groupObj.icon || groupObj.avatarUrl ? (
-                      <Avatar className="h-10 w-10 border rounded-xl shrink-0">
-                        <AvatarImage src={groupObj.image || groupObj.icon || groupObj.avatarUrl} className="object-cover" />
+                    {groupImg ? (
+                      <Avatar className="h-10 w-10 border rounded-xl shrink-0 overflow-hidden">
+                        <AvatarImage src={groupImg} alt={groupObj.name} className="object-cover" />
                         <AvatarFallback className="text-xs font-bold bg-[#155D5F]/10 text-[#155D5F]">G</AvatarFallback>
                       </Avatar>
                     ) : (
@@ -534,8 +573,8 @@ export default function GroupReportsPage() {
                     Reporting User
                   </p>
                   <div className="flex items-center gap-3">
-                    <Avatar className="h-10 w-10 border shrink-0">
-                      <AvatarImage src={reporterObj.avatarUrl || reporterObj.image} />
+                    <Avatar className="h-10 w-10 border shrink-0 overflow-hidden">
+                      <AvatarImage src={reporterAvatar} alt="Reporter" className="object-cover" />
                       <AvatarFallback className="text-xs font-bold bg-primary/10 text-primary">
                         {getInitials(reporterObj ? `${reporterObj.firstName || ""} ${reporterObj.lastName || ""}` : "")}
                       </AvatarFallback>
@@ -610,28 +649,49 @@ export default function GroupReportsPage() {
                   </div>
                 ) : (
                   <div className="flex items-center gap-2">
+                    <Button
+                      onClick={() => handleUpdateStatus(selectedReport.id, "DISMISSED")}
+                      disabled={isUpdatingStatus}
+                      className="h-10 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs cursor-pointer shadow-sm gap-2 min-w-[90px]"
+                    >
+                      {isUpdatingStatus && updatingTargetStatus === "DISMISSED" ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          <span>Dismissing...</span>
+                        </>
+                      ) : (
+                        "Dismiss"
+                      )}
+                    </Button>
                     {currentReportStatus !== "INVESTIGATING" && (
                       <Button
                         onClick={() => handleUpdateStatus(selectedReport.id, "INVESTIGATING")}
                         disabled={isUpdatingStatus}
-                        className="h-10 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs cursor-pointer shadow-sm"
+                        className="h-10 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs cursor-pointer shadow-sm gap-2 min-w-[105px]"
                       >
-                        Investigate
+                        {isUpdatingStatus && updatingTargetStatus === "INVESTIGATING" ? (
+                          <>
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            <span>Investigating...</span>
+                          </>
+                        ) : (
+                          "Investigate"
+                        )}
                       </Button>
                     )}
                     <Button
-                      onClick={() => handleUpdateStatus(selectedReport.id, "DISMISSED")}
-                      disabled={isUpdatingStatus}
-                      className="h-10 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs cursor-pointer shadow-sm"
-                    >
-                      Dismiss
-                    </Button>
-                    <Button
                       onClick={() => handleUpdateStatus(selectedReport.id, "RESOLVED")}
                       disabled={isUpdatingStatus}
-                      className="h-10 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs cursor-pointer shadow-sm"
+                      className="h-10 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs cursor-pointer shadow-sm gap-2 min-w-[125px]"
                     >
-                      Resolve Report
+                      {isUpdatingStatus && updatingTargetStatus === "RESOLVED" ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          <span>Resolving...</span>
+                        </>
+                      ) : (
+                        "Resolve Report"
+                      )}
                     </Button>
                   </div>
                 )}

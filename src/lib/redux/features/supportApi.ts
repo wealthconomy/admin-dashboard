@@ -56,6 +56,14 @@ export interface WealthGroupReportGroup {
   createdAt?: string;
   membersCount?: number;
   members?: any[];
+  coverImage?: string | null;
+  image?: string | null;
+  imageUrl?: string | null;
+  groupImage?: string | null;
+  groupImageUrl?: string | null;
+  avatarUrl?: string | null;
+  logo?: string | null;
+  icon?: string | null;
 }
 
 export interface WealthGroupReportReporter {
