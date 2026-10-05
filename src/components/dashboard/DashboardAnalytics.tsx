@@ -59,9 +59,9 @@ const getMappedAnalyticsFilter = (filterStr: string) => {
 
 export function DashboardAnalytics() {
   const [mounted, setMounted] = useState(false);
-  const [userFilter, setUserFilter] = useState("Today");
-  const [wealthFilter, setWealthFilter] = useState("Today");
-  const [transactionFilter, setTransactionFilter] = useState("Today");
+  const [userFilter, setUserFilter] = useState("Month");
+  const [wealthFilter, setWealthFilter] = useState("Month");
+  const [transactionFilter, setTransactionFilter] = useState("Month");
 
   useEffect(() => { setMounted(true); }, []);
 

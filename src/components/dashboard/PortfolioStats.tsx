@@ -1,7 +1,15 @@
 import Link from "next/link";
 import { useGetPortfolioStatsQuery } from "@/lib/redux/features/dashboardApi";
 import { useGetTribesQuery } from "@/lib/redux/features/portfolioApi";
-import { Wallet, Target, Crosshair, Users, Activity, Briefcase, Loader2 } from "lucide-react";
+import {
+  Wallet,
+  Target,
+  Crosshair,
+  Users,
+  Activity,
+  Briefcase,
+  Loader2,
+} from "lucide-react";
 
 interface PortfolioStatsProps {
   timeFilter: string;
@@ -9,20 +17,33 @@ interface PortfolioStatsProps {
 
 const mapFilterToPeriod = (filter: string) => {
   switch (filter) {
-    case "Today": return "today";
-    case "Last Week": return "last_week";
-    case "Last Month": return "month";
-    case "6 Months": return "last_6_months";
-    case "A Year": return "year";
-    case "All Time": return "all_time";
-    default: return "today";
+    case "Today":
+      return "today";
+    case "Last Week":
+      return "last_week";
+    case "Last Month":
+      return "month";
+    case "6 Months":
+      return "last_6_months";
+    case "A Year":
+      return "year";
+    case "All Time":
+      return "all_time";
+    default:
+      return "today";
   }
 };
 
 export function PortfolioStats({ timeFilter }: PortfolioStatsProps) {
   const period = mapFilterToPeriod(timeFilter);
-  const { data, isLoading: isLoadingStats } = useGetPortfolioStatsQuery(period, { refetchOnMountOrArgChange: true });
-  const { data: tribesRes, isLoading: isLoadingTribes } = useGetTribesQuery({ period }, { refetchOnMountOrArgChange: true });
+  const { data, isLoading: isLoadingStats } = useGetPortfolioStatsQuery(
+    period,
+    { refetchOnMountOrArgChange: true },
+  );
+  const { data: tribesRes, isLoading: isLoadingTribes } = useGetTribesQuery(
+    { period },
+    { refetchOnMountOrArgChange: true },
+  );
 
   const isLoading = isLoadingStats || isLoadingTribes;
 
@@ -30,10 +51,26 @@ export function PortfolioStats({ timeFilter }: PortfolioStatsProps) {
     const baseCards = [
       { name: "WealthFlex", icon: Wallet, color: "text-red-500 bg-red-100" },
       { name: "WealthGoal", icon: Target, color: "text-pink-500 bg-pink-100" },
-      { name: "WealthFix", icon: Crosshair, color: "text-orange-500 bg-orange-100" },
-      { name: "WealthFam", icon: Users, color: "text-purple-500 bg-purple-100" },
-      { name: "WealthFlow", icon: Activity, color: "text-blue-500 bg-blue-100" },
-      { name: "WealthGroup", icon: Briefcase, color: "text-gray-500 bg-gray-100" },
+      {
+        name: "WealthFix",
+        icon: Crosshair,
+        color: "text-orange-500 bg-orange-100",
+      },
+      {
+        name: "WealthFam",
+        icon: Users,
+        color: "text-purple-500 bg-purple-100",
+      },
+      {
+        name: "WealthFlow",
+        icon: Activity,
+        color: "text-blue-500 bg-blue-100",
+      },
+      {
+        name: "WealthGroup",
+        icon: Briefcase,
+        color: "text-gray-500 bg-gray-100",
+      },
     ];
 
     const tribesData = tribesRes?.data || tribesRes || {};
@@ -69,16 +106,27 @@ export function PortfolioStats({ timeFilter }: PortfolioStatsProps) {
                 ? (data as any).items
                 : [];
 
-      const normalize = (str: string) => (str || "").replace(/_/g, "").toLowerCase();
+      const normalize = (str: string) =>
+        (str || "").replace(/_/g, "").toLowerCase();
       const cardNorm = normalize(card.name);
 
       const apiData = dataArray.find((d: any) => {
-        const cat = normalize(d.category || d.plan || d.type || d.planType || d.name || "");
+        const cat = normalize(
+          d.category || d.plan || d.type || d.planType || d.name || "",
+        );
         return (
           cat === cardNorm ||
           cat.includes(cardNorm) ||
           cardNorm.includes(cat) ||
-          (cardNorm === "wealthgroup" && (cat.includes("tribe") || cat.includes("group") || cat.includes("coop")))
+          (cardNorm === "wealthflex" &&
+            (cat.includes("cash") ||
+              cat.includes("saving") ||
+              cat.includes("wallet") ||
+              cat.includes("flex"))) ||
+          (cardNorm === "wealthgroup" &&
+            (cat.includes("tribe") ||
+              cat.includes("group") ||
+              cat.includes("coop")))
         );
       });
 
@@ -89,22 +137,33 @@ export function PortfolioStats({ timeFilter }: PortfolioStatsProps) {
         if (groupItems.length > 0) {
           groupTotalSavingsKobo = groupItems.reduce((sum: number, g: any) => {
             const rawStatus = String(g.status || g.state || "").toUpperCase();
-            if (g.isTerminated || rawStatus.includes("TERMINAT") || rawStatus.includes("CANCEL")) {
+            if (
+              g.isTerminated ||
+              rawStatus.includes("TERMINAT") ||
+              rawStatus.includes("CANCEL")
+            ) {
               return sum;
             }
             const rawType = String(g.type || g.groupType || "").toUpperCase();
-            const isRotational = g.type === "ROTATIONAL" || rawType.includes("ROTAT");
-            const rawCycleSavings = g.currentCycleSavings ?? g.currentCyclePot ?? g.cycleSavings;
-            const hasCycleSavings = rawCycleSavings !== undefined && rawCycleSavings !== null;
+            const isRotational =
+              g.type === "ROTATIONAL" || rawType.includes("ROTAT");
+            const rawCycleSavings =
+              g.currentCycleSavings ?? g.currentCyclePot ?? g.cycleSavings;
+            const hasCycleSavings =
+              rawCycleSavings !== undefined && rawCycleSavings !== null;
 
             const savingsKobo = isRotational
-              ? (hasCycleSavings ? Number(rawCycleSavings) || 0 : 0)
+              ? hasCycleSavings
+                ? Number(rawCycleSavings) || 0
+                : 0
               : Number(g.totalSaved ?? g.totalSavings ?? g.totalBalance ?? 0);
 
             return sum + savingsKobo;
           }, 0);
         } else {
-          groupTotalSavingsKobo = Number(tribesData?.totalSavings ?? tribesData?.totalBalance ?? 0);
+          groupTotalSavingsKobo = Number(
+            tribesData?.totalSavings ?? tribesData?.totalBalance ?? 0,
+          );
         }
       }
 
@@ -112,53 +171,55 @@ export function PortfolioStats({ timeFilter }: PortfolioStatsProps) {
         ? groupTotalSavingsKobo
         : Number(
             apiData?.amount ??
-            apiData?.totalBalance ??
-            apiData?.balance ??
-            apiData?.totalAmount ??
-            apiData?.totalSavings ??
-            0
+              apiData?.totalBalance ??
+              apiData?.balance ??
+              apiData?.totalAmount ??
+              apiData?.totalSavings ??
+              0,
           );
       const nairaAmt = rawAmt / 100;
 
       const groupActiveCount = isGroupCard
-        ? (groupItems.length > 0
-            ? groupItems.filter((g: any) => {
-                const s = String(g.status || "").toUpperCase();
-                return s === "ACTIVE" && !g.isTerminated;
-              }).length
-            : (tribesData?.totalGroups != null ? Number(tribesData.totalGroups) : 0))
+        ? groupItems.length > 0
+          ? groupItems.filter((g: any) => {
+              const s = String(g.status || "").toUpperCase();
+              return s === "ACTIVE" && !g.isTerminated;
+            }).length
+          : tribesData?.totalGroups != null
+            ? Number(tribesData.totalGroups)
+            : 0
         : 0;
 
       const groupCompletedCount = isGroupCard
-        ? (groupItems.length > 0
-            ? groupItems.filter((g: any) => {
-                const s = String(g.status || "").toUpperCase();
-                return s === "COMPLETED";
-              }).length
-            : 0)
+        ? groupItems.length > 0
+          ? groupItems.filter((g: any) => {
+              const s = String(g.status || "").toUpperCase();
+              return s === "COMPLETED";
+            }).length
+          : 0
         : 0;
 
       const activeCount = isGroupCard
         ? groupActiveCount
         : Number(
             apiData?.active ??
-            apiData?.activeMembers ??
-            apiData?.activeCount ??
-            apiData?.totalMembers ??
-            apiData?.membersCount ??
-            apiData?.count ??
-            apiData?.members ??
-            0
+              apiData?.activeMembers ??
+              apiData?.activeCount ??
+              apiData?.totalMembers ??
+              apiData?.membersCount ??
+              apiData?.count ??
+              apiData?.members ??
+              0,
           );
 
       const completedCount = isGroupCard
         ? groupCompletedCount
         : Number(
             apiData?.completed ??
-            apiData?.completedCount ??
-            apiData?.completedPortfolios ??
-            apiData?.completedMembers ??
-            0
+              apiData?.completedCount ??
+              apiData?.completedPortfolios ??
+              apiData?.completedMembers ??
+              0,
           );
 
       return {
@@ -177,7 +238,9 @@ export function PortfolioStats({ timeFilter }: PortfolioStatsProps) {
   return (
     <div className="w-full max-w-[1106px] min-h-[132px] py-[10px] space-y-6">
       <div className="h-[1px] bg-[#155D5F]/10 w-full mb-4 mt-2"></div>
-      <h2 className="text-lg font-bold font-outfit text-dark">Portfolio Stats</h2>
+      <h2 className="text-lg font-bold font-outfit text-dark">
+        Portfolio Stats
+      </h2>
 
       <div className="flex flex-wrap items-center justify-between gap-[20px]">
         {portfolios.map((portfolio, i) => (
@@ -186,20 +249,32 @@ export function PortfolioStats({ timeFilter }: PortfolioStatsProps) {
             href={`/dashboard/portfolio/${portfolio.name.toLowerCase()}`}
             className="flex items-start gap-3 rounded-xl p-2 -m-2 hover:bg-surface/70 hover:shadow-sm transition-all duration-200 group cursor-pointer"
           >
-            <div className={`p-2.5 rounded-full ${portfolio.color} shrink-0 group-hover:scale-105 transition-transform`}>
+            <div
+              className={`p-2.5 rounded-full ${portfolio.color} shrink-0 group-hover:scale-105 transition-transform`}
+            >
               <portfolio.icon className="w-5 h-5" />
             </div>
             <div className="space-y-0.5">
-              <h3 className="text-[13px] font-bold text-dark group-hover:text-primary transition-colors">{portfolio.name}</h3>
+              <h3 className="text-[13px] font-bold text-dark group-hover:text-primary transition-colors">
+                {portfolio.name}
+              </h3>
               <div className="text-[14px] font-bold text-dark">
-                {isLoading ? <Loader2 className="h-4 w-4 text-primary animate-spin" /> : portfolio.value}
+                {isLoading ? (
+                  <Loader2 className="h-4 w-4 text-primary animate-spin" />
+                ) : (
+                  portfolio.value
+                )}
               </div>
               <div className="text-[10px] flex items-center gap-1.5 whitespace-nowrap">
-                <span className="text-slate">Active: <span className="text-slate">{portfolio.active}</span></span>
+                <span className="text-slate">
+                  Active: <span className="text-slate">{portfolio.active}</span>
+                </span>
                 <span className="text-[#65D36A]">↑</span>
               </div>
               <div className="text-[10px] whitespace-nowrap">
-                <span className="text-[#65D36A]">Completed: {portfolio.completed}</span>
+                <span className="text-[#65D36A]">
+                  Completed: {portfolio.completed}
+                </span>
               </div>
             </div>
           </Link>
