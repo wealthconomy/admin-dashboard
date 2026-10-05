@@ -118,11 +118,6 @@ export function PortfolioStats({ timeFilter }: PortfolioStatsProps) {
           cat === cardNorm ||
           cat.includes(cardNorm) ||
           cardNorm.includes(cat) ||
-          (cardNorm === "wealthflex" &&
-            (cat.includes("cash") ||
-              cat.includes("saving") ||
-              cat.includes("wallet") ||
-              cat.includes("flex"))) ||
           (cardNorm === "wealthgroup" &&
             (cat.includes("tribe") ||
               cat.includes("group") ||
