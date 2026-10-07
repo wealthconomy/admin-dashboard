@@ -65,6 +65,7 @@ import {
   WealthGroupReport,
 } from "@/lib/redux/features/supportApi";
 import { useUploadFileMutation } from "@/lib/redux/features/adminApi";
+import { useGetUsersQuery } from "@/lib/redux/features/usersApi";
 import { useSocket } from "@/context/SocketContext";
 import { useUnreadCounts } from "@/context/UnreadCountContext";
 
@@ -134,6 +135,83 @@ const CANNED_TOPICS = [
   },
 ];
 
+function getLiveCustomerDetails(chat: any, userMap: Map<string, any>) {
+  if (!chat) return { displayName: "User", avatarUrl: "", email: "", phone: "" };
+
+  const userObj =
+    (typeof chat.user === "object" && chat.user !== null ? chat.user : null) ||
+    (typeof chat.customer === "object" && chat.customer !== null ? chat.customer : null) ||
+    {};
+
+  const userIdKey = String(
+    chat.userId ||
+      chat.user_id ||
+      userObj.id ||
+      userObj._id ||
+      userObj.userId ||
+      chat.id ||
+      chat._id ||
+      ""
+  );
+  const userEmailKey = String(
+    chat.email || userObj.email || ""
+  ).toLowerCase();
+
+  const matchedUser = userMap.get(userIdKey) || userMap.get(userEmailKey) || {};
+
+  const firstName =
+    matchedUser.firstName ||
+    userObj.firstName ||
+    userObj.first_name ||
+    chat.firstName ||
+    "";
+  const lastName =
+    matchedUser.lastName ||
+    userObj.lastName ||
+    userObj.last_name ||
+    chat.lastName ||
+    "";
+  const fullName = `${firstName} ${lastName}`.trim();
+
+  const displayName =
+    fullName ||
+    matchedUser.name ||
+    matchedUser.fullName ||
+    matchedUser.username ||
+    userObj.name ||
+    userObj.fullName ||
+    chat.userName ||
+    chat.name ||
+    (chat.email ? chat.email.split("@")[0] : undefined) ||
+    `User ${String(chat.id || chat._id || "").slice(0, 6)}`;
+
+  const avatarUrl =
+    matchedUser.imageUrl ||
+    matchedUser.avatarUrl ||
+    matchedUser.avatar ||
+    userObj.imageUrl ||
+    userObj.avatarUrl ||
+    userObj.avatar ||
+    chat.avatarUrl ||
+    chat.image ||
+    "";
+
+  const email =
+    matchedUser.email ||
+    userObj.email ||
+    chat.email ||
+    "—";
+
+  const phone =
+    matchedUser.phone ||
+    matchedUser.phoneNumber ||
+    userObj.phone ||
+    chat.phone ||
+    "—";
+
+  return { displayName, avatarUrl, email, phone };
+}
+
 function SupportCentreContent() {
   const searchParams = useSearchParams();
   const { socket, isConnected } = useSocket();
@@ -197,6 +275,29 @@ function SupportCentreContent() {
 
   // Map activeTab to stage query parameter
   const stageParam = activeTab === "queue" ? "queue" : activeTab === "active" ? "active" : "resolved";
+
+  const { data: allUsersData } = useGetUsersQuery({ limit: 500 });
+
+  const userMap = useMemo(() => {
+    const map = new Map<string, any>();
+    const rawList = Array.isArray(allUsersData)
+      ? allUsersData
+      : Array.isArray(allUsersData?.data)
+        ? allUsersData.data
+        : Array.isArray(allUsersData?.data?.items)
+          ? allUsersData.data.items
+          : Array.isArray(allUsersData?.items)
+            ? allUsersData.items
+            : [];
+
+    rawList.forEach((u: any) => {
+      if (u.id) map.set(String(u.id), u);
+      if (u._id) map.set(String(u._id), u);
+      if (u.userId) map.set(String(u.userId), u);
+      if (u.email) map.set(String(u.email).toLowerCase(), u);
+    });
+    return map;
+  }, [allUsersData]);
 
   const {
     data: usersData,
@@ -804,11 +905,7 @@ function SupportCentreContent() {
                     
                     const unread =
                       user.adminUnreadCount ?? user.unreadCount ?? 0;
-                    const displayName =
-                      user.userName ||
-                      user.name ||
-                      `User ${String(currentId).slice(0, 6)}`;
-                    const avatarUrl = user.avatarUrl || user.image;
+                    const { displayName, avatarUrl } = getLiveCustomerDetails(user, userMap);
 
                     let latestMsgText = "";
                     let latestMsgTime = "";
@@ -989,62 +1086,65 @@ function SupportCentreContent() {
               <div className="flex-1 flex flex-col min-h-0 animate-in fade-in duration-300">
                 {/* Chat Header */}
                 <header className="px-8 py-4 border-b border-border/50 flex items-center justify-between bg-white sticky top-0 z-10">
-                  <div className="flex items-center gap-4">
-                    <div className="relative">
-                      <Avatar className="h-12 w-12 ring-2 ring-primary/5 transition-transform duration-300 hover:scale-105">
-                        <AvatarImage
-                          src={selectedChat.avatarUrl || selectedChat.image}
-                        />
-                        <AvatarFallback className="bg-primary/5 font-bold text-[#155D5F]">
-                          {((selectedChat.userName || selectedChat.name || "U")[0])}
-                        </AvatarFallback>
-                      </Avatar>
-                      {selectedChat.status === "online" && (
-                        <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full bg-[#10B981] border-2 border-white" />
-                      )}
-                    </div>
-                    <div>
-                      <h3 className="text-base font-bold text-dark flex items-center gap-2">
-                        {selectedChat.userName ||
-                          selectedChat.name ||
-                          `User ${String(selectedChat.id || selectedChat._id).slice(0, 6)}`}
-                        {selectedChat.isAdmin && (
-                          <Badge className="bg-primary/5 text-[#155D5F] border-none text-[9.5px] font-extrabold px-2.5 py-0.5 rounded-full">
-                            {selectedChat.role || "ADMIN"}
-                          </Badge>
-                        )}
-                      </h3>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span
-                          className={`h-2 w-2 rounded-full ${
-                            selectedChat.status === "online"
-                              ? "bg-[#10B981]"
-                              : "bg-slate-300"
-                          }`}
-                        />
-                        <span className="text-[11px] font-bold text-slate/40 uppercase tracking-wider">
-                          {selectedChat.status === "online" ? "Online" : "Offline"}
-                        </span>
-                        {!selectedChat.isAdmin && (
-                          <Badge
-                            className={`text-[10px] px-2.5 py-0.5 rounded-md font-bold uppercase tracking-wider ${
-                              currentStage === "queue" || currentStage === "unassigned"
-                                ? "bg-amber-100 text-amber-800 hover:bg-amber-100 border border-amber-200"
-                                : currentStage === "active"
-                                ? "bg-blue-100 text-blue-800 hover:bg-blue-100 border border-blue-200"
-                                : "bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border border-emerald-200"
-                            }`}
-                          >
-                            {currentStage === "queue" || currentStage === "unassigned"
-                              ? "In Queue"
-                              : currentStage === "active"
-                              ? "Active"
-                              : "Resolved"}
-                          </Badge>
-                        )}
+                  {(() => {
+                    const activeCustomer = getLiveCustomerDetails(selectedChat, userMap);
+                    return (
+                      <div className="flex items-center gap-4">
+                        <div className="relative">
+                          <Avatar className="h-12 w-12 ring-2 ring-primary/5 transition-transform duration-300 hover:scale-105">
+                            <AvatarImage
+                              src={activeCustomer.avatarUrl}
+                            />
+                            <AvatarFallback className="bg-primary/5 font-bold text-[#155D5F]">
+                              {((activeCustomer.displayName || "U")[0])}
+                            </AvatarFallback>
+                          </Avatar>
+                          {selectedChat.status === "online" && (
+                            <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full bg-[#10B981] border-2 border-white" />
+                          )}
+                        </div>
+                        <div>
+                          <h3 className="text-base font-bold text-dark flex items-center gap-2">
+                            {activeCustomer.displayName}
+                            {selectedChat.isAdmin && (
+                              <Badge className="bg-primary/5 text-[#155D5F] border-none text-[9.5px] font-extrabold px-2.5 py-0.5 rounded-full">
+                                {selectedChat.role || "ADMIN"}
+                              </Badge>
+                            )}
+                          </h3>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span
+                              className={`h-2 w-2 rounded-full ${
+                                selectedChat.status === "online"
+                                  ? "bg-[#10B981]"
+                                  : "bg-slate-300"
+                              }`}
+                            />
+                            <span className="text-[11px] font-bold text-slate/40 uppercase tracking-wider">
+                              {selectedChat.status === "online" ? "Online" : "Offline"}
+                            </span>
+                            {!selectedChat.isAdmin && (
+                              <Badge
+                                className={`text-[10px] px-2.5 py-0.5 rounded-md font-bold uppercase tracking-wider ${
+                                  currentStage === "queue" || currentStage === "unassigned"
+                                    ? "bg-amber-100 text-amber-800 hover:bg-amber-100 border border-amber-200"
+                                    : currentStage === "active"
+                                    ? "bg-blue-100 text-blue-800 hover:bg-blue-100 border border-blue-200"
+                                    : "bg-emerald-100 text-emerald-800 hover:bg-emerald-100 border border-emerald-200"
+                                }`}
+                              >
+                                {currentStage === "queue" || currentStage === "unassigned"
+                                  ? "In Queue"
+                                  : currentStage === "active"
+                                  ? "Active"
+                                  : "Resolved"}
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                  </div>
+                    );
+                  })()}
 
                   {/* Header Action Buttons */}
                   {!selectedChat.isAdmin && (
