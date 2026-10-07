@@ -244,7 +244,11 @@ export const adminApi = apiSlice.injectEndpoints({
       invalidatesTags: ["Dashboard"],
     }),
     getWealthGroups: builder.query({
-      query: () => "/admin/wealth-groups",
+      query: (params?: { status?: string } | string | void) => {
+        if (typeof params === "string") return `/admin/wealth-groups?status=${params}`;
+        if (params?.status) return `/admin/wealth-groups?status=${params.status}`;
+        return "/admin/wealth-groups";
+      },
       providesTags: ["Dashboard"],
     }),
 
@@ -293,7 +297,7 @@ export const adminApi = apiSlice.injectEndpoints({
       }),
     }),
   }),
-  overrideExisting: false,
+  overrideExisting: true,
 });
 
 export const {

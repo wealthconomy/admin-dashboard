@@ -59,6 +59,14 @@ export interface WealthGroupReportGroup {
   createdAt?: string;
   membersCount?: number;
   members?: any[];
+  coverImage?: string | null;
+  image?: string | null;
+  imageUrl?: string | null;
+  groupImage?: string | null;
+  groupImageUrl?: string | null;
+  avatarUrl?: string | null;
+  logo?: string | null;
+  icon?: string | null;
 }
 
 export interface WealthGroupReportReporter {
@@ -80,8 +88,10 @@ export interface WealthGroupReport {
   groupId: string;
   reporterId: string;
   reason: string;
-  status: "PENDING" | "RESOLVED" | "DISMISSED" | string;
+  status: "PENDING" | "INVESTIGATING" | "RESOLVED" | "DISMISSED" | string;
+  resolutionNote?: string | null;
   createdAt: string;
+  updatedAt?: string;
   group?: WealthGroupReportGroup;
   reporter?: WealthGroupReportReporter;
 }
@@ -199,22 +209,22 @@ export const supportApi = apiSlice.injectEndpoints({
           queryParams.append("page", String(params.page));
         }
         const qs = queryParams.toString();
-        return `/admin/wealth-groups/reports${qs ? `?${qs}` : ""}`;
+        return `/admin/groups/reports${qs ? `?${qs}` : ""}`;
       },
       providesTags: ["Support"],
     }),
     getWealthGroupReportDetail: builder.query<any, string>({
-      query: (id) => `/admin/wealth-groups/reports/${id}`,
+      query: (id) => `/admin/groups/reports/${id}`,
       providesTags: (result, error, id) => [{ type: "Support", id }],
     }),
     updateWealthGroupReportStatus: builder.mutation<
       any,
-      { id: string; status: "PENDING" | "RESOLVED" | "DISMISSED" | string }
+      { id: string; status: "PENDING" | "INVESTIGATING" | "RESOLVED" | "DISMISSED" | string; resolutionNote?: string }
     >({
-      query: ({ id, status }) => ({
-        url: `/admin/wealth-groups/reports/${id}/status`,
+      query: ({ id, status, resolutionNote }) => ({
+        url: `/admin/groups/reports/${id}/status`,
         method: "PATCH",
-        body: { status },
+        body: { status, resolutionNote },
       }),
       invalidatesTags: ["Support"],
     }),
@@ -226,6 +236,7 @@ export const supportApi = apiSlice.injectEndpoints({
       invalidatesTags: ["Support"],
     }),
   }),
+  overrideExisting: true,
 });
 
 export const {

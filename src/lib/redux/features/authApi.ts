@@ -69,7 +69,7 @@ export const authApi = apiSlice.injectEndpoints({
       providesTags: ["Auth"],
     }),
   }),
-  overrideExisting: false,
+  overrideExisting: true,
 });
 
 export const {

@@ -38,17 +38,40 @@ function ChartHeader({ title, filter, setFilter }: { title: string; filter: stri
   );
 }
 
+const getMappedAnalyticsFilter = (filterStr: string) => {
+  switch (filterStr.toLowerCase()) {
+    case "today":
+      return "today";
+    case "last week":
+    case "week":
+      return "week";
+    case "month":
+      return "month";
+    case "year":
+      return "year";
+    case "all time":
+    case "all_time":
+      return "all_time";
+    default:
+      return "today";
+  }
+};
+
 export function DashboardAnalytics() {
   const [mounted, setMounted] = useState(false);
-  const [userFilter, setUserFilter] = useState("Today");
-  const [wealthFilter, setWealthFilter] = useState("Today");
-  const [transactionFilter, setTransactionFilter] = useState("Today");
+  const [userFilter, setUserFilter] = useState("Month");
+  const [wealthFilter, setWealthFilter] = useState("Month");
+  const [transactionFilter, setTransactionFilter] = useState("Month");
 
   useEffect(() => { setMounted(true); }, []);
 
-  const { data: donutData, isLoading: donutLoading } = useGetDonutAnalyticsQuery();
-  const { data: userGrowthData, isLoading: userLoading } = useGetUserGrowthQuery();
-  const { data: wealthGrowthData, isLoading: wealthLoading } = useGetWealthGrowthQuery();
+  const userMapped = getMappedAnalyticsFilter(userFilter);
+  const wealthMapped = getMappedAnalyticsFilter(wealthFilter);
+  const transactionMapped = getMappedAnalyticsFilter(transactionFilter);
+
+  const { data: donutData, isLoading: donutLoading } = useGetDonutAnalyticsQuery(transactionMapped);
+  const { data: userGrowthData, isLoading: userLoading } = useGetUserGrowthQuery(userMapped);
+  const { data: wealthGrowthData, isLoading: wealthLoading } = useGetWealthGrowthQuery(wealthMapped);
 
   if (!mounted) return null;
 
@@ -89,21 +112,24 @@ export function DashboardAnalytics() {
     return "Months";
   };
 
-  const pieData = donutData?.data?.distribution ?? [];
-  const pieTotal = donutData?.data?.totalTransactionsProcessed ?? 0;
+  const donutObj = donutData?.data || donutData || {};
+  const pieData = donutObj.distribution || donutObj.donut || donutObj.segments || [];
+  const pieTotal = Number(donutObj.totalTransactionsProcessed ?? donutObj.totalTransactions ?? donutObj.totalProcessed ?? 0);
 
   const formatKoboCurrency = (amount: number | string) => {
-    const naira = Number(amount || 0) / 100;
+    const raw = Number(amount || 0);
+    // Convert kobo to Naira if value is in kobo (> 0)
+    const naira = raw > 0 && raw % 1 === 0 && raw >= 100 ? raw / 100 : raw;
     return `₦${naira.toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   const legends = [
-    { icon: RefreshCcw,   color: "text-teal-600 bg-teal-100",     value: (donutData?.data?.totalTransactionsProcessed ?? 0).toLocaleString(), label: "Total number of transactions processed" },
-    { icon: Clock,        color: "text-orange-500 bg-orange-100",  value: (donutData?.data?.pendingWithdrawals ?? 0).toLocaleString(),         label: "Pending withdrawals" },
-    { icon: CheckCircle2, color: "text-purple-600 bg-purple-100",  value: formatKoboCurrency(donutData?.data?.totalInterestDisbursed ?? 0),     label: "Total interest disbursed" },
-    { icon: BarChart2,    color: "text-blue-600 bg-blue-100",      value: (donutData?.data?.activePortfolios ?? 0).toLocaleString(),           label: "Active portfolios" },
-    { icon: TrendingUp,   color: "text-yellow-600 bg-yellow-100",  value: (donutData?.data?.platformAdministrators ?? 0).toLocaleString(),     label: "Platform administrators" },
-    { icon: Activity,     color: "text-green-600 bg-green-100",    value: pieData.length.toLocaleString(),                             label: "Distribution segments" },
+    { icon: RefreshCcw,   color: "text-teal-600 bg-teal-100",     value: pieTotal.toLocaleString(), label: "Total number of transactions processed" },
+    { icon: Clock,        color: "text-orange-500 bg-orange-100",  value: Number(donutObj.pendingWithdrawals ?? donutObj.pendingWithdrawalCount ?? 0).toLocaleString(), label: "Pending withdrawals" },
+    { icon: CheckCircle2, color: "text-purple-600 bg-purple-100",  value: formatKoboCurrency(donutObj.totalInterestDisbursed ?? donutObj.interestDisbursed ?? 0), label: "Total interest disbursed" },
+    { icon: BarChart2,    color: "text-blue-600 bg-blue-100",      value: Number(donutObj.activePortfolios ?? donutObj.activePortfolioCount ?? 0).toLocaleString(), label: "Active portfolios" },
+    { icon: TrendingUp,   color: "text-yellow-600 bg-yellow-100",  value: Number(donutObj.platformAdministrators ?? donutObj.adminCount ?? 0).toLocaleString(), label: "Platform administrators" },
+    { icon: Activity,     color: "text-green-600 bg-green-100",    value: (pieData.length || Number(donutObj.distributionSegments ?? 0)).toLocaleString(), label: "Distribution segments" },
   ];
 
   return (

@@ -33,6 +33,7 @@ export const chatApi = apiSlice.injectEndpoints({
       ],
     }),
   }),
+  overrideExisting: true,
 });
 
 export const {

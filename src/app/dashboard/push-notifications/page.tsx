@@ -49,7 +49,7 @@ export default function PushNotificationsPage() {
   const [scheduledDate, setScheduledDate] = useState("");
 
   const { data: usersData, isLoading: isUsersLoading } = useGetUsersQuery(undefined);
-  const { data: groupsData, isLoading: isGroupsLoading } = useGetWealthGroupsQuery(undefined);
+  const { data: groupsData, isLoading: isGroupsLoading } = useGetWealthGroupsQuery({ status: "ACTIVE" });
   const { data: historyData, isLoading: isHistoryLoading, refetch: refetchHistory } = useGetBroadcastHistoryQuery(undefined);
   const [broadcastNotification] = useBroadcastNotificationMutation();
 
@@ -84,16 +84,77 @@ export default function PushNotificationsPage() {
       (u?.id || "").toLowerCase().includes(userSearchTerm.toLowerCase())
   );
 
-  // Safely extract groups
-  const actualGroups: any[] = Array.isArray(groupsData?.data)
+  // Safely extract active groups only
+  const rawGroupItems: any[] = Array.isArray(groupsData)
+    ? groupsData
+    : Array.isArray(groupsData?.data)
     ? groupsData.data
     : Array.isArray(groupsData?.data?.items)
     ? groupsData.data.items
+    : Array.isArray(groupsData?.data?.tribes)
+    ? groupsData.data.tribes
+    : Array.isArray(groupsData?.data?.groups)
+    ? groupsData.data.groups
+    : Array.isArray(groupsData?.items)
+    ? groupsData.items
+    : Array.isArray(groupsData?.tribes)
+    ? groupsData.tribes
+    : Array.isArray(groupsData?.groups)
+    ? groupsData.groups
     : [];
 
-  const filteredGroups = actualGroups.filter((g: any) =>
-    (g?.name || g?.title || "").toLowerCase().includes(groupSearchTerm.toLowerCase())
-  );
+  const filteredGroups = rawGroupItems
+    .filter((g: any) => {
+      if (!g) return false;
+
+      // 1. Explicit boolean flags
+      if (typeof g.isActive === "boolean" && !g.isActive) return false;
+      if (
+        g.isClosed === true ||
+        g.isCompleted === true ||
+        g.isTerminated === true ||
+        g.isArchived === true ||
+        g.isExpired === true ||
+        g.isEnded === true ||
+        g.isMatured === true
+      ) {
+        return false;
+      }
+
+      // 2. Status / State string checks
+      const rawStatus = String(g.status || g.state || "").toUpperCase();
+      if (
+        rawStatus.includes("COMPLET") ||
+        rawStatus.includes("TERMINAT") ||
+        rawStatus.includes("CANCEL") ||
+        rawStatus.includes("CLOSED") ||
+        rawStatus.includes("MATUR") ||
+        rawStatus.includes("EXPIRED") ||
+        rawStatus.includes("ENDED") ||
+        rawStatus.includes("PAST") ||
+        rawStatus.includes("WITHDRAW") ||
+        rawStatus.includes("DISBAND") ||
+        rawStatus.includes("DELET") ||
+        rawStatus.includes("INACTIVE") ||
+        rawStatus.includes("ARCHIV")
+      ) {
+        return false;
+      }
+
+      // 3. Date check: If end date / deadline / target date exists, check if date has passed
+      const endDateStr = g.endDate || g.deadline || g.targetDate || g.maturityDate;
+      if (endDateStr) {
+        const endMs = new Date(endDateStr).getTime();
+        if (!isNaN(endMs) && endMs < Date.now()) {
+          return false; // Group end date has elapsed
+        }
+      }
+
+      return true;
+    })
+    .filter((g: any) =>
+      (g?.groupName || g?.name || g?.title || "").toLowerCase().includes(groupSearchTerm.toLowerCase())
+    );
 
   // Safely extract history
   const actualHistory: any[] = Array.isArray(historyData?.data)
@@ -458,14 +519,19 @@ export default function PushNotificationsPage() {
               {targetType === "group" && (
                 <div className="space-y-3 p-4 bg-surface/40 border border-border/50 rounded-2xl animate-in fade-in duration-200">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-dark block">
-                      Select Wealth Groups ({targetIds.length} selected)
-                    </label>
+                    <div className="flex items-center gap-2">
+                      <label className="text-xs font-bold text-dark block">
+                        Select Active Wealth Groups ({targetIds.length} selected)
+                      </label>
+                      <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                        Active Only
+                      </Badge>
+                    </div>
                     <div className="relative w-48">
                       <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate/40" />
                       <Input
                         type="text"
-                        placeholder="Search groups..."
+                        placeholder="Search active groups..."
                         value={groupSearchTerm}
                         onChange={(e) => setGroupSearchTerm(e.target.value)}
                         className="h-8 pl-8 text-[11px] bg-white rounded-lg border-border/50"
@@ -494,7 +560,7 @@ export default function PushNotificationsPage() {
                             />
                             <div className="min-w-0 flex-1">
                               <p className="text-xs font-bold text-dark truncate">
-                                {group.name || group.title || "Group"}
+                                {group.groupName || group.name || group.title || "Group"}
                               </p>
                               {group.id && (
                                 <p className="text-[10px] text-slate/40 font-mono truncate">
@@ -507,7 +573,7 @@ export default function PushNotificationsPage() {
                       })
                     ) : (
                       <div className="col-span-2 text-center py-6 text-xs text-slate/50">
-                        {isGroupsLoading ? "Loading groups..." : "No groups found."}
+                        {isGroupsLoading ? "Loading active groups..." : "No active wealth groups found."}
                       </div>
                     )}
                   </div>

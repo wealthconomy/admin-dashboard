@@ -29,7 +29,7 @@ export const referralsApi = apiSlice.injectEndpoints({
       invalidatesTags: ["Referrals"],
     }),
   }),
-  overrideExisting: false,
+  overrideExisting: true,
 });
 
 export const {

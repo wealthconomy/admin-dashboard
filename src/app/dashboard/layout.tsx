@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useSelector, useDispatch } from "react-redux";
 import { useGetMeQuery } from "@/lib/redux/features/authApi";
 import Link from "next/link";
@@ -36,6 +36,7 @@ import {
   Loader2,
   Mail,
   HelpCircle,
+  Flag,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -51,6 +52,7 @@ import { UnreadCountProvider, useUnreadCounts } from "@/context/UnreadCountConte
 import { toast } from "sonner";
 import { AdminChatWidget } from "@/components/AdminChatWidget";
 import { selectIsAccessDenied, setAccessDenied } from "@/lib/redux/features/authSlice";
+import { useGetWealthGroupReportsQuery } from "@/lib/redux/features/supportApi";
 
 interface SubItem {
   name: string;
@@ -95,6 +97,7 @@ const sidebarItems: SidebarItem[] = [
   { name: "Library Management", icon: Library, href: "/dashboard/library" },
   { name: "Financial Assessments", icon: HelpCircle, href: "/dashboard/assessments" },
   { name: "Support Centre", icon: LifeBuoy, href: "/dashboard/support" },
+  { name: "Group Reports", icon: Flag, href: "/dashboard/group-reports" },
   { name: "Users Referrals", icon: UserPlus, href: "/dashboard/referrals" },
   { name: "Push Notifications", icon: Send, href: "/dashboard/push-notifications" },
   { name: "Reports & Analytics", icon: BarChart, href: "/dashboard/reports" },
@@ -272,6 +275,24 @@ function DashboardLayoutContent({
   children: React.ReactNode;
 }) {
   const { totalSupportUnread } = useUnreadCounts();
+  const { data: pendingReportsData } = useGetWealthGroupReportsQuery({ status: "PENDING" }, { pollingInterval: 15000 });
+
+  const pendingReportsCount = useMemo(() => {
+    if (!pendingReportsData) return 0;
+    if (typeof pendingReportsData?.data?.totalCount === "number") return pendingReportsData.data.totalCount;
+    if (typeof pendingReportsData?.totalCount === "number") return pendingReportsData.totalCount;
+    const items = Array.isArray(pendingReportsData?.data?.items)
+      ? pendingReportsData.data.items
+      : Array.isArray(pendingReportsData?.items)
+      ? pendingReportsData.items
+      : Array.isArray(pendingReportsData?.data)
+      ? pendingReportsData.data
+      : Array.isArray(pendingReportsData)
+      ? pendingReportsData
+      : [];
+    return items.length;
+  }, [pendingReportsData]);
+
   const pathname = usePathname();
   const router = useRouter();
   const dispatch = useDispatch();
@@ -396,6 +417,13 @@ function DashboardLayoutContent({
                           {totalSupportUnread}
                         </span>
                       )}
+                      {item.name === "Group Reports" && pendingReportsCount > 0 && (
+                        <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                          isActive || isChildActive ? "bg-white text-primary" : "bg-amber-500 text-white animate-pulse"
+                        }`}>
+                          {pendingReportsCount}
+                        </span>
+                      )}
                       {item.hasDropdown && (
                         <ChevronDown
                           className={`h-4 w-4 transition-transform duration-200 ${
@@ -507,6 +535,13 @@ function DashboardLayoutContent({
                               isActive || isChildActive ? "bg-white text-primary" : "bg-red-500 text-white"
                             }`}>
                               {totalSupportUnread}
+                            </span>
+                          )}
+                          {item.name === "Group Reports" && pendingReportsCount > 0 && (
+                            <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
+                              isActive || isChildActive ? "bg-white text-primary" : "bg-amber-500 text-white animate-pulse"
+                            }`}>
+                              {pendingReportsCount}
                             </span>
                           )}
                           {item.hasDropdown && (

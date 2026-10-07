@@ -33,36 +33,36 @@ export const dashboardApi = apiSlice.injectEndpoints({
     }),
 
     // Reports: Savings
-    getSavingsReport: builder.query<any[], void>({
-      query: () => "/admin/dashboard/reports/savings",
+    getSavingsReport: builder.query<any[], string | void>({
+      query: (filter) => `/admin/dashboard/reports/savings${filter ? `?filter=${filter}&period=${filter}` : ""}`,
       providesTags: ["Dashboard"],
     }),
 
     // Reports: Transactions
-    getTransactionsReport: builder.query<any[], void>({
-      query: () => "/admin/dashboard/reports/transactions",
+    getTransactionsReport: builder.query<any[], string | void>({
+      query: (filter) => `/admin/dashboard/reports/transactions${filter ? `?filter=${filter}&period=${filter}` : ""}`,
       providesTags: ["Dashboard"],
     }),
 
     // Reports: Interest
-    getInterestReport: builder.query<any[], void>({
-      query: () => "/admin/dashboard/reports/interest",
+    getInterestReport: builder.query<any[], string | void>({
+      query: (filter) => `/admin/dashboard/reports/interest${filter ? `?filter=${filter}&period=${filter}` : ""}`,
       providesTags: ["Dashboard"],
     }),
 
     // Reports: Revenue
-    getRevenueReport: builder.query<any[], void>({
-      query: () => "/admin/dashboard/reports/revenue",
+    getRevenueReport: builder.query<any[], string | void>({
+      query: (filter) => `/admin/dashboard/reports/revenue${filter ? `?filter=${filter}&period=${filter}` : ""}`,
       providesTags: ["Dashboard"],
     }),
 
     // Reports: Retention
-    getRetentionReport: builder.query<any[], void>({
-      query: () => "/admin/dashboard/reports/retention",
+    getRetentionReport: builder.query<any[], string | void>({
+      query: (filter) => `/admin/dashboard/reports/retention${filter ? `?filter=${filter}&period=${filter}` : ""}`,
       providesTags: ["Dashboard"],
     }),
   }),
-  overrideExisting: false,
+  overrideExisting: true,
 });
 
 export const {

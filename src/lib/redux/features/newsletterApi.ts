@@ -58,6 +58,7 @@ export const newsletterApi = apiSlice.injectEndpoints({
       providesTags: ["Newsletter"],
     }),
   }),
+  overrideExisting: true,
 });
 
 export const {
