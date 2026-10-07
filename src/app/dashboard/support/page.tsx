@@ -147,7 +147,53 @@ function SupportCentreContent() {
   const [liveMessages, setLiveMessages] = useState<SupportMessage[] | any[]>([]);
   const [isSending, setIsSending] = useState(false);
   const [showCanned, setShowCanned] = useState(false);
+  const [stagedAttachment, setStagedAttachment] = useState<{
+    name: string;
+    previewUrl?: string;
+    cloudUrl?: string;
+    type?: string;
+  } | null>(null);
+  const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
+  const [previewModalImage, setPreviewModalImage] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const [uploadFile] = useUploadFileMutation();
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const isImg = file.type.startsWith("image/");
+    const previewUrl = isImg ? URL.createObjectURL(file) : undefined;
+
+    setStagedAttachment({
+      name: file.name,
+      previewUrl,
+      type: isImg ? "image" : "document",
+    });
+
+    setIsUploadingAttachment(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await uploadFile(formData).unwrap();
+      const cloudUrl =
+        res?.data?.url ||
+        res?.url ||
+        res?.data?.fileUrl ||
+        res?.fileUrl ||
+        (typeof res?.data === "string" ? res.data : undefined);
+
+      setStagedAttachment((prev) => (prev ? { ...prev, cloudUrl } : null));
+    } catch (err: any) {
+      toast.error(err?.data?.message || "Failed to upload attachment");
+      setStagedAttachment(null);
+    } finally {
+      setIsUploadingAttachment(false);
+      if (e.target) e.target.value = "";
+    }
+  };
 
   // Map activeTab to stage query parameter
   const stageParam = activeTab === "queue" ? "queue" : activeTab === "active" ? "active" : "resolved";
@@ -1384,6 +1430,26 @@ function SupportCentreContent() {
             )}
           </main>
         </div>
+
+        {/* Full Image Preview Modal */}
+        {previewModalImage && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="relative max-w-4xl max-h-[90vh] bg-white rounded-2xl overflow-hidden shadow-2xl p-2">
+              <button
+                type="button"
+                onClick={() => setPreviewModalImage(null)}
+                className="absolute top-4 right-4 z-10 p-2 rounded-full bg-black/50 text-white hover:bg-black/70 transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+              <img
+                src={previewModalImage}
+                alt="Preview"
+                className="max-h-[85vh] max-w-full object-contain rounded-xl"
+              />
+            </div>
+          </div>
+        )}
 
       <style jsx global>{`
         .custom-scrollbar::-webkit-scrollbar {
