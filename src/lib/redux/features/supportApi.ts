@@ -4,7 +4,7 @@ export interface SupportMessage {
   id: string;
   chatId?: string;
   senderName?: string;
-  text: string;
+  text?: string;
   time: string;
   isMe: boolean;
   isRead?: boolean;
@@ -14,6 +14,9 @@ export interface SupportMessage {
   senderImage?: string;
   createdAt?: string;
   isAdmin?: boolean;
+  attachmentUrl?: string | null;
+  fileType?: "image" | "pdf" | "document" | string | null;
+  fileName?: string | null;
 }
 
 export interface SupportChat {
@@ -113,7 +116,16 @@ export const supportApi = apiSlice.injectEndpoints({
       query: (id) => `/admin/support/chats/${id}`,
       providesTags: (result, error, id) => [{ type: "Support", id }],
     }),
-    replySupportChat: builder.mutation<any, { id: string; text: string; attachmentUrl?: string }>({
+    replySupportChat: builder.mutation<
+      any,
+      {
+        id: string;
+        text?: string;
+        attachmentUrl?: string;
+        fileType?: "image" | "pdf" | "document" | string;
+        fileName?: string;
+      }
+    >({
       query: ({ id, ...body }) => ({
         url: `/admin/support/chats/${id}/messages`,
         method: "POST",

@@ -63,6 +63,7 @@ import {
   SupportMessage,
   WealthGroupReport,
 } from "@/lib/redux/features/supportApi";
+import { useUploadFileMutation } from "@/lib/redux/features/adminApi";
 import { useSocket } from "@/context/SocketContext";
 import { useUnreadCounts } from "@/context/UnreadCountContext";
 
@@ -149,6 +150,73 @@ function SupportCentreContent() {
   const [isSending, setIsSending] = useState(false);
   const [showCanned, setShowCanned] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  // Attachment state for support agent replies
+  const [stagedAttachment, setStagedAttachment] = useState<{
+    file: File;
+    previewUrl: string;
+    cloudUrl?: string;
+    name: string;
+    type: "image" | "pdf" | "document";
+  } | null>(null);
+  const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
+  const [previewModalImage, setPreviewModalImage] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [uploadFileMutation] = useUploadFileMutation();
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const isImage = file.type.startsWith("image/");
+    const isPdf = file.type === "application/pdf" || file.name.endsWith(".pdf");
+    const fileType: "image" | "pdf" | "document" = isImage
+      ? "image"
+      : isPdf
+      ? "pdf"
+      : "document";
+
+    const localPreview = isImage ? URL.createObjectURL(file) : "";
+
+    setStagedAttachment({
+      file,
+      previewUrl: localPreview,
+      name: file.name,
+      type: fileType,
+    });
+    setIsUploadingAttachment(true);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res: any = await uploadFileMutation(formData).unwrap();
+      const cloudUrl =
+        res?.data?.url ||
+        res?.url ||
+        res?.data?.fileUrl ||
+        res?.fileUrl ||
+        (typeof res?.data === "string" ? res.data : null);
+
+      if (cloudUrl) {
+        setStagedAttachment((prev) =>
+          prev ? { ...prev, cloudUrl } : null
+        );
+        toast.success("Attachment uploaded and ready to send");
+      } else {
+        toast.error("File upload failed to return a URL");
+        setStagedAttachment(null);
+      }
+    } catch (err: any) {
+      console.error("Attachment upload error:", err);
+      toast.error(err?.data?.message || "Failed to upload attachment");
+      setStagedAttachment(null);
+    } finally {
+      setIsUploadingAttachment(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  };
 
   // Wealth Group Reports States
   const [reportStatusFilter, setReportStatusFilter] = useState<"ALL" | "PENDING" | "RESOLVED" | "DISMISSED">("ALL");
@@ -402,6 +470,14 @@ function SupportCentreContent() {
       const text = msg.text || msg.content || msg.message || "";
       const rawCreatedAt = msg.createdAt || msg.time || new Date().toISOString();
 
+      const displayPreview =
+        text ||
+        (msg.fileType === "image"
+          ? "📷 Image"
+          : msg.attachmentUrl
+          ? "📎 Attachment"
+          : "");
+
       updateLastMessageForChat(
         [
           targetChatId,
@@ -409,7 +485,7 @@ function SupportCentreContent() {
           msg.userId,
           isCurrentActiveChat ? currentChatId : undefined,
         ],
-        text,
+        displayPreview,
         undefined,
         rawCreatedAt
       );
@@ -421,7 +497,8 @@ function SupportCentreContent() {
               (msg.id && m.id === msg.id) ||
               (m.id &&
                 m.id.startsWith("temp_") &&
-                m.text === text &&
+                ((m.text && m.text === text) ||
+                  (m.attachmentUrl && m.attachmentUrl === msg.attachmentUrl)) &&
                 isMessageFromSupport(msg) === isMessageFromSupport(m))
           );
           if (alreadyExists) {
@@ -429,7 +506,8 @@ function SupportCentreContent() {
               (msg.id && m.id === msg.id) ||
               (m.id &&
                 m.id.startsWith("temp_") &&
-                m.text === text &&
+                ((m.text && m.text === text) ||
+                  (m.attachmentUrl && m.attachmentUrl === msg.attachmentUrl)) &&
                 isMessageFromSupport(msg) === isMessageFromSupport(m))
                 ? { ...m, ...msg, isMe: isMessageFromSupport(msg) }
                 : m
@@ -443,7 +521,7 @@ function SupportCentreContent() {
         refetchUsers();
         const sender = msg.senderName || msg.userName || "Customer";
         toast.info(`New message from ${sender}`, {
-          description: text ? text.slice(0, 60) : "Sent a new message",
+          description: displayPreview ? displayPreview.slice(0, 60) : "Sent a new message",
         });
       }
     };
@@ -556,11 +634,23 @@ function SupportCentreContent() {
   };
 
   const handleSendMessage = async (customText?: string) => {
-    const textToSend = (customText || inputText).trim();
-    if (!textToSend || !selectedChat || isSending) return;
+    const textToSend = (customText !== undefined ? customText : inputText).trim();
+    const attachmentToSend = stagedAttachment;
+
+    if (
+      (!textToSend && !attachmentToSend?.cloudUrl) ||
+      !selectedChat ||
+      isSending ||
+      isUploadingAttachment
+    ) {
+      return;
+    }
 
     const activeId = selectedChat.id || selectedChat._id;
-    setInputText("");
+    if (customText === undefined) {
+      setInputText("");
+    }
+    setStagedAttachment(null);
     setIsSending(true);
 
     const tempId = `temp_${Date.now()}`;
@@ -570,6 +660,9 @@ function SupportCentreContent() {
       senderName: "Admin Support",
       sender: "admin",
       text: textToSend,
+      attachmentUrl: attachmentToSend?.cloudUrl || null,
+      fileType: attachmentToSend?.type || null,
+      fileName: attachmentToSend?.name || null,
       isMe: true,
       time: new Date().toLocaleTimeString([], {
         hour: "2-digit",
@@ -580,9 +673,17 @@ function SupportCentreContent() {
     };
     setLiveMessages((prev) => [...prev, optimisticMsg]);
 
+    const displayPreview =
+      textToSend ||
+      (attachmentToSend?.type === "image"
+        ? "📷 Image"
+        : attachmentToSend?.cloudUrl
+        ? "📎 Attachment"
+        : "");
+
     updateLastMessageForChat(
       [activeId, selectedChat.id, selectedChat._id],
-      textToSend,
+      displayPreview,
       undefined,
       new Date().toISOString()
     );
@@ -597,7 +698,15 @@ function SupportCentreContent() {
     }
 
     try {
-      const res = await replyChat({ id: activeId, text: textToSend }).unwrap();
+      const res = await replyChat({
+        id: activeId,
+        text: textToSend,
+        ...(attachmentToSend?.cloudUrl && {
+          attachmentUrl: attachmentToSend.cloudUrl,
+          fileType: attachmentToSend.type,
+          fileName: attachmentToSend.name,
+        }),
+      }).unwrap();
 
       if (res?.data || res?.id) {
         const serverMsg = res.data || res;
@@ -1282,13 +1391,55 @@ function SupportCentreContent() {
                               )}
                               <div className="relative group/bubble flex items-center gap-2">
                                 <div
-                                  className={`p-4 rounded-2xl text-[13.5px] font-medium leading-relaxed shadow-[0_2px_8px_-3px_rgba(0,0,0,0.05)] transition-all ${
+                                  className={`p-3.5 rounded-2xl text-[13.5px] font-medium leading-relaxed shadow-[0_2px_8px_-3px_rgba(0,0,0,0.05)] transition-all ${
                                     msg.isMe
                                       ? "bg-[#E8F3F3] text-dark rounded-tr-none hover:shadow-md"
                                       : "bg-[#F3F4F6] text-dark/85 rounded-tl-none hover:shadow-md"
                                   }`}
                                 >
-                                  <p className="whitespace-pre-wrap">{msg.text}</p>
+                                  {/* Attachment Display */}
+                                  {msg.attachmentUrl && (
+                                    <div className="mb-2">
+                                      {msg.fileType === "image" ||
+                                      /\.(jpg|jpeg|png|webp|gif)$/i.test(msg.attachmentUrl) ? (
+                                        <div
+                                          onClick={() => setPreviewModalImage(msg.attachmentUrl)}
+                                          className="relative group/img cursor-pointer rounded-xl overflow-hidden border border-border/40 bg-surface/50 max-w-[280px]"
+                                        >
+                                          <img
+                                            src={msg.attachmentUrl}
+                                            alt={msg.fileName || "Attachment"}
+                                            className="w-full max-h-[220px] object-cover transition-transform duration-300 group-hover/img:scale-105"
+                                          />
+                                          <div className="absolute inset-0 bg-black/30 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-semibold gap-1.5 backdrop-blur-[1px]">
+                                            <Eye className="h-4 w-4" />
+                                            <span>View Full</span>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <a
+                                          href={msg.attachmentUrl}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          className="flex items-center gap-2.5 p-2.5 bg-white border border-border/60 rounded-xl hover:border-[#155D5F]/40 transition-colors shadow-xs group/doc max-w-[280px]"
+                                        >
+                                          <div className="h-9 w-9 rounded-lg bg-[#155D5F]/10 flex items-center justify-center text-[#155D5F] shrink-0">
+                                            <Paperclip className="h-4 w-4" />
+                                          </div>
+                                          <div className="flex-1 min-w-0">
+                                            <p className="text-xs font-bold text-dark truncate">
+                                              {msg.fileName || "Document Attachment"}
+                                            </p>
+                                            <p className="text-[10px] text-[#155D5F] font-semibold mt-0.5 flex items-center gap-1">
+                                              <span>Download / View</span>
+                                            </p>
+                                          </div>
+                                        </a>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {msg.text && <p className="whitespace-pre-wrap">{msg.text}</p>}
                                 </div>
 
                                 <button
@@ -1346,9 +1497,77 @@ function SupportCentreContent() {
 
                 {/* Input Area */}
                 <div className="p-8 pt-2">
+                  {/* Staged Attachment Preview */}
+                  {stagedAttachment && (
+                    <div className="mb-2.5 p-2 px-3 bg-[#F9FAFB] border border-border/60 rounded-xl flex items-center justify-between animate-in fade-in duration-200">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        {stagedAttachment.previewUrl ? (
+                          <img
+                            src={stagedAttachment.previewUrl}
+                            alt="preview"
+                            className="h-10 w-10 rounded-lg object-cover border border-border/40 shrink-0"
+                          />
+                        ) : (
+                          <div className="h-10 w-10 rounded-lg bg-[#155D5F]/10 flex items-center justify-center text-[#155D5F] shrink-0">
+                            <Paperclip className="h-4 w-4" />
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-dark truncate max-w-[280px]">
+                            {stagedAttachment.name}
+                          </p>
+                          <p className="text-[10px] text-slate/50 font-medium">
+                            {isUploadingAttachment ? (
+                              <span className="flex items-center gap-1 text-[#155D5F]">
+                                <RefreshCw className="h-3 w-3 animate-spin" /> Uploading to server...
+                              </span>
+                            ) : (
+                              <span className="text-emerald-600 font-semibold">Ready to send</span>
+                            )}
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStagedAttachment(null);
+                          setIsUploadingAttachment(false);
+                        }}
+                        disabled={isSending}
+                        className="h-7 w-7 rounded-lg hover:bg-slate-200 flex items-center justify-center text-slate/50 hover:text-dark cursor-pointer transition-colors"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  )}
+
                   <div className="relative group transition-all duration-300">
                     <div className="absolute inset-0 bg-primary/5 rounded-2xl blur-lg group-focus-within:blur-xl transition-all opacity-0 group-focus-within:opacity-100" />
                     <div className="relative flex items-center gap-3 bg-white border border-border/50 rounded-2xl p-2 px-4 shadow-[0_8px_30px_rgb(0,0,0,0.04)] focus-within:border-[#155D5F]/40 transition-all">
+                      {/* Hidden File Input */}
+                      <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={handleFileSelect}
+                        accept="image/*,application/pdf"
+                        className="hidden"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => fileInputRef.current?.click()}
+                        disabled={isSending || isUploadingAttachment}
+                        className="text-slate/50 hover:text-[#155D5F] hover:bg-[#155D5F]/10 rounded-xl h-10 w-10 shrink-0 cursor-pointer transition-colors"
+                        title="Attach image or PDF"
+                      >
+                        {isUploadingAttachment ? (
+                          <RefreshCw className="h-4 w-4 animate-spin text-[#155D5F]" />
+                        ) : (
+                          <Paperclip className="h-4 w-4" />
+                        )}
+                      </Button>
+
                       <Input
                         value={inputText}
                         onChange={(e) => setInputText(e.target.value)}
@@ -1362,7 +1581,11 @@ function SupportCentreContent() {
                       <Button
                         size="icon"
                         onClick={() => handleSendMessage()}
-                        disabled={!inputText.trim() || isSending}
+                        disabled={
+                          (!inputText.trim() && !stagedAttachment?.cloudUrl) ||
+                          isSending ||
+                          isUploadingAttachment
+                        }
                         className="bg-[#155D5F] hover:bg-[#124e50] text-white rounded-xl h-10 w-10 shrink-0 transition-all active:scale-95 cursor-pointer disabled:opacity-40"
                       >
                         <Send className="h-4 w-4" />
@@ -1944,6 +2167,29 @@ function SupportCentreContent() {
                 </Button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Lightbox Image Preview Modal */}
+      {previewModalImage && (
+        <div
+          onClick={() => setPreviewModalImage(null)}
+          className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 backdrop-blur-xs animate-in fade-in duration-200"
+        >
+          <div className="relative max-w-4xl max-h-[90vh]">
+            <button
+              onClick={() => setPreviewModalImage(null)}
+              className="absolute -top-10 right-0 text-white/80 hover:text-white p-1 rounded-full cursor-pointer transition-colors"
+            >
+              <X className="h-6 w-6" />
+            </button>
+            <img
+              src={previewModalImage}
+              alt="Preview"
+              className="max-w-full max-h-[85vh] rounded-2xl object-contain shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            />
           </div>
         </div>
       )}

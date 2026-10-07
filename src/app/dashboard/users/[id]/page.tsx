@@ -314,11 +314,13 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
 
               return (
                 <Badge
-                  className={`border-none px-4 py-4 rounded-xl gap-2 font-bold text-[10px] uppercase tracking-wider shadow-sm ${
+                  onClick={() => router.push(`/dashboard/users/${resolvedId}/credentials`)}
+                  className={`border-none px-4 py-4 rounded-xl gap-2 font-bold text-[10px] uppercase tracking-wider shadow-sm cursor-pointer hover:opacity-85 transition-opacity ${
                     isKycVerified
                       ? "bg-[#E7F0FF] text-blue-500 hover:bg-[#E7F0FF]"
-                      : "bg-amber-50 text-amber-500 hover:bg-amber-50"
+                      : "bg-amber-50 text-amber-500 hover:bg-amber-100/70"
                   }`}
+                  title="Click to review user KYC credentials"
                 >
                   <svg
                     width="16"
@@ -338,8 +340,8 @@ export default function UserDetailPage({ params }: { params: Promise<{ id: strin
             })()}
             <button 
               onClick={() => router.push(`/dashboard/users/${resolvedId}/credentials`)}
-              className="p-2.5 hover:bg-white rounded-xl transition-all border border-[#C5C5C5] shadow-sm bg-white/50 active:scale-95"
-              title="User Credentials"
+              className="p-2.5 hover:bg-white rounded-xl transition-all border border-[#C5C5C5] shadow-sm bg-white/50 active:scale-95 cursor-pointer"
+              title="Review User KYC Credentials"
             >
               <FileText className="h-5 w-5 text-slate" />
             </button>
