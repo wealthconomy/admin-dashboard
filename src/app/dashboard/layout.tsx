@@ -419,7 +419,7 @@ function DashboardLayoutContent({
                       )}
                       {item.name === "Group Reports" && pendingReportsCount > 0 && (
                         <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
-                          isActive || isChildActive ? "bg-white text-primary" : "bg-amber-500 text-white animate-pulse"
+                          isActive || isChildActive ? "bg-white text-primary" : "bg-red-500 text-white"
                         }`}>
                           {pendingReportsCount}
                         </span>
@@ -539,7 +539,7 @@ function DashboardLayoutContent({
                           )}
                           {item.name === "Group Reports" && pendingReportsCount > 0 && (
                             <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
-                              isActive || isChildActive ? "bg-white text-primary" : "bg-amber-500 text-white animate-pulse"
+                              isActive || isChildActive ? "bg-white text-primary" : "bg-red-500 text-white"
                             }`}>
                               {pendingReportsCount}
                             </span>
