@@ -128,6 +128,7 @@ export default function UsersPage() {
 
       return {
         ...u,
+        id: u.id || u._id || u.userId,
         name: `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.username || u.email,
         status,
         transactionType: tType,
@@ -607,7 +608,7 @@ export default function UsersPage() {
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => router.push(`/dashboard/users/${user.id}/credentials`)} className="py-2.5 px-4 text-xs font-bold focus:bg-surface text-dark cursor-pointer rounded-xl gap-2">
                            <FileText className="h-3.5 w-3.5 text-blue-500" />
-                           User Credential
+                           KYC Credentials
                         </DropdownMenuItem>
                         {user.status === "Active" ? (
                           <>
