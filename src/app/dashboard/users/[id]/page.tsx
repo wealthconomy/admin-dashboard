@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, use, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import {
   ChevronLeft,
   MoreVertical,
@@ -108,11 +108,10 @@ const BASE_PORTFOLIO_PLANS = [
   },
 ];
 
-export default function UserDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default function UserDetailPage({ params }: { params?: Promise<{ id: string }> }) {
   const router = useRouter();
-  
-  const resolvedParams = use(params);
-  const resolvedId = resolvedParams.id;
+  const routeParams = useParams();
+  const resolvedId = (routeParams?.id as string) || "";
 
   const { data: userDataResponse, isLoading, isError, refetch } = useGetUserDetailsQuery(resolvedId);
   // Safely extract the user object whether it's wrapped in { data: ... } or { data: { data: ... } }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, use } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import {
   ChevronLeft,
   CheckCircle2,
@@ -39,11 +39,11 @@ import { format } from "date-fns";
 export default function CredentialsVerificationPage({
   params,
 }: {
-  params: Promise<{ id: string }>;
+  params?: Promise<{ id: string }>;
 }) {
   const router = useRouter();
-  const resolvedParams = use(params);
-  const resolvedId = resolvedParams.id;
+  const routeParams = useParams();
+  const resolvedId = (routeParams?.id as string) || "";
 
   // Fetch both user details and dedicated credentials endpoint
   const { data: userDataResponse, isLoading: isUserLoading, refetch: refetchUser } = useGetUserDetailsQuery(resolvedId);
@@ -357,26 +357,6 @@ export default function CredentialsVerificationPage({
                 User ID: <span className="text-dark font-bold">{resolvedId}</span> • {user?.email || "No Email"}
               </p>
             </div>
-          </div>
-
-          <div className="flex items-center gap-3 border-t md:border-t-0 pt-4 md:pt-0 border-border/20">
-            <Button
-              onClick={() => setRejectingDoc("OVERALL")}
-              disabled={isUpdatingOverall}
-              variant="outline"
-              className="h-10 px-4 rounded-xl border-red-200 text-red-600 hover:bg-red-50 text-xs font-bold gap-1.5 cursor-pointer"
-            >
-              <XCircle className="h-4 w-4 text-red-500" />
-              Reject Overall KYC
-            </Button>
-            <Button
-              onClick={() => handleOverallKyc("VERIFIED")}
-              disabled={isUpdatingOverall}
-              className="h-10 px-5 rounded-xl bg-[#155D5F] hover:bg-[#0F4A4C] text-white text-xs font-bold gap-1.5 shadow-sm cursor-pointer"
-            >
-              <CheckCircle2 className="h-4 w-4" />
-              Approve Overall KYC
-            </Button>
           </div>
         </div>
       </div>
