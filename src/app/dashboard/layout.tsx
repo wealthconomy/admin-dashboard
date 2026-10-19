@@ -412,14 +412,14 @@ function DashboardLayoutContent({
                     <div className="flex items-center gap-2">
                       {item.name === "Support Centre" && totalSupportUnread > 0 && (
                         <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
-                          isActive || isChildActive ? "bg-white text-primary" : "bg-red-500 text-white"
+                          isActive || isChildActive ? "bg-white text-primary" : "bg-primary text-white"
                         }`}>
                           {totalSupportUnread}
                         </span>
                       )}
                       {item.name === "Group Reports" && pendingReportsCount > 0 && (
                         <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
-                          isActive || isChildActive ? "bg-white text-primary" : "bg-red-500 text-white"
+                          isActive || isChildActive ? "bg-white text-primary" : "bg-primary text-white"
                         }`}>
                           {pendingReportsCount}
                         </span>
@@ -532,14 +532,14 @@ function DashboardLayoutContent({
                         <div className="flex items-center gap-2">
                           {item.name === "Support Centre" && totalSupportUnread > 0 && (
                             <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
-                              isActive || isChildActive ? "bg-white text-primary" : "bg-red-500 text-white"
+                              isActive || isChildActive ? "bg-white text-primary" : "bg-primary text-white"
                             }`}>
                               {totalSupportUnread}
                             </span>
                           )}
                           {item.name === "Group Reports" && pendingReportsCount > 0 && (
                             <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
-                              isActive || isChildActive ? "bg-white text-primary" : "bg-red-500 text-white"
+                              isActive || isChildActive ? "bg-white text-primary" : "bg-primary text-white"
                             }`}>
                               {pendingReportsCount}
                             </span>

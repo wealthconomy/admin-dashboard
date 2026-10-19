@@ -302,23 +302,35 @@ export default function UserDetailPage({ params }: { params?: Promise<{ id: stri
           </div>
           <div className="flex items-center gap-4">
             {(() => {
-              // isVerified only reflects email verification.
-              // Use kycStatus / kycVerified for actual document/KYC verification.
-              // NOTE: kycLevel is NOT used here — it defaults to 1 for all users
-              // and would cause false positives. Only trust explicit status flags.
+              // Determine if user KYC is verified
               const isKycVerified =
                 user?.kycStatus === "VERIFIED" ||
                 user?.kycStatus === "verified" ||
-                user?.kycVerified === true;
+                user?.kycVerified === true ||
+                (Number(user?.kycLevel) >= 2 && user?.kycStatus !== "REJECTED");
+
+              const isKycRejected = user?.kycStatus === "REJECTED";
+
+              const badgeText = isKycVerified
+                ? `KYC Level ${user?.kycLevel || 2} Verified`
+                : isKycRejected
+                ? "KYC Rejected"
+                : user?.kycStatus === "PENDING"
+                ? "KYC Pending"
+                : "Unverified";
+
+              const badgeStyle = isKycVerified
+                ? "bg-emerald-50 text-emerald-600 hover:bg-emerald-100/70"
+                : isKycRejected
+                ? "bg-red-50 text-red-600 hover:bg-red-100/70"
+                : "bg-amber-50 text-amber-500 hover:bg-amber-100/70";
+
+              const iconColor = isKycVerified ? "#10B981" : isKycRejected ? "#EF4444" : "#F59E0B";
 
               return (
                 <Badge
                   onClick={() => router.push(`/dashboard/users/${resolvedId}/credentials`)}
-                  className={`border-none px-4 py-4 rounded-xl gap-2 font-bold text-[10px] uppercase tracking-wider shadow-sm cursor-pointer hover:opacity-85 transition-opacity ${
-                    isKycVerified
-                      ? "bg-[#E7F0FF] text-blue-500 hover:bg-[#E7F0FF]"
-                      : "bg-amber-50 text-amber-500 hover:bg-amber-100/70"
-                  }`}
+                  className={`border-none px-4 py-4 rounded-xl gap-2 font-bold text-[10px] uppercase tracking-wider shadow-sm cursor-pointer hover:opacity-85 transition-opacity ${badgeStyle}`}
                   title="Click to review user KYC credentials"
                 >
                   <svg
@@ -330,10 +342,10 @@ export default function UserDetailPage({ params }: { params?: Promise<{ id: stri
                   >
                     <path
                       d="M19.1663 10L17.133 7.675L17.4163 4.6L14.408 3.91667L12.833 1.25L9.99968 2.46667L7.16634 1.25L5.59134 3.90833L2.58301 4.58333L2.86634 7.66667L0.833008 10L2.86634 12.325L2.58301 15.4083L5.59134 16.0917L7.16634 18.75L9.99968 17.525L12.833 18.7417L14.408 16.0833L17.4163 15.4L17.133 12.325L19.1663 10ZM8.40801 13.9333L5.24134 10.7583L6.47468 9.525L8.40801 11.4667L13.283 6.575L14.5163 7.80833L8.40801 13.9333Z"
-                      fill={isKycVerified ? "#1D84D9" : "#F59E0B"}
+                      fill={iconColor}
                     />
                   </svg>
-                  {isKycVerified ? "KYC Verified" : "Unverified"}
+                  {badgeText}
                 </Badge>
               );
             })()}
@@ -516,6 +528,17 @@ export default function UserDetailPage({ params }: { params?: Promise<{ id: stri
               <InfoItem label="Email Verification" value={user?.isVerified ? "Verified" : "Unverified"} />
               <InfoItem label="Biometric" value={user?.biometricsEnabled ? "Enabled" : "Disabled"} />
               <InfoItem label="KYC Level" value={`Level ${user?.kycLevel || "N/A"}`} />
+              <InfoItem 
+                label="KYC Status" 
+                value={
+                  user?.kycStatus === "VERIFIED" || user?.kycVerified === true || (Number(user?.kycLevel) >= 2 && user?.kycStatus !== "REJECTED")
+                    ? "Verified" 
+                    : user?.kycStatus === "REJECTED"
+                    ? "Rejected"
+                    : user?.kycStatus || "Pending"
+                } 
+                isStatus 
+              />
             </div>
           </div>
 
@@ -695,17 +718,30 @@ function InfoItem({
   isLink?: boolean;
   isStatus?: boolean;
 }) {
+  const getStatusColor = (val: string) => {
+    const v = (val || "").trim().toLowerCase();
+    if (
+      v === "active" ||
+      v === "verified" ||
+      v === "approved" ||
+      v === "completed"
+    ) {
+      return "text-emerald-600";
+    }
+    if (v === "pending" || v === "in review" || v === "under review") {
+      return "text-amber-500";
+    }
+    if (v === "blocked" || v === "closed" || v === "not uploaded") {
+      return "text-slate-500";
+    }
+    return "text-red-500";
+  };
+
   return (
     <div className="flex items-center justify-between text-[11px]">
       <span className="text-slate/60 font-medium">{label}</span>
       {isStatus ? (
-        <span className={`font-bold uppercase tracking-wider ${
-          value === "Active" 
-            ? "text-emerald-500" 
-            : value === "Blocked"
-            ? "text-slate-500"
-            : "text-red-500"
-        }`}>
+        <span className={`font-bold uppercase tracking-wider ${getStatusColor(value)}`}>
           {value}
         </span>
       ) : isLink ? (
