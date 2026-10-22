@@ -30,6 +30,8 @@ import type { ContentType, FileType } from "@/types/library";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+export const MAX_DOCUMENT_MB = 10;
+
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -40,8 +42,83 @@ function getFileType(file: File): FileType {
   const ext = file.name.split(".").pop()?.toUpperCase();
   if (ext === "PDF") return "PDF";
   if (ext === "DOC" || ext === "DOCX") return "DOC";
-  if (ext === "EPUB") return "EPUB";
-  return "PDF"; // fallback
+  throw new Error(`Unsupported document file type: ${ext || "unknown"}`);
+}
+
+async function validateDocumentFile(file: File): Promise<{ valid: boolean; error?: string }> {
+  if (file.size > MAX_DOCUMENT_MB * 1024 * 1024) {
+    return {
+      valid: false,
+      error: "This file is larger than 10 MB. Please compress it and try again.",
+    };
+  }
+
+  const nameParts = file.name.split(".");
+  const ext = nameParts.length > 1 ? nameParts.pop()?.toLowerCase() : "";
+
+  if (ext !== "pdf" && ext !== "doc" && ext !== "docx") {
+    return {
+      valid: false,
+      error: "Only PDF or Word (.doc, .docx) files can be uploaded. Please convert your document to PDF or Word and upload it again.",
+    };
+  }
+
+  try {
+    const buffer = await file.slice(0, 8).arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+
+    if (ext === "pdf") {
+      // "%PDF" -> 0x25, 0x50, 0x44, 0x46
+      const isPdf =
+        bytes.length >= 4 &&
+        bytes[0] === 0x25 &&
+        bytes[1] === 0x50 &&
+        bytes[2] === 0x44 &&
+        bytes[3] === 0x46;
+
+      if (!isPdf) {
+        return {
+          valid: false,
+          error: "Only PDF or Word (.doc, .docx) files can be uploaded. Please convert your document to PDF or Word and upload it again.",
+        };
+      }
+    } else if (ext === "docx") {
+      // "PK" -> 0x50, 0x4B
+      const isDocx =
+        bytes.length >= 2 &&
+        bytes[0] === 0x50 &&
+        bytes[1] === 0x4b;
+
+      if (!isDocx) {
+        return {
+          valid: false,
+          error: "Only PDF or Word (.doc, .docx) files can be uploaded. Please convert your document to PDF or Word and upload it again.",
+        };
+      }
+    } else if (ext === "doc") {
+      // D0 CF 11 E0 -> 0xD0, 0xCF, 0x11, 0xE0
+      const isDoc =
+        bytes.length >= 4 &&
+        bytes[0] === 0xd0 &&
+        bytes[1] === 0xcf &&
+        bytes[2] === 0x11 &&
+        bytes[3] === 0xe0;
+
+      if (!isDoc) {
+        return {
+          valid: false,
+          error: "Only PDF or Word (.doc, .docx) files can be uploaded. Please convert your document to PDF or Word and upload it again.",
+        };
+      }
+    }
+  } catch {
+    return {
+      valid: false,
+      error: "Only PDF or Word (.doc, .docx) files can be uploaded. Please convert your document to PDF or Word and upload it again.",
+    };
+  }
+
+  return { valid: true };
 }
 
 function validateYouTubeUrl(url: string): boolean {
@@ -147,7 +224,10 @@ function DropZone({
           ref={inputRef}
           accept={accept}
           onChange={(e) => {
-            if (e.target.files?.[0]) onFile(e.target.files[0]);
+            if (e.target.files?.[0]) {
+              onFile(e.target.files[0]);
+              e.target.value = "";
+            }
           }}
           className="hidden"
         />
@@ -213,6 +293,7 @@ export default function NewLibraryMaterialPage() {
 
   // Document-specific
   const [documentFile, setDocumentFile] = useState<File | null>(null);
+  const [documentError, setDocumentError] = useState("");
   const [isDownloadable, setIsDownloadable] = useState(true);
 
   // Video-specific
@@ -226,20 +307,33 @@ export default function NewLibraryMaterialPage() {
   const [uploadFile, { isLoading: isUploading }] = useUploadFileMutation();
   const isSubmitting = isCreating || isUploading;
 
+  const isWord = documentFile ? getFileType(documentFile) === "DOC" : false;
+
   // Handlers
   const handleCoverFile = useCallback((file: File) => {
     setCoverFile(file);
     setCoverPreview(URL.createObjectURL(file));
   }, []);
 
-  const handleDocumentFile = useCallback((file: File) => {
+  const handleDocumentFile = useCallback(async (file: File) => {
+    const result = await validateDocumentFile(file);
+    if (!result.valid) {
+      setDocumentFile(null);
+      setDocumentError(result.error || "");
+      return;
+    }
+    setDocumentError("");
     setDocumentFile(file);
+    if (getFileType(file) === "DOC") {
+      setIsDownloadable(true);
+    }
   }, []);
 
   const handleSwitchType = (type: ContentType) => {
     setContentType(type);
     // Reset type-specific state
     setDocumentFile(null);
+    setDocumentError("");
     setYoutubeUrl("");
     setYoutubeError("");
     if (type === "video") setIsDownloadable(false);
@@ -277,9 +371,15 @@ export default function NewLibraryMaterialPage() {
       toast.error("Please upload a cover image.");
       return;
     }
-    if (contentType === "document" && !documentFile) {
-      toast.error("Please upload the document file.");
-      return;
+    if (contentType === "document") {
+      if (documentError) {
+        toast.error(documentError);
+        return;
+      }
+      if (!documentFile) {
+        toast.error("Please upload the document file.");
+        return;
+      }
     }
     if (contentType === "video") {
       if (!youtubeUrl.trim()) {
@@ -334,7 +434,7 @@ export default function NewLibraryMaterialPage() {
               fileSize: documentFile
                 ? formatFileSize(documentFile.size)
                 : "0 MB",
-              isDownloadable,
+              isDownloadable: isWord ? true : isDownloadable,
             }
           : {
               youtubeUrl: youtubeUrl.trim(),
@@ -427,15 +527,23 @@ export default function NewLibraryMaterialPage() {
 
           {/* Document File or YouTube URL */}
           {contentType === "document" ? (
-            <DropZone
-              id="document-upload"
-              label="Document File"
-              accept=".pdf,.doc,.docx,.epub"
-              file={documentFile}
-              onFile={handleDocumentFile}
-              icon={UploadCloud}
-              description="Upload .pdf, .doc, or .epub"
-            />
+            <div className="space-y-2">
+              <DropZone
+                id="document-upload"
+                label="Document File"
+                accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                file={documentFile}
+                onFile={handleDocumentFile}
+                icon={UploadCloud}
+                description="Upload .pdf, .doc, or .docx"
+              />
+              {documentError && (
+                <p className="flex items-center gap-1.5 text-[11px] text-red-500 font-medium animate-in slide-in-from-top-1 duration-200">
+                  <AlertCircle className="h-3 w-3 shrink-0" />
+                  {documentError}
+                </p>
+              )}
+            </div>
           ) : (
             <div className="space-y-2">
               <FieldLabel required>YouTube URL</FieldLabel>
@@ -636,7 +744,10 @@ export default function NewLibraryMaterialPage() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setDocumentFile(null)}
+                  onClick={() => {
+                    setDocumentFile(null);
+                    setDocumentError("");
+                  }}
                   className="text-slate/40 hover:text-red-500 transition-colors"
                 >
                   <X className="h-4 w-4" />
@@ -655,14 +766,17 @@ export default function NewLibraryMaterialPage() {
                     <Tooltip text="If disabled, users can only read the material inside the mobile app. The download button will be hidden." />
                   </div>
                   <p className="text-xs font-medium text-slate/60 max-w-[85%] leading-relaxed">
-                    {isDownloadable
+                    {isWord
+                      ? "Word files can't be read inside the app. Users can only download this file."
+                      : isDownloadable
                       ? "Users can read in-app AND download the file to their device."
                       : "Protect your content — file is read-only within the app. Download button is hidden."}
                   </p>
                 </div>
                 <Switch
                   id="is-downloadable"
-                  checked={isDownloadable}
+                  checked={isWord ? true : isDownloadable}
+                  disabled={isWord}
                   onCheckedChange={setIsDownloadable}
                   className="data-[state=checked]:bg-emerald-500 shrink-0 mt-0.5"
                 />
@@ -697,7 +811,7 @@ export default function NewLibraryMaterialPage() {
           <Button
             type="submit"
             id="submit-material"
-            disabled={isSubmitting}
+            disabled={isSubmitting || (contentType === "document" && !!documentError)}
             className="h-11 px-8 rounded-xl bg-[#155D5F] hover:bg-[#155D5F]/90 text-white font-bold shadow-lg shadow-primary/20 gap-2 transition-all active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
           >
             {isSubmitting ? (

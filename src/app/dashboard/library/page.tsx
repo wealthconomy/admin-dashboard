@@ -294,11 +294,37 @@ export default function LibraryPage() {
       // Non-blocking — don't prevent the download if tracking fails
     }
 
-    // Generate clean filename with extension
-    let extension = material.fileType?.toLowerCase() || "pdf";
-    if (extension.includes("pdf")) extension = "pdf";
-    else if (extension.includes("doc")) extension = "docx";
-    else if (extension.includes("epub")) extension = "epub";
+    // 1. Take the extension from the end of material.documentUrl (pdf, doc or docx) when it has one
+    let extension = "";
+    if (material.documentUrl) {
+      try {
+        const pathname = new URL(material.documentUrl).pathname;
+        const match = pathname.match(/\.(pdf|docx|doc)$/i);
+        if (match) {
+          extension = match[1].toLowerCase();
+        }
+      } catch {
+        const cleanUrl = material.documentUrl.split("?")[0].split("#")[0];
+        const match = cleanUrl.match(/\.(pdf|docx|doc)$/i);
+        if (match) {
+          extension = match[1].toLowerCase();
+        }
+      }
+    }
+
+    // 2. Fall back to current logic otherwise, without assuming ".docx" for every Word file
+    if (!extension) {
+      const rawType = material.fileType?.toLowerCase() || "pdf";
+      if (rawType.includes("pdf")) {
+        extension = "pdf";
+      } else if (rawType.includes("doc")) {
+        extension = "doc";
+      } else if (rawType.includes("epub")) {
+        extension = "epub";
+      } else {
+        extension = "pdf";
+      }
+    }
 
     const sanitizedTitle = (material.title || "wealthconomy_material")
       .replace(/[^\w\s-]/g, "")
