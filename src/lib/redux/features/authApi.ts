@@ -23,10 +23,13 @@ export const authApi = apiSlice.injectEndpoints({
 
     // Verify OTP code
     verifyOtp: builder.mutation({
-      query: (body: { destination: string; code: string }) => ({
+      query: (body: { destination: string; code: string; purpose?: string }) => ({
         url: "/auth/verify-otp",
         method: "POST",
-        body,
+        body: {
+          purpose: "RESET",
+          ...body,
+        },
       }),
     }),
 

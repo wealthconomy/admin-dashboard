@@ -28,21 +28,39 @@ function VerifyCodeForm() {
   const handleVerifyCode = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (otp.length < 4) {
+    if (!email) {
+      toast.error("Email address is missing. Please return to Forgot Password.");
+      return;
+    }
+
+    if (otp.trim().length < 4) {
       toast.error("Please enter a valid verification code");
       return;
     }
 
     try {
-      const result = await verifyOtp({ destination: email, code: otp }).unwrap();
+      const result = await verifyOtp({
+        destination: email.trim(),
+        code: otp.trim(),
+        purpose: "RESET",
+      }).unwrap();
       toast.success(result.message || "Code verified successfully!");
       // Redirect to the reset password page, passing email and resetToken in query params
-      const resetToken = result.data?.resetToken || "";
+      const resetToken =
+        result?.data?.resetToken ||
+        result?.resetToken ||
+        result?.data?.token ||
+        result?.token ||
+        "";
       router.push(
-        `/reset-password?email=${encodeURIComponent(email)}&resetToken=${encodeURIComponent(resetToken)}`
+        `/reset-password?email=${encodeURIComponent(email.trim())}&resetToken=${encodeURIComponent(resetToken)}`
       );
     } catch (err: any) {
-      const errorMsg = err?.data?.message || err?.message || "Verification failed";
+      const errorMsg =
+        (Array.isArray(err?.data?.message) ? err.data.message.join(", ") : err?.data?.message) ||
+        (Array.isArray(err?.data?.errors) ? err.data.errors.join(", ") : null) ||
+        err?.message ||
+        "Verification failed";
       toast.error(errorMsg);
     }
   };
