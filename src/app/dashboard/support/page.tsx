@@ -148,6 +148,52 @@ function SupportCentreContent() {
   const [isSending, setIsSending] = useState(false);
   const [showCanned, setShowCanned] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const [stagedAttachment, setStagedAttachment] = useState<{
+    file: File;
+    name: string;
+    type: string;
+    size: number;
+    previewUrl: string;
+    cloudUrl?: string;
+  } | null>(null);
+  const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
+  const [previewModalImage, setPreviewModalImage] = useState<string | null>(null);
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const previewUrl = file.type.startsWith("image/")
+      ? URL.createObjectURL(file)
+      : "";
+
+    setStagedAttachment({
+      file,
+      name: file.name,
+      type: file.type,
+      size: file.size,
+      previewUrl,
+    });
+
+    setIsUploadingAttachment(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/v1/upload", {
+        method: "POST",
+        body: formData,
+      });
+      const data = await res.json();
+      const cloudUrl = data?.url || data?.data?.url || previewUrl;
+      setStagedAttachment((prev) => (prev ? { ...prev, cloudUrl } : null));
+    } catch {
+      setStagedAttachment((prev) => (prev ? { ...prev, cloudUrl: previewUrl } : null));
+    } finally {
+      setIsUploadingAttachment(false);
+    }
+  };
 
   // Map activeTab to stage query parameter
   const stageParam = activeTab === "queue" ? "queue" : activeTab === "active" ? "active" : "resolved";

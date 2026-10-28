@@ -80,11 +80,11 @@ export const usersApi = apiSlice.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, { id }) => [{ type: "Users", id }, { type: "Kyc", id }, "Users"],
     }),
-    updateOverallKycStatus: builder.mutation<any, { id: string; status: string; reason?: string }>({
-      query: ({ id, status, reason }) => ({
+    updateOverallKycStatus: builder.mutation<any, { id: string; status?: string; reason?: string; kycLevel?: number; level?: number }>({
+      query: ({ id, ...body }) => ({
         url: `/admin/kyc/users/${id}`,
         method: "PUT",
-        body: { status, reason },
+        body,
       }),
       invalidatesTags: (_result, _error, { id }) => [{ type: "Users", id }, { type: "Kyc", id }, "Users"],
     }),
@@ -113,11 +113,11 @@ export const usersApi = apiSlice.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, { id }) => [{ type: "Users", id }, { type: "Kyc", id }, "Users"],
     }),
-    updateKycLevel: builder.mutation({
-      query: ({ id, status, reason }) => ({
-        url: `/admin/kyc/users/${id}`,
+    updateKycLevel: builder.mutation<any, { id: string; level?: number; kycLevel?: number; status?: string; reason?: string }>({
+      query: ({ id, ...body }) => ({
+        url: `/admin/kyc/users/${id}/level`,
         method: "PUT",
-        body: { status, reason },
+        body,
       }),
       invalidatesTags: (_result, _error, { id }) => [{ type: "Users", id }, { type: "Kyc", id }, "Users"],
     }),

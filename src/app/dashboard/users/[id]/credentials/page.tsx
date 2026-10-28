@@ -33,6 +33,7 @@ import {
   useGetUserCredentialsQuery,
   useReviewKycDocumentsMutation,
   useUpdateOverallKycStatusMutation,
+  useUpdateKycLevelMutation,
 } from "@/lib/redux/features/usersApi";
 import { format } from "date-fns";
 
@@ -61,8 +62,12 @@ export default function CredentialsVerificationPage({
     ...(typeof credsData === "object" && !Array.isArray(credsData) ? credsData : {}),
   };
 
+  // Specific Government ID type submitted (International Passport, Driver's License, NIN)
+  const resolvedIdType = kycProfile.idType || credsData?.idType || user?.idType || "National ID";
+
   const [reviewKycDocuments, { isLoading: isReviewing }] = useReviewKycDocumentsMutation();
   const [updateOverallKycStatus, { isLoading: isUpdatingOverall }] = useUpdateOverallKycStatusMutation();
+  const [updateKycLevel] = useUpdateKycLevelMutation();
 
   // Document statuses
   const [ninStatus, setNinStatus] = useState<string>("Pending");
@@ -125,14 +130,52 @@ export default function CredentialsVerificationPage({
       setFaceReason(kycProfile.faceRejectionReason || "");
 
       const hasAddress = Boolean(addressDocUrl);
-      setUtilityStatus(hasAddress ? (kycProfile.utilityStatus || "Pending") : "Not Uploaded");
-      setUtilityReason(kycProfile.utilityRejectionReason || "");
+      const isUtilityApproved = kycProfile.utilityStatus === "Approved" || user?.kycLevel >= 3;
+      setUtilityStatus(
+        isUtilityApproved
+          ? "Approved"
+          : hasAddress
+          ? (kycProfile.utilityStatus || "Pending")
+          : "Not Uploaded"
+      );
+      // Only record utilityReason as an error if status is actually Rejected
+      setUtilityReason(
+        kycProfile.utilityStatus === "Rejected"
+          ? (kycProfile.utilityRejectionReason || "")
+          : ""
+      );
 
       const hasPassport = Boolean(passportUrl);
       setPassportStatus(hasPassport ? (kycProfile.passportStatus || "Pending") : "Not Uploaded");
-      setPassportReason(kycProfile.passportRejectionReason || "");
+      setPassportReason(kycProfile.passportStatus === "Rejected" ? (kycProfile.passportRejectionReason || "") : "");
     }
-  }, [kycProfile, idImageUrl, selfieUrl, addressDocUrl, passportUrl]);
+  }, [kycProfile, idImageUrl, selfieUrl, addressDocUrl, passportUrl, user?.kycLevel]);
+
+  // Log user and credentials data to console for direct comparison with App responses
+  useEffect(() => {
+    if (userDataResponse || credsDataResponse) {
+      console.log("\n================ [ADMIN: USER DETAILS & KYC CREDENTIALS RESPONSE] ================");
+      console.log("Resolved User ID:", resolvedId);
+      console.log("1. User Data (GET /admin/users/" + resolvedId + "):", {
+        id: user?.id,
+        name: `${user?.firstName || ""} ${user?.lastName || ""}`,
+        email: user?.email,
+        kycLevel: user?.kycLevel,
+        kycStatus: user?.kycStatus,
+        kycVerified: user?.kycVerified,
+        rawUserData: user,
+      });
+      console.log("2. KYC Credentials Data (GET /admin/kyc/users/" + resolvedId + "/credentials):", credsData);
+      console.log("3. Synthesized kycProfile in Admin UI:", kycProfile);
+      console.log("4. Resolved Image URLs:", {
+        idImageUrl,
+        selfieUrl,
+        addressDocUrl,
+        passportUrl,
+      });
+      console.log("==================================================================================\n");
+    }
+  }, [userDataResponse, credsDataResponse, resolvedId, idImageUrl, selfieUrl, addressDocUrl, passportUrl]);
 
   // Modal controls
   const [activeLightboxImage, setActiveLightboxImage] = useState<string | null>(null);
@@ -161,16 +204,35 @@ export default function CredentialsVerificationPage({
     "Incorrect document type uploaded",
   ];
 
+  // Helper to resolve specific ID type string for review
+  const resolveBackendIdDocType = (typeStr: string) => {
+    const lower = (typeStr || "").toLowerCase();
+    if (lower.includes("passport")) return "PASSPORT";
+    if (lower.includes("driver") || lower.includes("license")) return "DRIVERS_LICENSE";
+    return "NIN";
+  };
+
   // Review single document (POST /api/v1/admin/kyc/users/{id}/credentials/review)
   const handleReview = async (type: "NIN" | "FACE" | "UTILITY" | "PASSPORT", status: "Approved" | "Rejected", reason?: string) => {
     try {
+      const docTitle =
+        type === "NIN"
+          ? resolvedIdType
+          : type === "FACE"
+          ? "Live Face Selfie"
+          : type === "UTILITY"
+          ? "Proof of Address (Level 3)"
+          : "International Passport";
+
+      const effectiveDocType = type === "NIN" ? resolveBackendIdDocType(resolvedIdType) : type;
+
       await reviewKycDocuments({
         id: resolvedId,
         documents: [
           {
-            type,
+            type: effectiveDocType,
             status,
-            reason: reason || (status === "Approved" ? "Document verified successfully" : "Document rejected"),
+            reason: reason || (status === "Approved" ? `${docTitle} verified successfully` : `${docTitle} rejected`),
           },
         ],
       }).unwrap();
@@ -189,14 +251,97 @@ export default function CredentialsVerificationPage({
         setPassportReason(reason || "");
       }
 
-      const docTitle =
-        type === "NIN"
-          ? "National ID"
-          : type === "FACE"
-          ? "Live Face Selfie"
-          : type === "UTILITY"
-          ? "Proof of Address"
-          : "International Passport";
+      // Synchronize overall user account level and KYC status based on document changes
+      if (status === "Approved") {
+        if (type === "UTILITY") {
+          // Level 3 document approved -> upgrade user to Level 3 Verified
+          try {
+            await updateOverallKycStatus({
+              id: resolvedId,
+              status: "VERIFIED",
+              kycLevel: 3,
+              level: 3,
+              reason: "Level 3 Proof of Address approved",
+            }).unwrap();
+          } catch (e) {
+            console.warn("updateOverallKycStatus Level 3 error:", e);
+          }
+          try {
+            await updateKycLevel({
+              id: resolvedId,
+              level: 3,
+              kycLevel: 3,
+              status: "VERIFIED",
+              reason: "Level 3 Proof of Address approved",
+            }).unwrap();
+          } catch (e) {
+            console.warn("updateKycLevel Level 3 error:", e);
+          }
+        } else if ((type === "NIN" && faceStatus === "Approved") || (type === "FACE" && ninStatus === "Approved")) {
+          // Both Level 2 credentials now approved -> upgrade user to Level 2 Verified
+          try {
+            await updateOverallKycStatus({
+              id: resolvedId,
+              status: "VERIFIED",
+              kycLevel: 2,
+              level: 2,
+              reason: "Level 2 credentials approved",
+            }).unwrap();
+          } catch (e) {
+            console.warn("updateOverallKycStatus Level 2 error:", e);
+          }
+          try {
+            await updateKycLevel({
+              id: resolvedId,
+              level: 2,
+              kycLevel: 2,
+              status: "VERIFIED",
+              reason: "Level 2 credentials approved",
+            }).unwrap();
+          } catch (e) {
+            console.warn("updateKycLevel Level 2 error:", e);
+          }
+        }
+      } else if (status === "Rejected") {
+        if (type === "UTILITY") {
+          // Level 3 rejected: demote user back to Level 2
+          try {
+            await updateOverallKycStatus({
+              id: resolvedId,
+              status: "VERIFIED",
+              kycLevel: 2,
+              level: 2,
+              reason: reason || "Proof of Address rejected",
+            }).unwrap();
+          } catch (e) {
+            console.warn("Demote to Level 2 error:", e);
+          }
+        } else {
+          // Level 2 credential rejected: set user status to REJECTED and demote kycLevel to 1
+          try {
+            await updateOverallKycStatus({
+              id: resolvedId,
+              status: "REJECTED",
+              kycLevel: 1,
+              level: 1,
+              reason: reason || `${docTitle} rejected`,
+            }).unwrap();
+          } catch (e) {
+            console.warn("updateOverallKycStatus rejection error:", e);
+          }
+          try {
+            await updateKycLevel({
+              id: resolvedId,
+              level: 1,
+              kycLevel: 1,
+              status: "REJECTED",
+              reason: reason || `${docTitle} rejected`,
+            }).unwrap();
+          } catch (e) {
+            console.warn("updateKycLevel Level 1 rejection error:", e);
+          }
+        }
+      }
 
       toast.success(`${docTitle} marked as ${status}`);
       refetchUser();
@@ -206,16 +351,18 @@ export default function CredentialsVerificationPage({
     }
   };
 
-  // Bulk review Level 2 credentials (both National ID and Face Selfie)
+  // Bulk review Level 2 credentials (both ID and Face Selfie)
   const handleReviewLevel2 = async (status: "Approved" | "Rejected", reason?: string) => {
     try {
+      const effectiveIdType = resolveBackendIdDocType(resolvedIdType);
+
       await reviewKycDocuments({
         id: resolvedId,
         documents: [
           {
-            type: "NIN",
+            type: effectiveIdType,
             status,
-            reason: reason || (status === "Approved" ? "National ID verified" : "National ID rejected"),
+            reason: reason || (status === "Approved" ? `${resolvedIdType} verified` : `${resolvedIdType} rejected`),
           },
           {
             type: "FACE",
@@ -227,11 +374,144 @@ export default function CredentialsVerificationPage({
 
       setNinStatus(status);
       setFaceStatus(status);
-      toast.success(`Level 2 (ID & Face Selfie) marked as ${status}`);
+
+      // Synchronize overall user account level and KYC status
+      if (status === "Approved") {
+        try {
+          await updateOverallKycStatus({
+            id: resolvedId,
+            status: "VERIFIED",
+            kycLevel: 2,
+            level: 2,
+            reason: "Level 2 KYC approved by admin",
+          }).unwrap();
+        } catch (e) {
+          console.warn("updateOverallKycStatus Level 2 bulk error:", e);
+        }
+        try {
+          await updateKycLevel({
+            id: resolvedId,
+            level: 2,
+            kycLevel: 2,
+            status: "VERIFIED",
+            reason: "Level 2 KYC approved by admin",
+          }).unwrap();
+        } catch (e) {
+          console.warn("updateKycLevel Level 2 bulk error:", e);
+        }
+      } else {
+        try {
+          await updateOverallKycStatus({
+            id: resolvedId,
+            status: "REJECTED",
+            kycLevel: 1,
+            level: 1,
+            reason: reason || "Level 2 credentials rejected",
+          }).unwrap();
+        } catch (e) {
+          console.warn("updateOverallKycStatus rejection error:", e);
+        }
+        try {
+          await updateKycLevel({
+            id: resolvedId,
+            level: 1,
+            kycLevel: 1,
+            status: "REJECTED",
+            reason: reason || "Level 2 credentials rejected",
+          }).unwrap();
+        } catch (e) {
+          console.warn("updateKycLevel demotion to 1 error:", e);
+        }
+      }
+
+      toast.success(
+        status === "Approved"
+          ? `Level 2 approved & user upgraded to Level 2 (Verified)`
+          : `Level 2 marked as ${status}`
+      );
       refetchUser();
       refetchCreds();
     } catch (err: any) {
       toast.error(err?.data?.message || "Failed to update Level 2 documents");
+    }
+  };
+
+  // Review Level 3 Proof of Address
+  const handleReviewLevel3 = async (status: "Approved" | "Rejected", reason?: string) => {
+    try {
+      await reviewKycDocuments({
+        id: resolvedId,
+        documents: [
+          {
+            type: "UTILITY",
+            status,
+            reason: reason || (status === "Approved" ? "Proof of Address verified successfully" : "Proof of Address rejected"),
+          },
+        ],
+      }).unwrap();
+
+      setUtilityStatus(status);
+      setUtilityReason(reason || "");
+
+      // Synchronize overall user account level and KYC status
+      if (status === "Approved") {
+        try {
+          await updateOverallKycStatus({
+            id: resolvedId,
+            status: "VERIFIED",
+            kycLevel: 3,
+            level: 3,
+            reason: "Level 3 Proof of Address approved by admin",
+          }).unwrap();
+        } catch (e) {
+          console.warn("updateOverallKycStatus Level 3 error:", e);
+        }
+        try {
+          await updateKycLevel({
+            id: resolvedId,
+            level: 3,
+            kycLevel: 3,
+            status: "VERIFIED",
+            reason: "Level 3 Proof of Address approved by admin",
+          }).unwrap();
+        } catch (e) {
+          console.warn("updateKycLevel Level 3 error:", e);
+        }
+      } else {
+        // Demote back to Level 2
+        try {
+          await updateOverallKycStatus({
+            id: resolvedId,
+            status: "VERIFIED",
+            kycLevel: 2,
+            level: 2,
+            reason: reason || "Proof of Address rejected",
+          }).unwrap();
+        } catch (e) {
+          console.warn("Demote to Level 2 error:", e);
+        }
+        try {
+          await updateKycLevel({
+            id: resolvedId,
+            level: 2,
+            kycLevel: 2,
+            status: "VERIFIED",
+            reason: reason || "Proof of Address rejected",
+          }).unwrap();
+        } catch (e) {
+          console.warn("Demote level to 2 error:", e);
+        }
+      }
+
+      toast.success(
+        status === "Approved"
+          ? `Level 3 approved & user upgraded to Level 3 (Verified)`
+          : `Level 3 Proof of Address marked as ${status}`
+      );
+      refetchUser();
+      refetchCreds();
+    } catch (err: any) {
+      toast.error(err?.data?.message || "Failed to update Level 3 Proof of Address");
     }
   };
 
@@ -362,13 +642,13 @@ export default function CredentialsVerificationPage({
       </div>
 
       {/* KYC Documents Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className={`grid grid-cols-1 ${passportUrl ? "lg:grid-cols-3" : "lg:grid-cols-2"} gap-6`}>
         {/* DOCUMENT 1: National ID (Level 2) & Face Selfie */}
         <div className="border border-border/50 rounded-2xl overflow-hidden shadow-sm bg-white flex flex-col h-full">
           <div className="p-5 border-b border-border/30 bg-surface/30 flex items-center justify-between">
             <div className="space-y-0.5">
               <h3 className="font-bold text-sm text-dark font-outfit">
-                {kycProfile.idType || "National ID & Live Face"}
+                {resolvedIdType} & Live Face
               </h3>
               <p className="text-[11px] font-medium text-slate/40">Proof of Identification (Level 2)</p>
             </div>
@@ -417,7 +697,13 @@ export default function CredentialsVerificationPage({
               <div className="p-2.5 bg-surface/40 border border-border/20 rounded-xl space-y-0.5">
                 <div className="flex items-center gap-1.5 text-slate/50">
                   <CreditCard className="h-3 w-3" />
-                  <span className="text-[9px] font-bold uppercase tracking-wider">NIN / ID Number</span>
+                  <span className="text-[9px] font-bold uppercase tracking-wider">
+                    {resolvedIdType.toLowerCase().includes("passport")
+                      ? "Passport Number"
+                      : resolvedIdType.toLowerCase().includes("driver") || resolvedIdType.toLowerCase().includes("license")
+                      ? "Driver's License No."
+                      : "NIN / ID Number"}
+                  </span>
                 </div>
                 <p className="text-xs font-bold text-dark truncate">
                   {kycProfile.idNumber || user?.nin || "Not Provided"}
@@ -466,7 +752,9 @@ export default function CredentialsVerificationPage({
               {/* Submitted ID Card */}
               <div className="space-y-1">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-slate/50 uppercase tracking-wider">ID Document</span>
+                  <span className="text-[10px] font-bold text-slate/50 uppercase tracking-wider">
+                    {resolvedIdType} Document
+                  </span>
                   <span className="text-[9px] font-semibold text-slate/40">{ninStatus}</span>
                 </div>
                 {isIdImageWeb ? (
@@ -532,7 +820,7 @@ export default function CredentialsVerificationPage({
               <div className="bg-red-50 border border-red-100 rounded-xl p-3 flex gap-2 text-red-700 text-xs">
                 <AlertTriangle className="h-4 w-4 shrink-0 text-red-500 mt-0.5" />
                 <div>
-                  <p className="font-bold">ID Rejection Reason:</p>
+                  <p className="font-bold">{resolvedIdType} Rejection Reason:</p>
                   <p className="italic">{ninReason}</p>
                 </div>
               </div>
@@ -551,9 +839,19 @@ export default function CredentialsVerificationPage({
 
           <div className="p-4 border-t border-border/30 bg-surface/10 flex flex-col gap-2">
             {ninStatus === "Not Uploaded" && faceStatus === "Not Uploaded" ? (
-              <Button disabled variant="outline" className="w-full h-10 rounded-xl text-xs font-bold text-slate/40 border-border/40 cursor-not-allowed">
-                Awaiting Level 2 Uploads
-              </Button>
+              <div className="flex items-center gap-2 w-full">
+                <Button disabled variant="outline" className="flex-1 h-10 rounded-xl text-xs font-bold text-slate/40 border-border/40 cursor-not-allowed">
+                  Awaiting Level 2 Uploads
+                </Button>
+                <Button
+                  onClick={() => handleReviewLevel2("Rejected", "Incomplete upload or documents missing")}
+                  disabled={isReviewing}
+                  variant="outline"
+                  className="h-10 px-3 rounded-xl border-red-200 text-red-600 hover:bg-red-50 font-bold text-xs cursor-pointer"
+                >
+                  Reject & Reset
+                </Button>
+              </div>
             ) : isLevel2BothApproved ? (
               <div className="flex items-center justify-between w-full gap-2">
                 <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1.5 rounded-xl border border-emerald-100 truncate">
@@ -566,7 +864,7 @@ export default function CredentialsVerificationPage({
                     variant="outline"
                     className="h-9 px-2.5 rounded-xl border-red-200 text-red-600 hover:bg-red-50 text-[11px] font-bold cursor-pointer"
                   >
-                    Revoke ID
+                    Revoke {resolvedIdType.toLowerCase().includes("passport") ? "Passport" : resolvedIdType.toLowerCase().includes("license") ? "License" : "ID"}
                   </Button>
                   <Button
                     onClick={() => setRejectingDoc("FACE")}
@@ -687,6 +985,12 @@ export default function CredentialsVerificationPage({
                   <p className="text-[10px] font-bold text-dark">Mobile URI</p>
                   <span className="text-[8px] font-mono text-slate/40 truncate max-w-[200px]">{addressDocUrl}</span>
                 </div>
+              ) : utilityStatus === "Approved" ? (
+                <div className="h-[130px] rounded-xl border border-emerald-200 bg-emerald-50/50 flex flex-col items-center justify-center p-2 text-center space-y-1">
+                  <CheckCircle2 className="h-6 w-6 text-emerald-600" />
+                  <p className="text-xs font-bold text-emerald-800">Verified by Compliance</p>
+                  <p className="text-[10px] text-emerald-600 font-medium">No document attachment uploaded</p>
+                </div>
               ) : (
                 <div className="h-[130px] rounded-xl border-2 border-dashed border-border/60 bg-surface/30 flex flex-col items-center justify-center p-2 text-center space-y-1">
                   <ImageIcon className="h-6 w-6 text-slate/30" />
@@ -714,7 +1018,7 @@ export default function CredentialsVerificationPage({
             ) : utilityStatus === "Approved" ? (
               <div className="flex items-center justify-between w-full gap-2">
                 <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1.5 rounded-xl border border-emerald-100 truncate">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> Verified
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> Level 3 Verified
                 </span>
                 <Button
                   onClick={() => setRejectingDoc("UTILITY")}
@@ -722,7 +1026,7 @@ export default function CredentialsVerificationPage({
                   variant="outline"
                   className="h-9 px-3 rounded-xl border-red-200 text-red-600 hover:bg-red-50 text-xs font-bold cursor-pointer"
                 >
-                  Revoke
+                  Revoke Level 3
                 </Button>
               </div>
             ) : utilityStatus === "Rejected" ? (
@@ -731,11 +1035,11 @@ export default function CredentialsVerificationPage({
                   <XCircle className="h-3.5 w-3.5 text-red-500 shrink-0" /> Rejected
                 </span>
                 <Button
-                  onClick={() => handleReview("UTILITY", "Approved")}
+                  onClick={() => handleReviewLevel3("Approved")}
                   disabled={isReviewing}
                   className="h-9 px-3 rounded-xl bg-[#155D5F] hover:bg-[#0F4A4C] text-white text-xs font-bold cursor-pointer"
                 >
-                  Re-Approve
+                  Re-Approve Level 3
                 </Button>
               </div>
             ) : (
@@ -750,27 +1054,28 @@ export default function CredentialsVerificationPage({
                   Reject
                 </Button>
                 <Button
-                  onClick={() => handleReview("UTILITY", "Approved")}
+                  onClick={() => handleReviewLevel3("Approved")}
                   disabled={isReviewing}
                   className="flex-1 h-10 rounded-xl bg-[#155D5F] hover:bg-[#0F4A4C] text-white font-bold text-xs gap-1 shadow-sm cursor-pointer"
                 >
                   <CheckCircle2 className="h-3.5 w-3.5" />
-                  Approve
+                  Approve Level 3
                 </Button>
               </>
             )}
           </div>
         </div>
 
-        {/* DOCUMENT 3: International Passport (Level 3) */}
-        <div className="border border-border/50 rounded-2xl overflow-hidden shadow-sm bg-white flex flex-col h-full">
-          <div className="p-5 border-b border-border/30 bg-surface/30 flex items-center justify-between">
-            <div className="space-y-0.5">
-              <h3 className="font-bold text-sm text-dark font-outfit">International Passport</h3>
-              <p className="text-[11px] font-medium text-slate/40">Travel & Global ID (Level 3)</p>
+        {/* DOCUMENT 3: International Passport (Optional / Legacy) */}
+        {Boolean(passportUrl) && (
+          <div className="border border-border/50 rounded-2xl overflow-hidden shadow-sm bg-white flex flex-col h-full">
+            <div className="p-5 border-b border-border/30 bg-surface/30 flex items-center justify-between">
+              <div className="space-y-0.5">
+                <h3 className="font-bold text-sm text-dark font-outfit">International Passport</h3>
+                <p className="text-[11px] font-medium text-slate/40">Additional Document</p>
+              </div>
+              {renderStatusBadge(passportStatus)}
             </div>
-            {renderStatusBadge(passportStatus)}
-          </div>
 
           <div className="p-5 flex-1 space-y-4">
             {/* Extracted Fields */}
@@ -930,6 +1235,7 @@ export default function CredentialsVerificationPage({
             )}
           </div>
         </div>
+        )}
       </div>
 
       {/* Lightbox Zoom Modal */}
@@ -997,11 +1303,11 @@ export default function CredentialsVerificationPage({
                   ? "Provide explanation for rejecting the user's overall KYC account status."
                   : `Provide explanation for rejecting ${
                       rejectingDoc === "NIN"
-                        ? "National ID"
+                        ? resolvedIdType
                         : rejectingDoc === "FACE"
                         ? "Face Selfie"
                         : rejectingDoc === "UTILITY"
-                        ? "Proof of Address"
+                        ? "Proof of Address (Level 3)"
                         : "International Passport"
                     }.`}
               </p>

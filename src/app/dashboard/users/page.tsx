@@ -520,6 +520,7 @@ export default function UsersPage() {
                 <TableHead className="py-3 px-3 text-slate/50 font-bold text-[10px] uppercase tracking-widest whitespace-nowrap">Last Login</TableHead>
                 <TableHead className="py-3 px-3 text-slate/50 font-bold text-[10px] uppercase tracking-widest whitespace-nowrap">Email</TableHead>
                 <TableHead className="py-3 px-3 text-slate/50 font-bold text-[10px] uppercase tracking-widest text-center whitespace-nowrap">Status</TableHead>
+                <TableHead className="py-3 px-3 text-slate/50 font-bold text-[10px] uppercase tracking-widest text-center whitespace-nowrap">KYC</TableHead>
                 <TableHead className="py-3 px-3 text-slate/50 font-bold text-[10px] uppercase tracking-widest text-center whitespace-nowrap">Transaction Type</TableHead>
                 <TableHead className="py-3 px-3 text-slate/50 font-bold text-[10px] uppercase tracking-widest text-center whitespace-nowrap">Total Savings</TableHead>
                 <TableHead className="py-3 px-3 text-slate/50 font-bold text-[10px] uppercase tracking-widest text-center whitespace-nowrap">Total Interest</TableHead>
@@ -576,6 +577,31 @@ export default function UsersPage() {
                         {user.status}
                       </Badge>
                     </div>
+                  </TableCell>
+                  <TableCell className="py-3 px-3 whitespace-nowrap text-center">
+                    <span
+                      onClick={() => router.push(`/dashboard/users/${user.id}/credentials`)}
+                      className="cursor-pointer inline-block"
+                      title="Click to view KYC Credentials"
+                    >
+                      {user.kycStatus === "VERIFIED" || user.kycStatus === "verified" || user.kycVerified ? (
+                        <Badge className="bg-emerald-50 text-emerald-600 border border-emerald-100 hover:bg-emerald-100 px-2 py-0.5 rounded-lg text-[9px] font-bold">
+                          Level {user.kycLevel || 2}
+                        </Badge>
+                      ) : user.kycStatus === "REJECTED" ? (
+                        <Badge className="bg-red-50 text-red-600 border border-red-100 hover:bg-red-100 px-2 py-0.5 rounded-lg text-[9px] font-bold">
+                          Rejected
+                        </Badge>
+                      ) : user.kycStatus === "PENDING" || (user.kycLevel && user.kycLevel > 1) ? (
+                        <Badge className="bg-amber-50 text-amber-600 border border-amber-100 hover:bg-amber-100 px-2 py-0.5 rounded-lg text-[9px] font-bold">
+                          Pending
+                        </Badge>
+                      ) : (
+                        <Badge className="bg-slate-50 text-slate-500 border border-slate-200 hover:bg-slate-100 px-2 py-0.5 rounded-lg text-[9px] font-bold">
+                          Level 1
+                        </Badge>
+                      )}
+                    </span>
                   </TableCell>
                   <TableCell className="py-3 px-3 text-center whitespace-nowrap">
                      <span className={`text-[10px] font-bold px-2.5 py-1 rounded-lg border ${
