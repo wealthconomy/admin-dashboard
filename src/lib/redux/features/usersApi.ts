@@ -115,7 +115,7 @@ export const usersApi = apiSlice.injectEndpoints({
     }),
     updateKycLevel: builder.mutation<any, { id: string; level?: number; kycLevel?: number; status?: string; reason?: string }>({
       query: ({ id, ...body }) => ({
-        url: `/admin/kyc/users/${id}/level`,
+        url: `/admin/kyc/users/${id}`,
         method: "PUT",
         body,
       }),

@@ -70,17 +70,14 @@ export default function CredentialsVerificationPage({
   const [updateKycLevel] = useUpdateKycLevelMutation();
 
   // Document statuses
-  const [ninStatus, setNinStatus] = useState<string>("Pending");
-  const [ninReason, setNinReason] = useState<string>("");
+  const [idStatus, setIdStatus] = useState<string>("Pending");
+  const [idReason, setIdReason] = useState<string>("");
 
   const [faceStatus, setFaceStatus] = useState<string>("Pending");
   const [faceReason, setFaceReason] = useState<string>("");
 
   const [utilityStatus, setUtilityStatus] = useState<string>("Pending");
   const [utilityReason, setUtilityReason] = useState<string>("");
-
-  const [passportStatus, setPassportStatus] = useState<string>("Pending");
-  const [passportReason, setPassportReason] = useState<string>("");
 
   // Document URLs - checking both Swagger official names and legacy alternatives
   const idImageUrl =
@@ -113,24 +110,65 @@ export default function CredentialsVerificationPage({
     null;
 
   // Provider automated verification metrics from Swagger
-  const faceConfidenceScore = kycProfile.faceConfidenceScore ?? credsData?.faceConfidenceScore;
   const bvnProviderVerified = kycProfile.bvnProviderVerified ?? credsData?.bvnProviderVerified;
   const ninProviderVerified = kycProfile.ninProviderVerified ?? credsData?.ninProviderVerified;
+  const idProviderVerified = kycProfile.idProviderVerified ?? credsData?.idProviderVerified;
   const faceProviderVerified = kycProfile.faceProviderVerified ?? credsData?.faceProviderVerified;
 
   // Sync statuses from backend response
   useEffect(() => {
     if (kycProfile) {
-      const hasNIN = Boolean(idImageUrl || kycProfile.idNumber);
-      setNinStatus(hasNIN ? (kycProfile.ninStatus || "Pending") : "Not Uploaded");
-      setNinReason(kycProfile.ninRejectionReason || "");
+      // 1. Government ID Status
+      const rawIdStatus =
+        kycProfile.idStatus ||
+        (resolvedIdType.toLowerCase().includes("passport") ? kycProfile.passportStatus : kycProfile.ninStatus) ||
+        kycProfile.passportStatus ||
+        kycProfile.ninStatus;
 
+      const hasId = Boolean(idImageUrl || passportUrl || kycProfile.idNumber || user?.nin);
+      const isIdApproved =
+        rawIdStatus === "Approved" ||
+        ((user?.kycLevel >= 2 || user?.kycStatus === "VERIFIED") && rawIdStatus !== "Rejected");
+
+      setIdStatus(
+        isIdApproved
+          ? "Approved"
+          : hasId
+          ? (rawIdStatus || "Pending")
+          : "Not Uploaded"
+      );
+      setIdReason(
+        rawIdStatus === "Rejected"
+          ? (kycProfile.idRejectionReason || kycProfile.passportRejectionReason || kycProfile.ninRejectionReason || "")
+          : ""
+      );
+
+      // 2. Face Selfie Status
+      const rawFaceStatus = kycProfile.faceStatus || (kycProfile.faceVerified ? "Approved" : undefined);
       const hasFace = Boolean(selfieUrl || kycProfile.faceVerified);
-      setFaceStatus(hasFace ? (kycProfile.faceStatus || "Pending") : "Not Uploaded");
-      setFaceReason(kycProfile.faceRejectionReason || "");
+      const isFaceApproved =
+        rawFaceStatus === "Approved" ||
+        ((user?.kycLevel >= 2 || user?.kycStatus === "VERIFIED") && rawFaceStatus !== "Rejected");
 
+      setFaceStatus(
+        isFaceApproved
+          ? "Approved"
+          : hasFace
+          ? (rawFaceStatus || "Pending")
+          : "Not Uploaded"
+      );
+      setFaceReason(
+        rawFaceStatus === "Rejected"
+          ? (kycProfile.faceRejectionReason || "")
+          : ""
+      );
+
+      // 3. Proof of Address Status
       const hasAddress = Boolean(addressDocUrl);
-      const isUtilityApproved = kycProfile.utilityStatus === "Approved" || user?.kycLevel >= 3;
+      const isUtilityApproved =
+        kycProfile.utilityStatus === "Approved" ||
+        ((user?.kycLevel >= 3 || user?.kycStatus === "VERIFIED") && kycProfile.utilityStatus !== "Rejected");
+
       setUtilityStatus(
         isUtilityApproved
           ? "Approved"
@@ -138,18 +176,13 @@ export default function CredentialsVerificationPage({
           ? (kycProfile.utilityStatus || "Pending")
           : "Not Uploaded"
       );
-      // Only record utilityReason as an error if status is actually Rejected
       setUtilityReason(
         kycProfile.utilityStatus === "Rejected"
           ? (kycProfile.utilityRejectionReason || "")
           : ""
       );
-
-      const hasPassport = Boolean(passportUrl);
-      setPassportStatus(hasPassport ? (kycProfile.passportStatus || "Pending") : "Not Uploaded");
-      setPassportReason(kycProfile.passportStatus === "Rejected" ? (kycProfile.passportRejectionReason || "") : "");
     }
-  }, [kycProfile, idImageUrl, selfieUrl, addressDocUrl, passportUrl, user?.kycLevel]);
+  }, [kycProfile, idImageUrl, selfieUrl, addressDocUrl, passportUrl, user?.kycLevel, user?.kycStatus, resolvedIdType]);
 
   // Log user and credentials data to console for direct comparison with App responses
   useEffect(() => {
@@ -179,7 +212,7 @@ export default function CredentialsVerificationPage({
 
   // Modal controls
   const [activeLightboxImage, setActiveLightboxImage] = useState<string | null>(null);
-  const [rejectingDoc, setRejectingDoc] = useState<"NIN" | "FACE" | "UTILITY" | "PASSPORT" | "OVERALL" | null>(null);
+  const [rejectingDoc, setRejectingDoc] = useState<"ID" | "NIN" | "FACE" | "UTILITY" | "PASSPORT" | "OVERALL" | null>(null);
   const [rejectionInput, setRejectionInput] = useState<string>("");
 
   const isWebUrl = (url: string | null) => Boolean(url && (url.startsWith("http://") || url.startsWith("https://")));
@@ -209,22 +242,22 @@ export default function CredentialsVerificationPage({
     const lower = (typeStr || "").toLowerCase();
     if (lower.includes("passport")) return "PASSPORT";
     if (lower.includes("driver") || lower.includes("license")) return "DRIVERS_LICENSE";
+    if (lower.includes("voter")) return "VOTERS_CARD";
     return "NIN";
   };
 
   // Review single document (POST /api/v1/admin/kyc/users/{id}/credentials/review)
-  const handleReview = async (type: "NIN" | "FACE" | "UTILITY" | "PASSPORT", status: "Approved" | "Rejected", reason?: string) => {
+  const handleReview = async (type: "ID" | "NIN" | "FACE" | "UTILITY" | "PASSPORT", status: "Approved" | "Rejected", reason?: string) => {
     try {
+      const isIdType = type === "ID" || type === "NIN" || type === "PASSPORT";
       const docTitle =
-        type === "NIN"
+        isIdType
           ? resolvedIdType
           : type === "FACE"
           ? "Live Face Selfie"
-          : type === "UTILITY"
-          ? "Proof of Address (Level 3)"
-          : "International Passport";
+          : "Proof of Address (Level 3)";
 
-      const effectiveDocType = type === "NIN" ? resolveBackendIdDocType(resolvedIdType) : type;
+      const effectiveDocType = isIdType ? resolveBackendIdDocType(resolvedIdType) : type;
 
       await reviewKycDocuments({
         id: resolvedId,
@@ -237,18 +270,15 @@ export default function CredentialsVerificationPage({
         ],
       }).unwrap();
 
-      if (type === "NIN") {
-        setNinStatus(status);
-        setNinReason(reason || "");
+      if (isIdType) {
+        setIdStatus(status);
+        setIdReason(reason || "");
       } else if (type === "FACE") {
         setFaceStatus(status);
         setFaceReason(reason || "");
       } else if (type === "UTILITY") {
         setUtilityStatus(status);
         setUtilityReason(reason || "");
-      } else if (type === "PASSPORT") {
-        setPassportStatus(status);
-        setPassportReason(reason || "");
       }
 
       // Synchronize overall user account level and KYC status based on document changes
@@ -266,18 +296,7 @@ export default function CredentialsVerificationPage({
           } catch (e) {
             console.warn("updateOverallKycStatus Level 3 error:", e);
           }
-          try {
-            await updateKycLevel({
-              id: resolvedId,
-              level: 3,
-              kycLevel: 3,
-              status: "VERIFIED",
-              reason: "Level 3 Proof of Address approved",
-            }).unwrap();
-          } catch (e) {
-            console.warn("updateKycLevel Level 3 error:", e);
-          }
-        } else if ((type === "NIN" && faceStatus === "Approved") || (type === "FACE" && ninStatus === "Approved")) {
+        } else if ((isIdType && faceStatus === "Approved") || (type === "FACE" && idStatus === "Approved")) {
           // Both Level 2 credentials now approved -> upgrade user to Level 2 Verified
           try {
             await updateOverallKycStatus({
@@ -289,17 +308,6 @@ export default function CredentialsVerificationPage({
             }).unwrap();
           } catch (e) {
             console.warn("updateOverallKycStatus Level 2 error:", e);
-          }
-          try {
-            await updateKycLevel({
-              id: resolvedId,
-              level: 2,
-              kycLevel: 2,
-              status: "VERIFIED",
-              reason: "Level 2 credentials approved",
-            }).unwrap();
-          } catch (e) {
-            console.warn("updateKycLevel Level 2 error:", e);
           }
         }
       } else if (status === "Rejected") {
@@ -328,17 +336,6 @@ export default function CredentialsVerificationPage({
             }).unwrap();
           } catch (e) {
             console.warn("updateOverallKycStatus rejection error:", e);
-          }
-          try {
-            await updateKycLevel({
-              id: resolvedId,
-              level: 1,
-              kycLevel: 1,
-              status: "REJECTED",
-              reason: reason || `${docTitle} rejected`,
-            }).unwrap();
-          } catch (e) {
-            console.warn("updateKycLevel Level 1 rejection error:", e);
           }
         }
       }
@@ -372,7 +369,7 @@ export default function CredentialsVerificationPage({
         ],
       }).unwrap();
 
-      setNinStatus(status);
+      setIdStatus(status);
       setFaceStatus(status);
 
       // Synchronize overall user account level and KYC status
@@ -388,17 +385,6 @@ export default function CredentialsVerificationPage({
         } catch (e) {
           console.warn("updateOverallKycStatus Level 2 bulk error:", e);
         }
-        try {
-          await updateKycLevel({
-            id: resolvedId,
-            level: 2,
-            kycLevel: 2,
-            status: "VERIFIED",
-            reason: "Level 2 KYC approved by admin",
-          }).unwrap();
-        } catch (e) {
-          console.warn("updateKycLevel Level 2 bulk error:", e);
-        }
       } else {
         try {
           await updateOverallKycStatus({
@@ -411,18 +397,8 @@ export default function CredentialsVerificationPage({
         } catch (e) {
           console.warn("updateOverallKycStatus rejection error:", e);
         }
-        try {
-          await updateKycLevel({
-            id: resolvedId,
-            level: 1,
-            kycLevel: 1,
-            status: "REJECTED",
-            reason: reason || "Level 2 credentials rejected",
-          }).unwrap();
-        } catch (e) {
-          console.warn("updateKycLevel demotion to 1 error:", e);
-        }
       }
+
 
       toast.success(
         status === "Approved"
@@ -466,17 +442,6 @@ export default function CredentialsVerificationPage({
         } catch (e) {
           console.warn("updateOverallKycStatus Level 3 error:", e);
         }
-        try {
-          await updateKycLevel({
-            id: resolvedId,
-            level: 3,
-            kycLevel: 3,
-            status: "VERIFIED",
-            reason: "Level 3 Proof of Address approved by admin",
-          }).unwrap();
-        } catch (e) {
-          console.warn("updateKycLevel Level 3 error:", e);
-        }
       } else {
         // Demote back to Level 2
         try {
@@ -489,17 +454,6 @@ export default function CredentialsVerificationPage({
           }).unwrap();
         } catch (e) {
           console.warn("Demote to Level 2 error:", e);
-        }
-        try {
-          await updateKycLevel({
-            id: resolvedId,
-            level: 2,
-            kycLevel: 2,
-            status: "VERIFIED",
-            reason: reason || "Proof of Address rejected",
-          }).unwrap();
-        } catch (e) {
-          console.warn("Demote level to 2 error:", e);
         }
       }
 
@@ -592,7 +546,7 @@ export default function CredentialsVerificationPage({
   };
 
   const isOverallVerified = user?.kycStatus === "VERIFIED" || user?.kycStatus === "verified";
-  const isLevel2BothApproved = ninStatus === "Approved" && faceStatus === "Approved";
+  const isLevel2BothApproved = idStatus === "Approved" && faceStatus === "Approved";
 
   return (
     <div className="bg-white rounded-[20px] p-6 md:p-10 border border-border/50 shadow-sm w-full max-w-[1240px] min-h-[900px] mx-auto flex flex-col space-y-8 animate-in fade-in duration-500">
@@ -640,43 +594,32 @@ export default function CredentialsVerificationPage({
           </div>
         </div>
       </div>
-
       {/* KYC Documents Grid */}
-      <div className={`grid grid-cols-1 ${passportUrl ? "lg:grid-cols-3" : "lg:grid-cols-2"} gap-6`}>
-        {/* DOCUMENT 1: National ID (Level 2) & Face Selfie */}
-        <div className="border border-border/50 rounded-2xl overflow-hidden shadow-sm bg-white flex flex-col h-full">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 w-full items-stretch">
+        {/* CARD 1: Live Face Selfie (Level 2 Biometrics) */}
+        <div className="border border-border/50 rounded-2xl overflow-hidden shadow-sm bg-white flex flex-col h-full w-full min-w-0">
           <div className="p-5 border-b border-border/30 bg-surface/30 flex items-center justify-between">
             <div className="space-y-0.5">
-              <h3 className="font-bold text-sm text-dark font-outfit">
-                {resolvedIdType} & Live Face
-              </h3>
-              <p className="text-[11px] font-medium text-slate/40">Proof of Identification (Level 2)</p>
+              <h3 className="font-bold text-sm text-dark font-outfit">Live Face Selfie</h3>
+              <p className="text-[11px] font-medium text-slate/40">Biometric Verification (Level 2)</p>
             </div>
-            <div className="flex flex-col items-end gap-1">
-              {renderStatusBadge(ninStatus)}
-            </div>
+            {renderStatusBadge(faceStatus)}
           </div>
 
           <div className="p-5 flex-1 space-y-4">
-            {/* Automated Gateway Badges */}
-            {(faceConfidenceScore !== undefined || bvnProviderVerified || ninProviderVerified) && (
+            {/* Automated Gateway Badges (AI match removed per request) */}
+            {(bvnProviderVerified || faceProviderVerified) && (
               <div className="flex flex-wrap items-center gap-1.5 p-2 bg-[#F2FFFF] border border-[#CCFBF1] rounded-xl">
-                {faceConfidenceScore !== undefined && (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-[#155D5F] bg-white px-2 py-0.5 rounded-md shadow-xs">
-                    <Sparkles className="h-3 w-3 text-amber-500" />
-                    AI Match: {Number(faceConfidenceScore).toFixed(1)}%
-                  </span>
-                )}
-                {ninProviderVerified && (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-white px-2 py-0.5 rounded-md shadow-xs">
-                    <CheckCircle2 className="h-3 w-3 text-emerald-500" />
-                    NIN Verified
-                  </span>
-                )}
                 {bvnProviderVerified && (
                   <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-white px-2 py-0.5 rounded-md shadow-xs">
                     <CheckCircle2 className="h-3 w-3 text-emerald-500" />
                     BVN Verified
+                  </span>
+                )}
+                {faceProviderVerified && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-white px-2 py-0.5 rounded-md shadow-xs">
+                    <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                    Face Verified
                   </span>
                 )}
               </div>
@@ -684,7 +627,166 @@ export default function CredentialsVerificationPage({
 
             {/* Extracted Fields */}
             <div className="grid grid-cols-2 gap-2.5">
+              <div className="col-span-2 p-2.5 bg-surface/40 border border-border/20 rounded-xl space-y-0.5">
+                <div className="flex items-center gap-1.5 text-slate/50">
+                  <User className="h-3 w-3" />
+                  <span className="text-[9px] font-bold uppercase tracking-wider">Full Name</span>
+                </div>
+                <p className="text-xs font-bold text-dark truncate">
+                  {`${user?.firstName || ""} ${user?.lastName || ""}`.trim() || "Not Provided"}
+                </p>
+              </div>
+
               <div className="p-2.5 bg-surface/40 border border-border/20 rounded-xl space-y-0.5">
+                <div className="flex items-center gap-1.5 text-slate/50">
+                  <ShieldCheck className="h-3 w-3" />
+                  <span className="text-[9px] font-bold uppercase tracking-wider">BVN</span>
+                </div>
+                <p className="text-xs font-bold text-dark truncate">
+                  {kycProfile.bvn || user?.bvn || "Not Provided"}
+                </p>
+              </div>
+
+              <div className="p-2.5 bg-surface/40 border border-border/20 rounded-xl space-y-0.5">
+                <div className="flex items-center gap-1.5 text-slate/50">
+                  <Calendar className="h-3 w-3" />
+                  <span className="text-[9px] font-bold uppercase tracking-wider">Date of Birth</span>
+                </div>
+                <p className="text-xs font-bold text-dark truncate">
+                  {kycProfile.dateOfBirth
+                    ? format(new Date(kycProfile.dateOfBirth), "MMM dd, yyyy")
+                    : user?.dob
+                    ? format(new Date(user.dob), "MMM dd, yyyy")
+                    : "Not Provided"}
+                </p>
+              </div>
+            </div>
+
+            {/* Face Selfie Image */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate/50 uppercase tracking-wider">Submitted Face Selfie</span>
+                <span className="text-[9px] font-semibold text-slate/40">{faceStatus}</span>
+              </div>
+              {isSelfieWeb ? (
+                <div
+                  className="relative group h-[180px] rounded-xl border border-border/40 overflow-hidden bg-slate-50 flex items-center justify-center cursor-pointer shadow-inner"
+                  onClick={() => setActiveLightboxImage(selfieUrl)}
+                >
+                  <img src={selfieUrl!} alt="Face Selfie" className="w-full h-full object-contain p-1.5" />
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <div className="bg-white p-2.5 rounded-full shadow-md">
+                      <ZoomIn className="h-5 w-5 text-dark" />
+                    </div>
+                  </div>
+                </div>
+              ) : selfieUrl ? (
+                <div className="h-[180px] rounded-xl border border-amber-200 bg-amber-50/50 flex flex-col items-center justify-center p-2 text-center space-y-1">
+                  <AlertTriangle className="h-5 w-5 text-amber-500" />
+                  <p className="text-[10px] font-bold text-dark">Mobile URI</p>
+                  <span className="text-[8px] font-mono text-slate/40 truncate max-w-[140px]">{selfieUrl}</span>
+                </div>
+              ) : (
+                <div className="h-[180px] rounded-xl border-2 border-dashed border-border/60 bg-surface/30 flex flex-col items-center justify-center p-2 text-center space-y-1">
+                  <Camera className="h-6 w-6 text-slate/30" />
+                  <p className="text-[10px] font-semibold text-slate/50">No face selfie captured</p>
+                </div>
+              )}
+            </div>
+
+            {faceStatus === "Rejected" && faceReason && (
+              <div className="bg-red-50 border border-red-100 rounded-xl p-3 flex gap-2 text-red-700 text-xs">
+                <AlertTriangle className="h-4 w-4 shrink-0 text-red-500 mt-0.5" />
+                <div>
+                  <p className="font-bold">Face Rejection Reason:</p>
+                  <p className="italic">{faceReason}</p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="p-4 border-t border-border/30 bg-surface/10 flex items-center gap-2">
+            {faceStatus === "Not Uploaded" ? (
+              <Button disabled variant="outline" className="w-full h-10 rounded-xl text-xs font-bold text-slate/40 border-border/40 cursor-not-allowed">
+                Awaiting Face Selfie
+              </Button>
+            ) : faceStatus === "Approved" ? (
+              <div className="flex items-center justify-between w-full gap-2">
+                <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1.5 rounded-xl border border-emerald-100 truncate">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> Face Approved
+                </span>
+                <Button
+                  onClick={() => setRejectingDoc("FACE")}
+                  disabled={isReviewing}
+                  variant="outline"
+                  className="h-9 px-3 rounded-xl border-red-200 text-red-600 hover:bg-red-50 text-xs font-bold cursor-pointer"
+                >
+                  Revoke Face
+                </Button>
+              </div>
+            ) : faceStatus === "Rejected" ? (
+              <div className="flex items-center justify-between w-full gap-2">
+                <span className="flex items-center gap-1.5 text-xs font-bold text-red-600 bg-red-50 px-2.5 py-1.5 rounded-xl border border-red-100 truncate">
+                  <XCircle className="h-3.5 w-3.5 text-red-500 shrink-0" /> Rejected
+                </span>
+                <Button
+                  onClick={() => handleReview("FACE", "Approved")}
+                  disabled={isReviewing}
+                  className="h-9 px-3 rounded-xl bg-[#155D5F] hover:bg-[#0F4A4C] text-white text-xs font-bold cursor-pointer"
+                >
+                  Re-Approve Face
+                </Button>
+              </div>
+            ) : (
+              <>
+                <Button
+                  onClick={() => setRejectingDoc("FACE")}
+                  disabled={isReviewing}
+                  variant="outline"
+                  className="flex-1 h-10 rounded-xl border-red-200 text-red-600 hover:bg-red-50 font-bold text-xs gap-1 cursor-pointer"
+                >
+                  <XCircle className="h-3.5 w-3.5" />
+                  Reject
+                </Button>
+                <Button
+                  onClick={() => handleReview("FACE", "Approved")}
+                  disabled={isReviewing}
+                  className="flex-1 h-10 rounded-xl bg-[#155D5F] hover:bg-[#0F4A4C] text-white font-bold text-xs gap-1 shadow-sm cursor-pointer"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Approve Face
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* CARD 2: Government Valid ID Card (Level 2) */}
+        <div className="border border-border/50 rounded-2xl overflow-hidden shadow-sm bg-white flex flex-col h-full w-full min-w-0">
+          <div className="p-5 border-b border-border/30 bg-surface/30 flex items-center justify-between">
+            <div className="space-y-0.5">
+              <h3 className="font-bold text-sm text-dark font-outfit">
+                {resolvedIdType}
+              </h3>
+              <p className="text-[11px] font-medium text-slate/40">Proof of Identification (Level 2)</p>
+            </div>
+            {renderStatusBadge(idStatus)}
+          </div>
+
+          <div className="p-5 flex-1 space-y-4">
+            {/* Verification Badges */}
+            {(ninProviderVerified || idProviderVerified) && (
+              <div className="flex flex-wrap items-center gap-1.5 p-2 bg-[#F2FFFF] border border-[#CCFBF1] rounded-xl">
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 bg-white px-2 py-0.5 rounded-md shadow-xs">
+                  <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                  {resolvedIdType} Verified
+                </span>
+              </div>
+            )}
+
+            {/* Extracted Fields */}
+            <div className="grid grid-cols-2 gap-2.5">
+              <div className="col-span-2 p-2.5 bg-surface/40 border border-border/20 rounded-xl space-y-0.5">
                 <div className="flex items-center gap-1.5 text-slate/50">
                   <User className="h-3 w-3" />
                   <span className="text-[9px] font-bold uppercase tracking-wider">Full Name</span>
@@ -707,16 +809,6 @@ export default function CredentialsVerificationPage({
                 </div>
                 <p className="text-xs font-bold text-dark truncate">
                   {kycProfile.idNumber || user?.nin || "Not Provided"}
-                </p>
-              </div>
-
-              <div className="p-2.5 bg-surface/40 border border-border/20 rounded-xl space-y-0.5">
-                <div className="flex items-center gap-1.5 text-slate/50">
-                  <ShieldCheck className="h-3 w-3" />
-                  <span className="text-[9px] font-bold uppercase tracking-wider">BVN</span>
-                </div>
-                <p className="text-xs font-bold text-dark truncate">
-                  {kycProfile.bvn || user?.bvn || "Not Provided"}
                 </p>
               </div>
 
@@ -747,139 +839,108 @@ export default function CredentialsVerificationPage({
               )}
             </div>
 
-            {/* Document Image & Selfie Comparison */}
-            <div className="grid grid-cols-2 gap-3">
-              {/* Submitted ID Card */}
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-slate/50 uppercase tracking-wider">
-                    {resolvedIdType} Document
-                  </span>
-                  <span className="text-[9px] font-semibold text-slate/40">{ninStatus}</span>
-                </div>
-                {isIdImageWeb ? (
-                  <div
-                    className="relative group h-[130px] rounded-xl border border-border/40 overflow-hidden bg-slate-50 flex items-center justify-center cursor-pointer shadow-inner"
-                    onClick={() => setActiveLightboxImage(idImageUrl)}
-                  >
-                    <img src={idImageUrl!} alt="Uploaded ID" className="w-full h-full object-contain p-1.5" />
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                      <div className="bg-white p-2 rounded-full shadow-md">
-                        <ZoomIn className="h-4 w-4 text-dark" />
+            {/* Submitted ID Document Image */}
+            {(() => {
+              const effectiveIdUrl = idImageUrl || passportUrl;
+              const isEffectiveIdWeb = isWebUrl(effectiveIdUrl);
+              return (
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-slate/50 uppercase tracking-wider">
+                      Submitted {resolvedIdType}
+                    </span>
+                    <span className="text-[9px] font-semibold text-slate/40">{idStatus}</span>
+                  </div>
+                  {isEffectiveIdWeb ? (
+                    isPdfUrl(effectiveIdUrl) ? (
+                      <div className="h-[180px] rounded-xl border border-border/40 bg-slate-50 flex flex-col items-center justify-center p-3 text-center space-y-2 shadow-inner">
+                        <FileText className="h-8 w-8 text-primary" />
+                        <p className="text-xs font-bold text-dark">PDF Document</p>
+                        <a
+                          href={effectiveIdUrl!}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-[11px] font-bold text-primary hover:underline"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" /> View / Download PDF
+                        </a>
                       </div>
-                    </div>
-                  </div>
-                ) : idImageUrl ? (
-                  <div className="h-[130px] rounded-xl border border-amber-200 bg-amber-50/50 flex flex-col items-center justify-center p-2 text-center space-y-1">
-                    <AlertTriangle className="h-5 w-5 text-amber-500" />
-                    <p className="text-[10px] font-bold text-dark">Mobile URI</p>
-                    <span className="text-[8px] font-mono text-slate/40 truncate max-w-[120px]">{idImageUrl}</span>
-                  </div>
-                ) : (
-                  <div className="h-[130px] rounded-xl border-2 border-dashed border-border/60 bg-surface/30 flex flex-col items-center justify-center p-2 text-center space-y-1">
-                    <ImageIcon className="h-5 w-5 text-slate/30" />
-                    <p className="text-[10px] font-semibold text-slate/50">No ID uploaded</p>
-                  </div>
-                )}
-              </div>
-
-              {/* Face Selfie */}
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-slate/50 uppercase tracking-wider">Face Selfie</span>
-                  <span className="text-[9px] font-semibold text-slate/40">{faceStatus}</span>
-                </div>
-                {isSelfieWeb ? (
-                  <div
-                    className="relative group h-[130px] rounded-xl border border-border/40 overflow-hidden bg-slate-50 flex items-center justify-center cursor-pointer shadow-inner"
-                    onClick={() => setActiveLightboxImage(selfieUrl)}
-                  >
-                    <img src={selfieUrl!} alt="Face Selfie" className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                      <div className="bg-white p-2 rounded-full shadow-md">
-                        <ZoomIn className="h-4 w-4 text-dark" />
+                    ) : (
+                      <div
+                        className="relative group h-[180px] rounded-xl border border-border/40 overflow-hidden bg-slate-50 flex items-center justify-center cursor-pointer shadow-inner"
+                        onClick={() => setActiveLightboxImage(effectiveIdUrl)}
+                      >
+                        <img src={effectiveIdUrl!} alt="Uploaded ID" className="w-full h-full object-contain p-1.5" />
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <div className="bg-white p-2.5 rounded-full shadow-md">
+                            <ZoomIn className="h-5 w-5 text-dark" />
+                          </div>
+                        </div>
                       </div>
+                    )
+                  ) : effectiveIdUrl ? (
+                    <div className="h-[180px] rounded-xl border border-amber-200 bg-amber-50/50 flex flex-col items-center justify-center p-2 text-center space-y-1">
+                      <AlertTriangle className="h-5 w-5 text-amber-500" />
+                      <p className="text-[10px] font-bold text-dark">Mobile URI</p>
+                      <span className="text-[8px] font-mono text-slate/40 truncate max-w-[140px]">{effectiveIdUrl}</span>
                     </div>
-                  </div>
-                ) : selfieUrl ? (
-                  <div className="h-[130px] rounded-xl border border-amber-200 bg-amber-50/50 flex flex-col items-center justify-center p-2 text-center space-y-1">
-                    <AlertTriangle className="h-5 w-5 text-amber-500" />
-                    <p className="text-[10px] font-bold text-dark">Mobile URI</p>
-                    <span className="text-[8px] font-mono text-slate/40 truncate max-w-[120px]">{selfieUrl}</span>
-                  </div>
-                ) : (
-                  <div className="h-[130px] rounded-xl border-2 border-dashed border-border/60 bg-surface/30 flex flex-col items-center justify-center p-2 text-center space-y-1">
-                    <Camera className="h-5 w-5 text-slate/30" />
-                    <p className="text-[10px] font-semibold text-slate/50">No selfie captured</p>
-                  </div>
-                )}
-              </div>
-            </div>
+                  ) : (
+                    <div className="h-[180px] rounded-xl border-2 border-dashed border-border/60 bg-surface/30 flex flex-col items-center justify-center p-2 text-center space-y-1">
+                      <ImageIcon className="h-6 w-6 text-slate/30" />
+                      <p className="text-[10px] font-semibold text-slate/50">No ID uploaded</p>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
-            {ninStatus === "Rejected" && ninReason && (
+            {idStatus === "Rejected" && idReason && (
               <div className="bg-red-50 border border-red-100 rounded-xl p-3 flex gap-2 text-red-700 text-xs">
                 <AlertTriangle className="h-4 w-4 shrink-0 text-red-500 mt-0.5" />
                 <div>
                   <p className="font-bold">{resolvedIdType} Rejection Reason:</p>
-                  <p className="italic">{ninReason}</p>
-                </div>
-              </div>
-            )}
-
-            {faceStatus === "Rejected" && faceReason && (
-              <div className="bg-red-50 border border-red-100 rounded-xl p-3 flex gap-2 text-red-700 text-xs">
-                <AlertTriangle className="h-4 w-4 shrink-0 text-red-500 mt-0.5" />
-                <div>
-                  <p className="font-bold">Face Rejection Reason:</p>
-                  <p className="italic">{faceReason}</p>
+                  <p className="italic">{idReason}</p>
                 </div>
               </div>
             )}
           </div>
 
-          <div className="p-4 border-t border-border/30 bg-surface/10 flex flex-col gap-2">
-            {ninStatus === "Not Uploaded" && faceStatus === "Not Uploaded" ? (
-              <div className="flex items-center gap-2 w-full">
-                <Button disabled variant="outline" className="flex-1 h-10 rounded-xl text-xs font-bold text-slate/40 border-border/40 cursor-not-allowed">
-                  Awaiting Level 2 Uploads
-                </Button>
-                <Button
-                  onClick={() => handleReviewLevel2("Rejected", "Incomplete upload or documents missing")}
-                  disabled={isReviewing}
-                  variant="outline"
-                  className="h-10 px-3 rounded-xl border-red-200 text-red-600 hover:bg-red-50 font-bold text-xs cursor-pointer"
-                >
-                  Reject & Reset
-                </Button>
-              </div>
-            ) : isLevel2BothApproved ? (
+          <div className="p-4 border-t border-border/30 bg-surface/10 flex items-center gap-2">
+            {idStatus === "Not Uploaded" ? (
+              <Button disabled variant="outline" className="w-full h-10 rounded-xl text-xs font-bold text-slate/40 border-border/40 cursor-not-allowed">
+                Awaiting {resolvedIdType} Upload
+              </Button>
+            ) : idStatus === "Approved" ? (
               <div className="flex items-center justify-between w-full gap-2">
                 <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1.5 rounded-xl border border-emerald-100 truncate">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> Level 2 Verified
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> {resolvedIdType} Approved
                 </span>
-                <div className="flex items-center gap-1.5">
-                  <Button
-                    onClick={() => setRejectingDoc("NIN")}
-                    disabled={isReviewing}
-                    variant="outline"
-                    className="h-9 px-2.5 rounded-xl border-red-200 text-red-600 hover:bg-red-50 text-[11px] font-bold cursor-pointer"
-                  >
-                    Revoke {resolvedIdType.toLowerCase().includes("passport") ? "Passport" : resolvedIdType.toLowerCase().includes("license") ? "License" : "ID"}
-                  </Button>
-                  <Button
-                    onClick={() => setRejectingDoc("FACE")}
-                    disabled={isReviewing}
-                    variant="outline"
-                    className="h-9 px-2.5 rounded-xl border-red-200 text-red-600 hover:bg-red-50 text-[11px] font-bold cursor-pointer"
-                  >
-                    Revoke Face
-                  </Button>
-                </div>
+                <Button
+                  onClick={() => setRejectingDoc("ID")}
+                  disabled={isReviewing}
+                  variant="outline"
+                  className="h-9 px-3 rounded-xl border-red-200 text-red-600 hover:bg-red-50 text-xs font-bold cursor-pointer"
+                >
+                  Revoke ID
+                </Button>
+              </div>
+            ) : idStatus === "Rejected" ? (
+              <div className="flex items-center justify-between w-full gap-2">
+                <span className="flex items-center gap-1.5 text-xs font-bold text-red-600 bg-red-50 px-2.5 py-1.5 rounded-xl border border-red-100 truncate">
+                  <XCircle className="h-3.5 w-3.5 text-red-500 shrink-0" /> Rejected
+                </span>
+                <Button
+                  onClick={() => handleReview("ID", "Approved")}
+                  disabled={isReviewing}
+                  className="h-9 px-3 rounded-xl bg-[#155D5F] hover:bg-[#0F4A4C] text-white text-xs font-bold cursor-pointer"
+                >
+                  Re-Approve ID
+                </Button>
               </div>
             ) : (
-              <div className="flex items-center gap-2">
+              <>
                 <Button
-                  onClick={() => setRejectingDoc("NIN")}
+                  onClick={() => setRejectingDoc("ID")}
                   disabled={isReviewing}
                   variant="outline"
                   className="flex-1 h-10 rounded-xl border-red-200 text-red-600 hover:bg-red-50 font-bold text-xs gap-1 cursor-pointer"
@@ -888,20 +949,20 @@ export default function CredentialsVerificationPage({
                   Reject
                 </Button>
                 <Button
-                  onClick={() => handleReviewLevel2("Approved")}
+                  onClick={() => handleReview("ID", "Approved")}
                   disabled={isReviewing}
                   className="flex-1 h-10 rounded-xl bg-[#155D5F] hover:bg-[#0F4A4C] text-white font-bold text-xs gap-1 shadow-sm cursor-pointer"
                 >
                   <CheckCircle2 className="h-3.5 w-3.5" />
-                  Approve Level 2
+                  Approve ID
                 </Button>
-              </div>
+              </>
             )}
           </div>
         </div>
 
-        {/* DOCUMENT 2: Utility Bill / Proof of Address (Level 3) */}
-        <div className="border border-border/50 rounded-2xl overflow-hidden shadow-sm bg-white flex flex-col h-full">
+        {/* CARD 3: Proof of Address (Level 3) */}
+        <div className="border border-border/50 rounded-2xl overflow-hidden shadow-sm bg-white flex flex-col h-full w-full min-w-0">
           <div className="p-5 border-b border-border/30 bg-surface/30 flex items-center justify-between">
             <div className="space-y-0.5">
               <h3 className="font-bold text-sm text-dark font-outfit">Proof of Address</h3>
@@ -954,7 +1015,7 @@ export default function CredentialsVerificationPage({
               <span className="text-[10px] font-bold text-slate/50 uppercase tracking-wider">Submitted Document</span>
               {isAddressDocWeb ? (
                 isPdfUrl(addressDocUrl) ? (
-                  <div className="h-[130px] rounded-xl border border-border/40 bg-slate-50 flex flex-col items-center justify-center p-3 text-center space-y-2 shadow-inner">
+                  <div className="h-[180px] rounded-xl border border-border/40 bg-slate-50 flex flex-col items-center justify-center p-3 text-center space-y-2 shadow-inner">
                     <FileText className="h-8 w-8 text-primary" />
                     <p className="text-xs font-bold text-dark">PDF Proof of Address</p>
                     <a
@@ -968,31 +1029,31 @@ export default function CredentialsVerificationPage({
                   </div>
                 ) : (
                   <div
-                    className="relative group h-[130px] rounded-xl border border-border/40 overflow-hidden bg-slate-50 flex items-center justify-center cursor-pointer shadow-inner"
+                    className="relative group h-[180px] rounded-xl border border-border/40 overflow-hidden bg-slate-50 flex items-center justify-center cursor-pointer shadow-inner"
                     onClick={() => setActiveLightboxImage(addressDocUrl)}
                   >
                     <img src={addressDocUrl!} alt="Address Document" className="w-full h-full object-contain p-1.5" />
                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                      <div className="bg-white p-2 rounded-full shadow-md">
-                        <ZoomIn className="h-4 w-4 text-dark" />
+                      <div className="bg-white p-2.5 rounded-full shadow-md">
+                        <ZoomIn className="h-5 w-5 text-dark" />
                       </div>
                     </div>
                   </div>
                 )
               ) : addressDocUrl ? (
-                <div className="h-[130px] rounded-xl border border-amber-200 bg-amber-50/50 flex flex-col items-center justify-center p-2 text-center space-y-1">
+                <div className="h-[180px] rounded-xl border border-amber-200 bg-amber-50/50 flex flex-col items-center justify-center p-2 text-center space-y-1">
                   <AlertTriangle className="h-5 w-5 text-amber-500" />
                   <p className="text-[10px] font-bold text-dark">Mobile URI</p>
                   <span className="text-[8px] font-mono text-slate/40 truncate max-w-[200px]">{addressDocUrl}</span>
                 </div>
               ) : utilityStatus === "Approved" ? (
-                <div className="h-[130px] rounded-xl border border-emerald-200 bg-emerald-50/50 flex flex-col items-center justify-center p-2 text-center space-y-1">
+                <div className="h-[180px] rounded-xl border border-emerald-200 bg-emerald-50/50 flex flex-col items-center justify-center p-2 text-center space-y-1">
                   <CheckCircle2 className="h-6 w-6 text-emerald-600" />
                   <p className="text-xs font-bold text-emerald-800">Verified by Compliance</p>
                   <p className="text-[10px] text-emerald-600 font-medium">No document attachment uploaded</p>
                 </div>
               ) : (
-                <div className="h-[130px] rounded-xl border-2 border-dashed border-border/60 bg-surface/30 flex flex-col items-center justify-center p-2 text-center space-y-1">
+                <div className="h-[180px] rounded-xl border-2 border-dashed border-border/60 bg-surface/30 flex flex-col items-center justify-center p-2 text-center space-y-1">
                   <ImageIcon className="h-6 w-6 text-slate/30" />
                   <p className="text-[10px] font-semibold text-slate/50">No address document uploaded</p>
                 </div>
@@ -1035,7 +1096,7 @@ export default function CredentialsVerificationPage({
                   <XCircle className="h-3.5 w-3.5 text-red-500 shrink-0" /> Rejected
                 </span>
                 <Button
-                  onClick={() => handleReviewLevel3("Approved")}
+                  onClick={() => handleReview("UTILITY", "Approved")}
                   disabled={isReviewing}
                   className="h-9 px-3 rounded-xl bg-[#155D5F] hover:bg-[#0F4A4C] text-white text-xs font-bold cursor-pointer"
                 >
@@ -1054,7 +1115,7 @@ export default function CredentialsVerificationPage({
                   Reject
                 </Button>
                 <Button
-                  onClick={() => handleReviewLevel3("Approved")}
+                  onClick={() => handleReview("UTILITY", "Approved")}
                   disabled={isReviewing}
                   className="flex-1 h-10 rounded-xl bg-[#155D5F] hover:bg-[#0F4A4C] text-white font-bold text-xs gap-1 shadow-sm cursor-pointer"
                 >
@@ -1065,177 +1126,6 @@ export default function CredentialsVerificationPage({
             )}
           </div>
         </div>
-
-        {/* DOCUMENT 3: International Passport (Optional / Legacy) */}
-        {Boolean(passportUrl) && (
-          <div className="border border-border/50 rounded-2xl overflow-hidden shadow-sm bg-white flex flex-col h-full">
-            <div className="p-5 border-b border-border/30 bg-surface/30 flex items-center justify-between">
-              <div className="space-y-0.5">
-                <h3 className="font-bold text-sm text-dark font-outfit">International Passport</h3>
-                <p className="text-[11px] font-medium text-slate/40">Additional Document</p>
-              </div>
-              {renderStatusBadge(passportStatus)}
-            </div>
-
-          <div className="p-5 flex-1 space-y-4">
-            {/* Extracted Fields */}
-            <div className="grid grid-cols-2 gap-2.5">
-              <div className="p-2.5 bg-surface/40 border border-border/20 rounded-xl space-y-0.5">
-                <div className="flex items-center gap-1.5 text-slate/50">
-                  <User className="h-3 w-3" />
-                  <span className="text-[9px] font-bold uppercase tracking-wider">Passport Holder</span>
-                </div>
-                <p className="text-xs font-bold text-dark truncate">
-                  {`${user?.firstName || ""} ${user?.lastName || ""}`.trim() || "Not Provided"}
-                </p>
-              </div>
-
-              <div className="p-2.5 bg-surface/40 border border-border/20 rounded-xl space-y-0.5">
-                <div className="flex items-center gap-1.5 text-slate/50">
-                  <Globe className="h-3 w-3" />
-                  <span className="text-[9px] font-bold uppercase tracking-wider">Nationality</span>
-                </div>
-                <p className="text-xs font-bold text-dark truncate">
-                  {user?.country || "Nigeria"}
-                </p>
-              </div>
-
-              <div className="p-2.5 bg-surface/40 border border-border/20 rounded-xl space-y-0.5">
-                <div className="flex items-center gap-1.5 text-slate/50">
-                  <CreditCard className="h-3 w-3" />
-                  <span className="text-[9px] font-bold uppercase tracking-wider">Document Type</span>
-                </div>
-                <p className="text-xs font-bold text-dark truncate">
-                  Passport Bio Page
-                </p>
-              </div>
-
-              <div className="p-2.5 bg-surface/40 border border-border/20 rounded-xl space-y-0.5">
-                <div className="flex items-center gap-1.5 text-slate/50">
-                  <Calendar className="h-3 w-3" />
-                  <span className="text-[9px] font-bold uppercase tracking-wider">Date of Birth</span>
-                </div>
-                <p className="text-xs font-bold text-dark truncate">
-                  {kycProfile.dateOfBirth
-                    ? format(new Date(kycProfile.dateOfBirth), "MMM dd, yyyy")
-                    : user?.dob
-                    ? format(new Date(user.dob), "MMM dd, yyyy")
-                    : "Not Provided"}
-                </p>
-              </div>
-            </div>
-
-            {/* Document Image or PDF */}
-            <div className="space-y-1">
-              <span className="text-[10px] font-bold text-slate/50 uppercase tracking-wider">Submitted Passport</span>
-              {isPassportWeb ? (
-                isPdfUrl(passportUrl) ? (
-                  <div className="h-[130px] rounded-xl border border-border/40 bg-slate-50 flex flex-col items-center justify-center p-3 text-center space-y-2 shadow-inner">
-                    <FileText className="h-8 w-8 text-primary" />
-                    <p className="text-xs font-bold text-dark">PDF Passport Document</p>
-                    <a
-                      href={passportUrl!}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-[11px] font-bold text-primary hover:underline"
-                    >
-                      <ExternalLink className="h-3.5 w-3.5" /> View / Download PDF
-                    </a>
-                  </div>
-                ) : (
-                  <div
-                    className="relative group h-[130px] rounded-xl border border-border/40 overflow-hidden bg-slate-50 flex items-center justify-center cursor-pointer shadow-inner"
-                    onClick={() => setActiveLightboxImage(passportUrl)}
-                  >
-                    <img src={passportUrl!} alt="Passport Document" className="w-full h-full object-contain p-1.5" />
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                      <div className="bg-white p-2 rounded-full shadow-md">
-                        <ZoomIn className="h-4 w-4 text-dark" />
-                      </div>
-                    </div>
-                  </div>
-                )
-              ) : passportUrl ? (
-                <div className="h-[130px] rounded-xl border border-amber-200 bg-amber-50/50 flex flex-col items-center justify-center p-2 text-center space-y-1">
-                  <AlertTriangle className="h-5 w-5 text-amber-500" />
-                  <p className="text-[10px] font-bold text-dark">Mobile URI</p>
-                  <span className="text-[8px] font-mono text-slate/40 truncate max-w-[200px]">{passportUrl}</span>
-                </div>
-              ) : (
-                <div className="h-[130px] rounded-xl border-2 border-dashed border-border/60 bg-surface/30 flex flex-col items-center justify-center p-2 text-center space-y-1">
-                  <ImageIcon className="h-6 w-6 text-slate/30" />
-                  <p className="text-[10px] font-semibold text-slate/50">No passport uploaded</p>
-                </div>
-              )}
-            </div>
-
-            {passportStatus === "Rejected" && passportReason && (
-              <div className="bg-red-50 border border-red-100 rounded-xl p-3 flex gap-2 text-red-700 text-xs">
-                <AlertTriangle className="h-4 w-4 shrink-0 text-red-500 mt-0.5" />
-                <div>
-                  <p className="font-bold">Rejection Reason:</p>
-                  <p className="italic">{passportReason}</p>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="p-4 border-t border-border/30 bg-surface/10 flex items-center gap-2">
-            {passportStatus === "Not Uploaded" ? (
-              <Button disabled variant="outline" className="w-full h-10 rounded-xl text-xs font-bold text-slate/40 border-border/40 cursor-not-allowed">
-                Awaiting Passport Upload
-              </Button>
-            ) : passportStatus === "Approved" ? (
-              <div className="flex items-center justify-between w-full gap-2">
-                <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1.5 rounded-xl border border-emerald-100 truncate">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" /> Verified
-                </span>
-                <Button
-                  onClick={() => setRejectingDoc("PASSPORT")}
-                  disabled={isReviewing}
-                  variant="outline"
-                  className="h-9 px-3 rounded-xl border-red-200 text-red-600 hover:bg-red-50 text-xs font-bold cursor-pointer"
-                >
-                  Revoke
-                </Button>
-              </div>
-            ) : passportStatus === "Rejected" ? (
-              <div className="flex items-center justify-between w-full gap-2">
-                <span className="flex items-center gap-1.5 text-xs font-bold text-red-600 bg-red-50 px-2.5 py-1.5 rounded-xl border border-red-100 truncate">
-                  <XCircle className="h-3.5 w-3.5 text-red-500 shrink-0" /> Rejected
-                </span>
-                <Button
-                  onClick={() => handleReview("PASSPORT", "Approved")}
-                  disabled={isReviewing}
-                  className="h-9 px-3 rounded-xl bg-[#155D5F] hover:bg-[#0F4A4C] text-white text-xs font-bold cursor-pointer"
-                >
-                  Re-Approve
-                </Button>
-              </div>
-            ) : (
-              <>
-                <Button
-                  onClick={() => setRejectingDoc("PASSPORT")}
-                  disabled={isReviewing}
-                  variant="outline"
-                  className="flex-1 h-10 rounded-xl border-red-200 text-red-600 hover:bg-red-50 font-bold text-xs gap-1 cursor-pointer"
-                >
-                  <XCircle className="h-3.5 w-3.5" />
-                  Reject
-                </Button>
-                <Button
-                  onClick={() => handleReview("PASSPORT", "Approved")}
-                  disabled={isReviewing}
-                  className="flex-1 h-10 rounded-xl bg-[#155D5F] hover:bg-[#0F4A4C] text-white font-bold text-xs gap-1 shadow-sm cursor-pointer"
-                >
-                  <CheckCircle2 className="h-3.5 w-3.5" />
-                  Approve
-                </Button>
-              </>
-            )}
-          </div>
-        </div>
-        )}
       </div>
 
       {/* Lightbox Zoom Modal */}
@@ -1302,7 +1192,7 @@ export default function CredentialsVerificationPage({
                 {rejectingDoc === "OVERALL"
                   ? "Provide explanation for rejecting the user's overall KYC account status."
                   : `Provide explanation for rejecting ${
-                      rejectingDoc === "NIN"
+                      rejectingDoc === "ID" || rejectingDoc === "NIN" || rejectingDoc === "PASSPORT"
                         ? resolvedIdType
                         : rejectingDoc === "FACE"
                         ? "Face Selfie"
