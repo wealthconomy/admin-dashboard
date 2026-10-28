@@ -76,7 +76,7 @@ export default function CredentialsVerificationPage({
   const [faceStatus, setFaceStatus] = useState<string>("Pending");
   const [faceReason, setFaceReason] = useState<string>("");
 
-  const [utilityStatus, setUtilityStatus] = useState<string>("Pending");
+  const [utilityStatus, setUtilityStatus] = useState<string>("Not Uploaded");
   const [utilityReason, setUtilityReason] = useState<string>("");
 
   // Document URLs - checking both Swagger official names and legacy alternatives
@@ -128,7 +128,7 @@ export default function CredentialsVerificationPage({
       const hasId = Boolean(idImageUrl || passportUrl || kycProfile.idNumber || user?.nin);
       const isIdApproved =
         rawIdStatus === "Approved" ||
-        ((user?.kycLevel >= 2 || user?.kycStatus === "VERIFIED") && rawIdStatus !== "Rejected");
+        (hasId && (Number(user?.kycLevel) >= 2 || user?.kycStatus === "VERIFIED") && rawIdStatus !== "Rejected");
 
       setIdStatus(
         isIdApproved
@@ -148,7 +148,7 @@ export default function CredentialsVerificationPage({
       const hasFace = Boolean(selfieUrl || kycProfile.faceVerified);
       const isFaceApproved =
         rawFaceStatus === "Approved" ||
-        ((user?.kycLevel >= 2 || user?.kycStatus === "VERIFIED") && rawFaceStatus !== "Rejected");
+        (hasFace && (Number(user?.kycLevel) >= 2 || user?.kycStatus === "VERIFIED") && rawFaceStatus !== "Rejected");
 
       setFaceStatus(
         isFaceApproved
@@ -163,11 +163,12 @@ export default function CredentialsVerificationPage({
           : ""
       );
 
-      // 3. Proof of Address Status
+      // 3. Proof of Address Status (Level 3)
+      // Must only be Approved if explicitly approved or if an address document exists and user is verified at Level 3
       const hasAddress = Boolean(addressDocUrl);
       const isUtilityApproved =
         kycProfile.utilityStatus === "Approved" ||
-        ((user?.kycLevel >= 3 || user?.kycStatus === "VERIFIED") && kycProfile.utilityStatus !== "Rejected");
+        (hasAddress && Number(user?.kycLevel) >= 3 && kycProfile.utilityStatus !== "Rejected");
 
       setUtilityStatus(
         isUtilityApproved
