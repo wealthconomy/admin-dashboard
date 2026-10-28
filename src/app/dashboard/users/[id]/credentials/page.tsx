@@ -545,7 +545,29 @@ export default function CredentialsVerificationPage({
     }
   };
 
-  const isOverallVerified = user?.kycStatus === "VERIFIED" || user?.kycStatus === "verified";
+  const allReviewedDocsApproved =
+    idStatus === "Approved" &&
+    (faceStatus === "Approved" || faceStatus === "Not Uploaded") &&
+    (utilityStatus === "Approved" || utilityStatus === "Not Uploaded");
+
+  const hasAnyApproved =
+    idStatus === "Approved" ||
+    utilityStatus === "Approved" ||
+    faceStatus === "Approved";
+
+  const isAnyRejected =
+    idStatus === "Rejected" ||
+    faceStatus === "Rejected" ||
+    utilityStatus === "Rejected" ||
+    user?.kycStatus === "REJECTED";
+
+  const isOverallVerified =
+    user?.kycStatus === "VERIFIED" ||
+    user?.kycStatus === "verified" ||
+    user?.kycVerified === true ||
+    (allReviewedDocsApproved && hasAnyApproved && !isAnyRejected) ||
+    (Number(user?.kycLevel) >= 2 && !isAnyRejected && user?.kycStatus !== "REJECTED");
+
   const isLevel2BothApproved = idStatus === "Approved" && faceStatus === "Approved";
 
   return (
@@ -579,12 +601,12 @@ export default function CredentialsVerificationPage({
                   className={`${
                     isOverallVerified
                       ? "bg-emerald-50 text-emerald-600 border-emerald-100"
-                      : user?.kycStatus === "REJECTED"
+                      : isAnyRejected
                       ? "bg-red-50 text-red-600 border-red-100"
                       : "bg-blue-50 text-blue-600 border-blue-100"
                   } border shadow-none px-3 py-1 rounded-full text-[10px] font-bold`}
                 >
-                  KYC {user?.kycStatus || "PENDING"} (Level {user?.kycLevel ?? 1})
+                  KYC {isOverallVerified ? "VERIFIED" : isAnyRejected ? "REJECTED" : (user?.kycStatus || "PENDING")} (Level {user?.kycLevel ?? (isOverallVerified ? 3 : 1)})
                 </Badge>
               </div>
               <p className="text-slate/60 text-xs font-semibold">

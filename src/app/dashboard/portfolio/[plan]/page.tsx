@@ -66,7 +66,8 @@ type PlanUser = {
   goalStartDate?: string;
   planName?: string;
   createdAt?: string;
-  status: "ACTIVE" | "COMPLETED" | "MATURED" | "WITHDRAWN" | "CLOSED" | "TERMINATED";
+  status: "ACTIVE" | "COMPLETED" | "MATURED" | "WITHDRAWN" | "CLOSED" | "TERMINATED" | "DELETED";
+  isDeletedUser?: boolean;
 };
 
 type GroupMember = {
@@ -101,8 +102,16 @@ type WealthGroupData = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function PlanStatusBadge({ status }: { status?: string }) {
+function PlanStatusBadge({ status, isDeletedUser }: { status?: string; isDeletedUser?: boolean }) {
   const s = String(status || "").toUpperCase();
+  if (isDeletedUser || s.includes("DELET") || s === "DELETED") {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+        <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
+        Deleted Account
+      </span>
+    );
+  }
   if (
     s.includes("TERMINAT") ||
     s.includes("CANCEL") ||
@@ -498,6 +507,7 @@ export default function PlanUsersPage() {
   const isWealthFix = planKey === "wealthfix";
   const isWealthGoal = planKey === "wealthgoal";
   const isWealthGroup = planKey === "wealthgroup";
+  const isWealthFlex = planKey === "wealthflex";
 
   // Data Fetching
   const { data: portfoliosRes, isLoading: isLoadingPortfolios, isFetching: isFetchingPortfolios, refetch: refetchPortfolios } = useGetPortfoliosByTypeQuery(
@@ -697,14 +707,23 @@ export default function PlanUsersPage() {
       const planName = u.name || u.savingFor || u.goalName || u.targetName || u.title || u.goalTitle || "—";
 
       const rawStatus = String(u.status || u.planStatus || u.state || "").toUpperCase();
-      let status: "ACTIVE" | "COMPLETED" | "MATURED" | "WITHDRAWN" | "CLOSED" | "TERMINATED" = "ACTIVE";
+      const isKnownDeleted =
+        u.isDeleted === true ||
+        userObj.isDeleted === true ||
+        memberObj.isDeleted === true ||
+        matchedUser.isDeleted === true ||
+        rawStatus.includes("DELET") ||
+        (userMap.size > 0 && !matchedUser.id && !matchedUser._id && !matchedUser.email);
 
-      if (
+      let status: "ACTIVE" | "COMPLETED" | "MATURED" | "WITHDRAWN" | "CLOSED" | "TERMINATED" | "DELETED" = "ACTIVE";
+
+      if (isKnownDeleted) {
+        status = "DELETED";
+      } else if (
         rawStatus.includes("TERMINAT") ||
         rawStatus.includes("CANCEL") ||
         rawStatus.includes("LIQUIDAT") ||
         rawStatus.includes("DISBAND") ||
-        rawStatus.includes("DELET") ||
         rawStatus.includes("INACTIVE") ||
         Boolean(u.isTerminated) ||
         Boolean(u.terminatedAt)
@@ -743,6 +762,7 @@ export default function PlanUsersPage() {
         planName,
         createdAt: goalStartDate,
         status,
+        isDeletedUser: isKnownDeleted,
       };
     });
   }, [portfoliosRes, isWealthGroup, userMap]);
@@ -869,8 +889,14 @@ export default function PlanUsersPage() {
   }, [tribesRes, isWealthGroup]);
 
   // Tab filtering logic
-  const activeUsers = useMemo(() => users.filter((u) => u.status === "ACTIVE"), [users]);
-  const completedUsers = useMemo(() => users.filter((u) => u.status === "COMPLETED" || u.status === "MATURED"), [users]);
+  const activeUsers = useMemo(
+    () => users.filter((u) => u.status === "ACTIVE" && !u.isDeletedUser),
+    [users]
+  );
+  const completedUsers = useMemo(
+    () => users.filter((u) => u.status === "COMPLETED" || u.status === "MATURED"),
+    [users]
+  );
   const terminatedUsers = useMemo(
     () =>
       users.filter(
@@ -881,12 +907,22 @@ export default function PlanUsersPage() {
       ),
     [users]
   );
+  const deletedUsers = useMemo(
+    () => users.filter((u) => u.status === "DELETED" || u.isDeletedUser),
+    [users]
+  );
+
   const displayedUsers = useMemo(() => {
+    if (isWealthFlex) {
+      if (planTab === "active") return activeUsers;
+      if (planTab === "terminated" || planTab === "completed") return deletedUsers;
+      return users;
+    }
     if (planTab === "active") return activeUsers;
     if (planTab === "completed") return completedUsers;
     if (planTab === "terminated") return terminatedUsers;
     return users;
-  }, [planTab, activeUsers, completedUsers, terminatedUsers, users]);
+  }, [isWealthFlex, planTab, activeUsers, completedUsers, terminatedUsers, deletedUsers, users]);
 
   const activeGroups = useMemo(() => groups.filter((g) => !g.isTerminated && !g.isCompleted), [groups]);
   const completedGroups = useMemo(() => groups.filter((g) => g.isCompleted), [groups]);
@@ -899,9 +935,9 @@ export default function PlanUsersPage() {
     return validGroups;
   }, [planTab, activeGroups, completedGroups, terminatedGroups, validGroups]);
 
-  const activeCount = isWealthGroup ? activeGroups.length : activeUsers.length;
+  const activeCount = isWealthGroup ? activeGroups.length : isWealthFlex ? activeUsers.length : activeUsers.length;
   const completedCount = isWealthGroup ? completedGroups.length : completedUsers.length;
-  const terminatedCount = isWealthGroup ? terminatedGroups.length : terminatedUsers.length;
+  const terminatedCount = isWealthGroup ? terminatedGroups.length : isWealthFlex ? deletedUsers.length : terminatedUsers.length;
   const allCount = isWealthGroup ? validGroups.length : users.length;
 
   if (!meta) {
@@ -1120,30 +1156,49 @@ export default function PlanUsersPage() {
             }`}
           >
             <span className="w-2 h-2 rounded-full bg-emerald-500" />
-            {isWealthGroup ? "Active Groups" : "Active Plans"} ({activeCount})
+            {isWealthGroup ? "Active Groups" : isWealthFlex ? "Active Accounts" : "Active Plans"} ({activeCount})
           </button>
-          <button
-            onClick={() => setPlanTab("completed")}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              planTab === "completed"
-                ? "bg-white text-[#155D5F] shadow-sm"
-                : "text-slate/60 hover:text-dark hover:bg-white/50"
-            }`}
-          >
-            <span className="w-2 h-2 rounded-full bg-slate-400" />
-            {isWealthGroup ? "Completed Groups" : "Completed Plans"} ({completedCount})
-          </button>
-          <button
-            onClick={() => setPlanTab("terminated")}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-              planTab === "terminated"
-                ? "bg-white text-red-600 shadow-sm"
-                : "text-slate/60 hover:text-dark hover:bg-white/50"
-            }`}
-          >
-            <span className="w-2 h-2 rounded-full bg-red-500" />
-            {isWealthGroup ? "Terminated Groups" : "Terminated Plans"} ({terminatedCount})
-          </button>
+
+          {!isWealthFlex && (
+            <button
+              onClick={() => setPlanTab("completed")}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                planTab === "completed"
+                  ? "bg-white text-[#155D5F] shadow-sm"
+                  : "text-slate/60 hover:text-dark hover:bg-white/50"
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-slate-400" />
+              {isWealthGroup ? "Completed Groups" : "Completed Plans"} ({completedCount})
+            </button>
+          )}
+
+          {isWealthFlex ? (
+            <button
+              onClick={() => setPlanTab("terminated")}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                planTab === "terminated"
+                  ? "bg-white text-slate-700 shadow-sm"
+                  : "text-slate/60 hover:text-dark hover:bg-white/50"
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-slate-500" />
+              Deleted Accounts ({terminatedCount})
+            </button>
+          ) : (
+            <button
+              onClick={() => setPlanTab("terminated")}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                planTab === "terminated"
+                  ? "bg-white text-red-600 shadow-sm"
+                  : "text-slate/60 hover:text-dark hover:bg-white/50"
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-red-500" />
+              {isWealthGroup ? "Terminated Groups" : "Terminated Plans"} ({terminatedCount})
+            </button>
+          )}
+
           <button
             onClick={() => setPlanTab("all")}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
@@ -1152,14 +1207,20 @@ export default function PlanUsersPage() {
                 : "text-slate/60 hover:text-dark hover:bg-white/50"
             }`}
           >
-            All ({allCount})
+            {isWealthFlex ? "All Accounts" : "All"} ({allCount})
           </button>
         </div>
 
         <div className="text-xs font-semibold text-slate/50">
           Showing {isWealthGroup ? displayedGroups.length : displayedUsers.length}{" "}
-          {planTab === "active" ? "active" : planTab === "completed" ? "completed" : planTab === "terminated" ? "terminated" : "total"}{" "}
-          {isWealthGroup ? "group(s)" : "plan(s)"}
+          {isWealthFlex
+            ? planTab === "active"
+              ? "active account(s)"
+              : planTab === "terminated"
+              ? "deleted account(s)"
+              : "total account(s)"
+            : `${planTab === "active" ? "active" : planTab === "completed" ? "completed" : planTab === "terminated" ? "terminated" : "total"} ${isWealthGroup ? "group(s)" : "plan(s)"}`
+          }
         </div>
       </div>
 
@@ -1237,7 +1298,7 @@ export default function PlanUsersPage() {
                     </td>
 
                     <td className="py-4 px-4">
-                      <PlanStatusBadge status={user.status} />
+                      <PlanStatusBadge status={user.status} isDeletedUser={user.isDeletedUser} />
                     </td>
 
                     <td className="py-4 px-4 text-right">

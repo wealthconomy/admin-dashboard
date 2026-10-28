@@ -29,6 +29,8 @@ import type { ContentType, FileType, LibraryMaterial } from "@/types/library";
 
 // ─── Helpers (same as new/page) ───────────────────────────────────────────────
 
+export const MAX_DOCUMENT_MB = 10;
+
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -39,8 +41,83 @@ function getFileType(file: File): FileType {
   const ext = file.name.split(".").pop()?.toUpperCase();
   if (ext === "PDF") return "PDF";
   if (ext === "DOC" || ext === "DOCX") return "DOC";
-  if (ext === "EPUB") return "EPUB";
-  return "PDF";
+  throw new Error(`Unsupported document file type: ${ext || "unknown"}`);
+}
+
+async function validateDocumentFile(file: File): Promise<{ valid: boolean; error?: string }> {
+  if (file.size > MAX_DOCUMENT_MB * 1024 * 1024) {
+    return {
+      valid: false,
+      error: "This file is larger than 10 MB. Please compress it and try again.",
+    };
+  }
+
+  const nameParts = file.name.split(".");
+  const ext = nameParts.length > 1 ? nameParts.pop()?.toLowerCase() : "";
+
+  if (ext !== "pdf" && ext !== "doc" && ext !== "docx") {
+    return {
+      valid: false,
+      error: "Only PDF or Word (.doc, .docx) files can be uploaded. Please convert your document to PDF or Word and upload it again.",
+    };
+  }
+
+  try {
+    const buffer = await file.slice(0, 8).arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+
+    if (ext === "pdf") {
+      // "%PDF" -> 0x25, 0x50, 0x44, 0x46
+      const isPdf =
+        bytes.length >= 4 &&
+        bytes[0] === 0x25 &&
+        bytes[1] === 0x50 &&
+        bytes[2] === 0x44 &&
+        bytes[3] === 0x46;
+
+      if (!isPdf) {
+        return {
+          valid: false,
+          error: "Only PDF or Word (.doc, .docx) files can be uploaded. Please convert your document to PDF or Word and upload it again.",
+        };
+      }
+    } else if (ext === "docx") {
+      // "PK" -> 0x50, 0x4B
+      const isDocx =
+        bytes.length >= 2 &&
+        bytes[0] === 0x50 &&
+        bytes[1] === 0x4b;
+
+      if (!isDocx) {
+        return {
+          valid: false,
+          error: "Only PDF or Word (.doc, .docx) files can be uploaded. Please convert your document to PDF or Word and upload it again.",
+        };
+      }
+    } else if (ext === "doc") {
+      // D0 CF 11 E0 -> 0xD0, 0xCF, 0x11, 0xE0
+      const isDoc =
+        bytes.length >= 4 &&
+        bytes[0] === 0xd0 &&
+        bytes[1] === 0xcf &&
+        bytes[2] === 0x11 &&
+        bytes[3] === 0xe0;
+
+      if (!isDoc) {
+        return {
+          valid: false,
+          error: "Only PDF or Word (.doc, .docx) files can be uploaded. Please convert your document to PDF or Word and upload it again.",
+        };
+      }
+    }
+  } catch {
+    return {
+      valid: false,
+      error: "Only PDF or Word (.doc, .docx) files can be uploaded. Please convert your document to PDF or Word and upload it again.",
+    };
+  }
+
+  return { valid: true };
 }
 
 function validateYouTubeUrl(url: string): boolean {
@@ -105,6 +182,8 @@ export default function EditLibraryMaterialPage() {
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
 
   const [documentFile, setDocumentFile] = useState<File | null>(null);
+  const [documentError, setDocumentError] = useState("");
+  const [isDocDragging, setIsDocDragging] = useState(false);
   const [isDownloadable, setIsDownloadable] = useState(true);
 
   const [publishToApp, setPublishToApp] = useState(true);
@@ -115,6 +194,10 @@ export default function EditLibraryMaterialPage() {
 
   const isSubmitting = isUpdating || isUploading;
 
+  const isWord = documentFile
+    ? getFileType(documentFile) === "DOC"
+    : existing?.fileType === "DOC";
+
   useEffect(() => {
     if (existing && !isFetching) {
       setContentType(existing.contentType || "document");
@@ -122,7 +205,7 @@ export default function EditLibraryMaterialPage() {
       setDescription(existing.description || "");
       setReadingDuration(existing.readingDuration || "");
       setCoverPreview(existing.image?.replace(/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/, process.env.NEXT_PUBLIC_API_URL || "") || null);
-      setIsDownloadable(existing.isDownloadable ?? true);
+      setIsDownloadable(existing.fileType === "DOC" ? true : (existing.isDownloadable ?? true));
       setPublishToApp(existing.publishToApp ?? true);
       setPublishToWeb(existing.publishToWeb ?? true);
       setYoutubeUrl(existing.youtubeUrl || "");
@@ -136,6 +219,37 @@ export default function EditLibraryMaterialPage() {
     setCoverFile(file);
     setCoverPreview(URL.createObjectURL(file));
   }, []);
+
+  const handleDocumentFile = useCallback(async (file: File) => {
+    const result = await validateDocumentFile(file);
+    if (!result.valid) {
+      setDocumentFile(null);
+      setDocumentError(result.error || "");
+      return;
+    }
+    setDocumentError("");
+    setDocumentFile(file);
+    if (getFileType(file) === "DOC") {
+      setIsDownloadable(true);
+    }
+  }, []);
+
+  const handleDocDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDocDragging(true);
+  }, []);
+
+  const handleDocDragLeave = useCallback(() => setIsDocDragging(false), []);
+
+  const handleDocDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDocDragging(false);
+      const dropped = e.dataTransfer.files[0];
+      if (dropped) handleDocumentFile(dropped);
+    },
+    [handleDocumentFile]
+  );
 
   const handleYoutubeChange = (url: string) => {
     setYoutubeUrl(url);
@@ -154,6 +268,10 @@ export default function EditLibraryMaterialPage() {
     if (!title.trim()) { toast.error("Title is required."); return; }
     if (!description.trim()) { toast.error("Description is required."); return; }
     if (!readingDuration.trim()) { toast.error("Duration is required."); return; }
+    if (contentType === "document" && documentError) {
+      toast.error(documentError);
+      return;
+    }
     if (contentType === "video") {
       if (!youtubeUrl.trim()) { toast.error("YouTube URL is required."); return; }
       if (!validateYouTubeUrl(youtubeUrl)) { toast.error("Invalid YouTube URL."); return; }
@@ -203,7 +321,7 @@ export default function EditLibraryMaterialPage() {
               fileSize: documentFile
                 ? formatFileSize(documentFile.size)
                 : existing?.fileSize,
-              isDownloadable,
+              isDownloadable: isWord ? true : isDownloadable,
             }
           : { youtubeUrl: youtubeUrl.trim() }),
         publishToApp,
@@ -340,14 +458,26 @@ export default function EditLibraryMaterialPage() {
               </FieldLabel>
               <div
                 onClick={() => documentInputRef.current?.click()}
-                className="relative h-52 w-full rounded-xl border-2 border-dashed transition-all flex flex-col items-center justify-center cursor-pointer group border-border/60 hover:border-primary/50 hover:bg-surface/50"
+                onDragOver={handleDocDragOver}
+                onDragLeave={handleDocDragLeave}
+                onDrop={handleDocDrop}
+                className={`relative h-52 w-full rounded-xl border-2 border-dashed transition-all flex flex-col items-center justify-center cursor-pointer group ${
+                  isDocDragging
+                    ? "border-primary bg-primary/5 scale-[1.01]"
+                    : documentFile
+                    ? "border-emerald-300 bg-emerald-50/30"
+                    : "border-border/60 hover:border-primary/50 hover:bg-surface/50"
+                }`}
               >
                 <input
                   type="file"
                   ref={documentInputRef}
-                  accept=".pdf,.doc,.docx,.epub"
+                  accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                   onChange={(e) => {
-                    if (e.target.files?.[0]) setDocumentFile(e.target.files[0]);
+                    if (e.target.files?.[0]) {
+                      handleDocumentFile(e.target.files[0]);
+                      e.target.value = "";
+                    }
                   }}
                   className="hidden"
                 />
@@ -379,6 +509,24 @@ export default function EditLibraryMaterialPage() {
                   </div>
                 )}
               </div>
+
+              {/* Red error under drop zone if validation fails */}
+              {documentError && (
+                <p className="flex items-center gap-1.5 text-[11px] text-red-500 font-medium animate-in slide-in-from-top-1 duration-200">
+                  <AlertCircle className="h-3 w-3 shrink-0" />
+                  {documentError}
+                </p>
+              )}
+
+              {/* Amber notice if existing material is EPUB */}
+              {existing?.fileType === "EPUB" && !documentFile && (
+                <p className="flex items-start gap-1.5 text-xs text-amber-700 font-medium bg-amber-50 border border-amber-200 p-2.5 rounded-xl animate-in slide-in-from-top-1 duration-200">
+                  <AlertCircle className="h-4 w-4 shrink-0 text-amber-500 mt-0.5" />
+                  <span>
+                    This material was uploaded as an EPUB file, which is no longer supported. Upload a PDF or Word file to replace it.
+                  </span>
+                </p>
+              )}
             </div>
           ) : (
             <div className="space-y-2">
@@ -548,14 +696,17 @@ export default function EditLibraryMaterialPage() {
                   <Tooltip text="If disabled, users can only read the material inside the mobile app. The download button will be hidden." />
                 </div>
                 <p className="text-xs font-medium text-slate/60 max-w-[85%] leading-relaxed">
-                  {isDownloadable
+                  {isWord
+                    ? "Word files can't be read inside the app. Users can only download this file."
+                    : isDownloadable
                     ? "Users can read in-app AND download the file."
                     : "File is read-only within the app. Download button is hidden."}
                 </p>
               </div>
               <Switch
                 id="edit-is-downloadable"
-                checked={isDownloadable}
+                checked={isWord ? true : isDownloadable}
+                disabled={isWord}
                 onCheckedChange={setIsDownloadable}
                 className="data-[state=checked]:bg-emerald-500 shrink-0 mt-0.5"
               />
@@ -577,7 +728,7 @@ export default function EditLibraryMaterialPage() {
           <Button
             type="submit"
             id="save-edit"
-            disabled={isSubmitting}
+            disabled={isSubmitting || (contentType === "document" && !!documentError)}
             className="h-11 px-8 rounded-xl bg-[#155D5F] hover:bg-[#155D5F]/90 text-white font-bold shadow-lg shadow-primary/20 gap-2 transition-all active:scale-95 disabled:opacity-60"
           >
             {isSubmitting ? (
