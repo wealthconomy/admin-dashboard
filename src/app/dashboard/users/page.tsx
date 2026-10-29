@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { 
   Search, 
   ChevronDown, 
@@ -31,14 +31,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -53,7 +45,6 @@ import {
   useUnblockUserMutation,
   useLazyDownloadUsersReportQuery
 } from "@/lib/redux/features/usersApi";
-import { useGetTeamQuery } from "@/lib/redux/features/adminApi";
 
 // Helper to extract the safe array from backend response wrapper
 const getSafeArray = (data: any) => {
@@ -65,7 +56,22 @@ const getSafeArray = (data: any) => {
   return [];
 };
 
-const WEALTH_PLANS = ["WealthFix", "WealthFlex", "WealthFlow", "WealthFam", "WealthGoal", "Mixed Wealth"];
+/**
+ * PAGE SIZE: Exactly 20 users per page by default.
+ * In development, you can test pagination with smaller batches by setting
+ * NEXT_PUBLIC_DEBUG_PAGE_SIZE in .env.local or window.__USERS_PAGE_SIZE__ (e.g. to 5).
+ */
+const getPageSize = () => {
+  if (process.env.NODE_ENV !== "production") {
+    if (typeof window !== "undefined" && (window as any).__USERS_PAGE_SIZE__) {
+      return Number((window as any).__USERS_PAGE_SIZE__);
+    }
+    if (process.env.NEXT_PUBLIC_DEBUG_PAGE_SIZE) {
+      return Number(process.env.NEXT_PUBLIC_DEBUG_PAGE_SIZE);
+    }
+  }
+  return 20;
+};
 
 export default function UsersPage() {
   const router = useRouter();
@@ -74,6 +80,9 @@ export default function UsersPage() {
   const [selectedTransactionType, setSelectedTransactionType] = useState("All Types");
   const [sortSavings, setSortSavings] = useState("Default");
   
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = getPageSize();
+
   // Suspension Multi-step State
   const [suspendStep, setSuspendStep] = useState(1); 
   const [suspendUser, setSuspendUser] = useState<any | null>(null);
@@ -86,12 +95,19 @@ export default function UsersPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isStatsExpanded, setIsStatsExpanded] = useState(false);
 
-  // RTK Query hooks
-  const { data: usersData, isLoading, isFetching, refetch } = useGetUsersQuery({
-    q: searchQuery || undefined,
+  // Reset to page 1 whenever search or filter parameters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, selectedStatus, selectedTransactionType, sortSavings]);
+
+  // RTK Query hooks with explicit server-side sort (createdAt desc)
+  const { data: usersResponse, isLoading, isFetching, isError, refetch } = useGetUsersQuery({
+    q: searchQuery.trim() || undefined,
     status: selectedStatus !== "All Status" ? selectedStatus : undefined,
     transactionType: selectedTransactionType !== "All Types" ? selectedTransactionType : undefined,
-    sortBySavings: sortSavings !== "Default" ? sortSavings : undefined,
+    sortBy: "createdAt",
+    sortDir: "desc",
+    limit: 200,
   }, {
     refetchOnMountOrArgChange: true,
   });
@@ -102,11 +118,15 @@ export default function UsersPage() {
   const [unblockUserMutation] = useUnblockUserMutation();
   const [triggerDownload] = useLazyDownloadUsersReportQuery();
 
-  const { data: teamData } = useGetTeamQuery(undefined);
-  const teamEmails = new Set(getSafeArray(teamData).map((t: any) => t.user?.email || t.email));
+  const rawData = usersResponse?.data || usersResponse;
+  const rawItems = Array.isArray(rawData?.items)
+    ? rawData.items
+    : Array.isArray(rawData)
+    ? rawData
+    : [];
 
-  const userList = getSafeArray(usersData)
-    .filter((u: any) => u.role !== "ADMIN" && u.role !== "SUPER_ADMIN" && !teamEmails.has(u.email))
+  const userList = rawItems
+    .filter((u: any) => u.role !== "ADMIN" && u.role !== "SUPER_ADMIN")
     .map((u: any) => {
       // Determine effective status
       let status = "Active";
@@ -135,17 +155,45 @@ export default function UsersPage() {
       };
     });
 
+  // Client filtering
   const processedUsers = userList.filter((u: any) => {
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      const matchName = (u.name || "").toLowerCase().includes(q);
+      const matchEmail = (u.email || "").toLowerCase().includes(q);
+      const matchId = (u.id || "").toLowerCase().includes(q);
+      if (!matchName && !matchEmail && !matchId) return false;
+    }
     if (selectedStatus !== "All Status" && u.status !== selectedStatus) return false;
     if (selectedTransactionType !== "All Types" && u.transactionType !== selectedTransactionType) return false;
     return true;
   });
 
+  // Sort by savings if requested, otherwise keep server createdAt desc order
+  const sortedUsers = [...processedUsers].sort((a: any, b: any) => {
+    if (sortSavings === "Highest to Lowest") {
+      return Number(b.totalSavings || 0) - Number(a.totalSavings || 0);
+    }
+    if (sortSavings === "Lowest to Highest") {
+      return Number(a.totalSavings || 0) - Number(b.totalSavings || 0);
+    }
+    return 0;
+  });
+
+  // Pagination calculations
+  const totalCount = sortedUsers.length;
+  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+  const validCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+  const startIndex = (validCurrentPage - 1) * pageSize;
+  const displayedUsers = sortedUsers.slice(startIndex, startIndex + pageSize);
+
+  const displayFrom = totalCount === 0 ? 0 : startIndex + 1;
+  const displayTo = totalCount === 0 ? 0 : startIndex + displayedUsers.length;
+
   const handleSuspendToggle = async () => {
     if (!suspendUser) return;
     setIsSubmitting(true);
 
-    // Parse duration string to number of days: "7 Days" → 7, "24 Hours" → 1, "Permanent" → 999
     const parseDurationDays = (d: string): number => {
       if (d === "Permanent") return 999;
       if (d === "24 Hours") return 1;
@@ -170,7 +218,6 @@ export default function UsersPage() {
         await unblockUserMutation(suspendUser.id).unwrap();
         toast.success(`${suspendUser.name} has been unblocked.`);
       } else {
-        // Suspended
         await unsuspendUserMutation(suspendUser.id).unwrap();
         toast.success(`${suspendUser.name}'s suspension has been lifted.`);
       }
@@ -218,19 +265,24 @@ export default function UsersPage() {
   const mixedUserCount = userList.filter((u: any) => u.transactionType === "Mixed").length;
 
   return (
-    <div className="bg-white rounded-[20px] p-6 lg:p-10 border border-border/50 shadow-sm w-full max-w-[1140px] min-h-[1000px] mx-auto flex flex-col animate-in fade-in duration-500">
+    <div className="bg-white rounded-[20px] p-6 lg:p-10 border border-border/50 shadow-sm w-full max-w-[1600px] h-auto shrink-0 mx-auto flex flex-col animate-in fade-in duration-500">
       {/* Header */}
       <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-6 mb-8">
-        <h1 className="text-2xl font-bold font-outfit text-dark tracking-tight shrink-0">
-          User Management
-        </h1>
+        <div>
+          <h1 className="text-2xl font-bold font-outfit text-dark tracking-tight shrink-0">
+            User Management
+          </h1>
+          <p className="text-slate/50 text-xs font-semibold mt-1">
+            Sorted by newest registered &bull; Manage accounts, disciplinary actions and KYC credentials
+          </p>
+        </div>
 
         <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto">
           <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate/40" />
             <Input
               type="text"
-              placeholder="Search Name or ID"
+              placeholder="Search Name, Email or ID"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-11 pr-4 h-11 bg-surface border-border/30 rounded-xl text-sm font-medium focus-visible:ring-primary/20 shadow-none transition-all"
@@ -389,13 +441,13 @@ export default function UsersPage() {
                 <CheckCircle2 className="h-4 w-4 text-white" />
               </div>
             </div>
-            <div className="pt-2 border-t border-[#155D5F1A] flex items-center gap-1.5 text-[10px] text-emerald-600 font-bold">
+            <div className="pt-2 border-t border-[#155D5F1A] flex items-center gap-1.5 text-[10px] text-slate/50 font-bold">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
               {totalUserCount > 0 ? ((activeUserCount / totalUserCount) * 100).toFixed(0) : 0}% of total registered
             </div>
           </div>
 
-          {/* Suspended Users */}
+          {/* Suspended / Blocked */}
           <div className="h-[135px] bg-[#F2FFFF] border border-[#155D5F4D] rounded-[20px] p-5 flex flex-col justify-between hover:bg-[#E8FAFA] hover:shadow-md hover:scale-[1.01] transition-all duration-300">
             <div className="flex items-start justify-between">
               <div>
@@ -416,16 +468,16 @@ export default function UsersPage() {
                 <XCircle className="h-4 w-4 text-white" />
               </div>
             </div>
-            <div className="pt-2 border-t border-[#155D5F1A] flex items-center gap-1.5 text-[10px] text-red-500 font-bold">
+            <div className="pt-2 border-t border-[#155D5F1A] flex items-center gap-1.5 text-[10px] text-slate/50 font-bold">
               <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
               {suspendedUserCount} accounts restricted
             </div>
           </div>
 
-          {/* Expanded stats */}
+          {/* Secondary Row (Animated expand) */}
           {isStatsExpanded && (
             <>
-              {/* Interest Type Users */}
+              {/* Interest Type */}
               <div className="h-[135px] bg-[#F2FFFF] border border-[#155D5F4D] rounded-[20px] p-5 flex flex-col justify-between hover:bg-[#E8FAFA] hover:shadow-md hover:scale-[1.01] transition-all duration-300 animate-in fade-in slide-in-from-top-2 duration-300">
                 <div className="flex items-start justify-between">
                   <div>
@@ -447,12 +499,12 @@ export default function UsersPage() {
                   </div>
                 </div>
                 <div className="pt-2 border-t border-[#155D5F1A] flex items-center gap-1.5 text-[10px] text-slate/50 font-bold">
-                  <span className="h-1.5 w-1.5 rounded-full bg-[#0284C7]" />
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#0369A1]" />
                   {totalUserCount > 0 ? ((interestUserCount / totalUserCount) * 100).toFixed(0) : 0}% of platform savers
                 </div>
               </div>
 
-              {/* Impact Wealth Users */}
+              {/* Impact Wealth */}
               <div className="h-[135px] bg-[#F2FFFF] border border-[#155D5F4D] rounded-[20px] p-5 flex flex-col justify-between hover:bg-[#E8FAFA] hover:shadow-md hover:scale-[1.01] transition-all duration-300 animate-in fade-in slide-in-from-top-2 duration-300">
                 <div className="flex items-start justify-between">
                   <div>
@@ -474,12 +526,12 @@ export default function UsersPage() {
                   </div>
                 </div>
                 <div className="pt-2 border-t border-[#155D5F1A] flex items-center gap-1.5 text-[10px] text-slate/50 font-bold">
-                  <span className="h-1.5 w-1.5 rounded-full bg-[#16A34A]" />
+                  <span className="h-1.5 w-1.5 rounded-full bg-[#15803D]" />
                   {totalUserCount > 0 ? ((impactUserCount / totalUserCount) * 100).toFixed(0) : 0}% of platform savers
                 </div>
               </div>
 
-              {/* Mixed Users */}
+              {/* Mixed Plan */}
               <div className="h-[135px] bg-[#F2FFFF] border border-[#155D5F4D] rounded-[20px] p-5 flex flex-col justify-between hover:bg-[#E8FAFA] hover:shadow-md hover:scale-[1.01] transition-all duration-300 animate-in fade-in slide-in-from-top-2 duration-300">
                 <div className="flex items-start justify-between">
                   <div>
@@ -510,55 +562,114 @@ export default function UsersPage() {
         </div>
       </div>
 
-      {/* Table Content */}
-      <div className="border border-border/50 rounded-2xl overflow-hidden shadow-sm bg-white hover:shadow-md transition-shadow duration-300">
-        <div className="overflow-x-auto custom-scrollbar">
-          <Table>
-            <TableHeader className="bg-surface/50">
-              <TableRow className="border-border/50 hover:bg-transparent">
-                <TableHead className="py-3 px-3 text-slate/50 font-bold text-[10px] uppercase tracking-widest text-left whitespace-nowrap">Name</TableHead>
-                <TableHead className="py-3 px-3 text-slate/50 font-bold text-[10px] uppercase tracking-widest whitespace-nowrap">Last Login</TableHead>
-                <TableHead className="py-3 px-3 text-slate/50 font-bold text-[10px] uppercase tracking-widest whitespace-nowrap">Email</TableHead>
-                <TableHead className="py-3 px-3 text-slate/50 font-bold text-[10px] uppercase tracking-widest text-center whitespace-nowrap">Status</TableHead>
-                <TableHead className="py-3 px-3 text-slate/50 font-bold text-[10px] uppercase tracking-widest text-center whitespace-nowrap">KYC</TableHead>
-                <TableHead className="py-3 px-3 text-slate/50 font-bold text-[10px] uppercase tracking-widest text-center whitespace-nowrap">Transaction Type</TableHead>
-                <TableHead className="py-3 px-3 text-slate/50 font-bold text-[10px] uppercase tracking-widest text-center whitespace-nowrap">Total Savings</TableHead>
-                <TableHead className="py-3 px-3 text-slate/50 font-bold text-[10px] uppercase tracking-widest text-center whitespace-nowrap">Total Interest</TableHead>
-                <TableHead className="py-3 px-3 w-[60px]"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {processedUsers.length > 0 ? processedUsers.map((user: any) => (
-                <TableRow
+      {/* Main Table View (Desktop >= 1100px) */}
+      <div className="border border-border/50 rounded-2xl shadow-sm bg-white overflow-hidden hidden min-[1100px]:block">
+        <table className="w-full table-fixed caption-bottom text-sm border-collapse">
+          <thead className="bg-surface/50 border-b border-border/50 sticky top-0 bg-white z-10">
+            <tr className="hover:bg-transparent">
+              <th className="w-[28%] py-3.5 px-4 text-slate/50 font-bold text-[10px] uppercase tracking-widest text-left">
+                User
+              </th>
+              <th className="w-[11%] py-3.5 px-3 text-slate/50 font-bold text-[10px] uppercase tracking-widest text-left">
+                Last Login
+              </th>
+              <th className="w-[9%] py-3.5 px-3 text-slate/50 font-bold text-[10px] uppercase tracking-widest text-center">
+                Status
+              </th>
+              <th className="w-[9%] py-3.5 px-3 text-slate/50 font-bold text-[10px] uppercase tracking-widest text-center">
+                KYC
+              </th>
+              <th className="w-[13%] py-3.5 px-3 text-slate/50 font-bold text-[10px] uppercase tracking-widest text-center">
+                Transaction Type
+              </th>
+              <th className="w-[14%] py-3.5 px-3 text-slate/50 font-bold text-[10px] uppercase tracking-widest text-right">
+                Total Savings
+              </th>
+              <th className="w-[13%] py-3.5 px-3 text-slate/50 font-bold text-[10px] uppercase tracking-widest text-right">
+                Total Interest
+              </th>
+              <th className="w-[3%] py-3.5 pr-4 text-right"></th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border/50">
+            {isLoading ? (
+              Array.from({ length: 5 }).map((_, i) => (
+                <tr key={i} className="animate-pulse">
+                  <td className="py-3 px-4">
+                    <div className="flex items-center gap-3">
+                      <div className="h-9 w-9 rounded-full bg-slate-200" />
+                      <div className="space-y-1.5 flex-1">
+                        <div className="h-3 w-28 bg-slate-200 rounded" />
+                        <div className="h-2.5 w-36 bg-slate-100 rounded" />
+                      </div>
+                    </div>
+                  </td>
+                  <td className="py-3 px-3"><div className="h-3 w-16 bg-slate-200 rounded" /></td>
+                  <td className="py-3 px-3 text-center"><div className="h-5 w-14 bg-slate-200 rounded mx-auto" /></td>
+                  <td className="py-3 px-3 text-center"><div className="h-5 w-14 bg-slate-200 rounded mx-auto" /></td>
+                  <td className="py-3 px-3 text-center"><div className="h-5 w-20 bg-slate-200 rounded mx-auto" /></td>
+                  <td className="py-3 px-3 text-right"><div className="h-5 w-20 bg-slate-200 rounded ml-auto" /></td>
+                  <td className="py-3 px-3 text-right"><div className="h-5 w-20 bg-slate-200 rounded ml-auto" /></td>
+                  <td className="py-3 pr-4 text-right"><div className="h-4 w-4 bg-slate-200 rounded ml-auto" /></td>
+                </tr>
+              ))
+            ) : isError ? (
+              <tr>
+                <td colSpan={8} className="py-16 text-center">
+                  <div className="flex flex-col items-center gap-3">
+                    <AlertCircle className="h-8 w-8 text-red-500" />
+                    <p className="text-sm font-bold text-dark">Failed to load users.</p>
+                    <p className="text-xs text-slate/60">An error occurred while fetching user accounts.</p>
+                    <Button variant="outline" size="sm" onClick={() => refetch()} className="mt-2 text-xs font-bold text-primary">
+                      Retry
+                    </Button>
+                  </div>
+                </td>
+              </tr>
+            ) : displayedUsers.length > 0 ? (
+              displayedUsers.map((user: any) => (
+                <tr
                   key={user.id}
-                  className="group border-border/50 hover:bg-surface/30 transition-all duration-200"
+                  className="group hover:bg-surface/40 transition-colors"
                 >
-                  <TableCell className="py-3 px-3 whitespace-nowrap">
-                    <div className="flex items-center gap-3 cursor-pointer" onClick={() => router.push(`/dashboard/users/${user.id}`)}>
-                      <Avatar className="h-8 w-8 border-2 border-white shadow-sm ring-1 ring-border/5 group-hover:scale-105 transition-transform">
+                  {/* User Column (Avatar + Name + Email) */}
+                  <td className="py-3 px-4">
+                    <div 
+                      className="flex items-center gap-3 cursor-pointer min-w-0" 
+                      onClick={() => router.push(`/dashboard/users/${user.id}`)}
+                    >
+                      <Avatar className="h-9 w-9 border-2 border-white shadow-sm ring-1 ring-border/10 shrink-0 group-hover:scale-105 transition-transform">
                         <AvatarImage src={user.imageUrl || ""} />
                         <AvatarFallback className="bg-primary/5 text-primary font-bold text-xs uppercase">
                           {user.name?.charAt(0) || "U"}
                         </AvatarFallback>
                       </Avatar>
-                      <div className="flex flex-col">
-                        <span className="font-bold text-[12px] text-dark group-hover:text-primary transition-colors">
+                      <div className="flex flex-col min-w-0 truncate">
+                        <span 
+                          className="font-bold text-[13px] text-dark group-hover:text-primary transition-colors truncate" 
+                          title={user.name}
+                        >
                           {user.name}
+                        </span>
+                        <span 
+                          className="text-[11px] font-medium text-slate/60 hover:text-primary hover:underline transition-colors truncate" 
+                          title={user.email}
+                        >
+                          {user.email}
                         </span>
                       </div>
                     </div>
-                  </TableCell>
-                  <TableCell className="py-3 px-3 whitespace-nowrap">
-                    <span className="text-slate/70 text-[11px] font-medium leading-relaxed">
+                  </td>
+
+                  {/* Last Login */}
+                  <td className="py-3 px-3">
+                    <span className="text-slate/70 text-[12px] font-medium whitespace-nowrap">
                       {user.lastLoginDate ? new Date(user.lastLoginDate).toLocaleDateString() : user.lastLogin || "Never"}
                     </span>
-                  </TableCell>
-                  <TableCell className="py-3 px-3 whitespace-nowrap">
-                    <a href={`mailto:${user.email}`} className="text-primary hover:underline text-[11px] font-bold">
-                      {user.email}
-                    </a>
-                  </TableCell>
-                  <TableCell className="py-3 px-3 whitespace-nowrap">
+                  </td>
+
+                  {/* Status */}
+                  <td className="py-3 px-3 text-center">
                     <div className="flex justify-center">
                       <Badge className={`${
                         user.status === "Active" 
@@ -577,8 +688,10 @@ export default function UsersPage() {
                         {user.status}
                       </Badge>
                     </div>
-                  </TableCell>
-                  <TableCell className="py-3 px-3 whitespace-nowrap text-center">
+                  </td>
+
+                  {/* KYC */}
+                  <td className="py-3 px-3 text-center">
                     <span
                       onClick={() => router.push(`/dashboard/users/${user.id}/credentials`)}
                       className="cursor-pointer inline-block"
@@ -602,25 +715,37 @@ export default function UsersPage() {
                         </Badge>
                       )}
                     </span>
-                  </TableCell>
-                  <TableCell className="py-3 px-3 text-center whitespace-nowrap">
-                     <span className={`text-[10px] font-bold px-2.5 py-1 rounded-lg border ${
-                       user.transactionType === 'Interest' 
-                         ? 'bg-[#E0F2FE] text-[#0369A1] border-[#BAE6FD]' 
-                         : user.transactionType === 'Impact Wealth' 
-                         ? 'bg-[#DCFCE7] text-[#15803D] border-[#BBF7D0]' 
-                         : 'bg-[#F3E8FF] text-[#7E22CE] border-[#E9D5FF]'
-                     }`}>
-                        {user.transactionType || "Mixed"}
-                     </span>
-                  </TableCell>
-                  <TableCell className="py-3 px-3 text-center whitespace-nowrap">
-                     <span className="text-[11px] font-bold text-dark px-2 py-1 bg-surface/50 rounded-lg">₦{(Number(user.totalSavings || 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                  </TableCell>
-                  <TableCell className="py-3 px-3 text-center whitespace-nowrap">
-                     <span className="text-[11px] font-bold text-emerald-600 px-2 py-1 bg-emerald-50 border border-emerald-100 rounded-lg">+₦{(Number(user.totalInterest || 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                  </TableCell>
-                  <TableCell className="py-3 px-3 text-right whitespace-nowrap">
+                  </td>
+
+                  {/* Transaction Type */}
+                  <td className="py-3 px-3 text-center">
+                    <span className={`text-[10px] font-bold px-2.5 py-1 rounded-lg border inline-block ${
+                      user.transactionType === 'Interest' 
+                        ? 'bg-[#E0F2FE] text-[#0369A1] border-[#BAE6FD]' 
+                        : user.transactionType === 'Impact Wealth' 
+                        ? 'bg-[#DCFCE7] text-[#15803D] border-[#BBF7D0]' 
+                        : 'bg-[#F3E8FF] text-[#7E22CE] border-[#E9D5FF]'
+                    }`}>
+                      {user.transactionType || "Mixed"}
+                    </span>
+                  </td>
+
+                  {/* Total Savings */}
+                  <td className="py-3 px-3 text-right">
+                    <span className="text-[12px] font-bold text-dark px-2.5 py-1 bg-surface/50 rounded-lg tabular-nums inline-block whitespace-nowrap">
+                      ₦{(Number(user.totalSavings || 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </span>
+                  </td>
+
+                  {/* Total Interest */}
+                  <td className="py-3 px-3 text-right">
+                    <span className="text-[12px] font-bold text-emerald-600 px-2.5 py-1 bg-emerald-50 border border-emerald-100 rounded-lg tabular-nums inline-block whitespace-nowrap">
+                      +₦{(Number(user.totalInterest || 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </span>
+                  </td>
+
+                  {/* Row Actions Menu */}
+                  <td className="py-3 pr-4 text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button variant="ghost" className="h-8 w-8 p-0 hover:bg-surface rounded-full transition-all active:scale-90">
@@ -629,60 +754,256 @@ export default function UsersPage() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-52 rounded-[16px] border-border/50 shadow-xl p-1 animate-in slide-in-from-top-1 duration-200">
                         <DropdownMenuItem onClick={() => router.push(`/dashboard/users/${user.id}`)} className="py-2.5 px-4 text-xs font-bold focus:bg-surface text-dark cursor-pointer rounded-xl gap-2">
-                           <Eye className="h-3.5 w-3.5 text-primary" />
-                           View Account
+                          <Eye className="h-3.5 w-3.5 text-primary" />
+                          View Account
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => router.push(`/dashboard/users/${user.id}/credentials`)} className="py-2.5 px-4 text-xs font-bold focus:bg-surface text-dark cursor-pointer rounded-xl gap-2">
-                           <FileText className="h-3.5 w-3.5 text-blue-500" />
-                           KYC Credentials
+                          <FileText className="h-3.5 w-3.5 text-blue-500" />
+                          KYC Credentials
                         </DropdownMenuItem>
                         {user.status === "Active" ? (
                           <>
                             <DropdownMenuItem onClick={() => { setSuspendUser(user); setModalMode("suspend"); }} className="py-2.5 px-4 text-xs font-bold text-orange-500 focus:bg-orange-50 cursor-pointer rounded-xl gap-2">
-                               <Ban className="h-3.5 w-3.5" />
-                               <span className="truncate">Suspend User</span>
+                              <Ban className="h-3.5 w-3.5" />
+                              <span className="truncate">Suspend User</span>
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => { setSuspendUser(user); setModalMode("block"); }} className="py-2.5 px-4 text-xs font-bold text-red-700 focus:bg-red-100 cursor-pointer rounded-xl gap-2">
-                               <Lock className="h-3.5 w-3.5" />
-                               Block User
+                              <Lock className="h-3.5 w-3.5" />
+                              Block User
                             </DropdownMenuItem>
                           </>
                         ) : user.status === "Suspended" ? (
                           <DropdownMenuItem onClick={() => { setSuspendUser(user); setModalMode("suspend"); }} className="py-2.5 px-4 text-xs font-bold text-emerald-600 focus:bg-emerald-50 cursor-pointer rounded-xl gap-2">
-                             <ShieldAlert className="h-3.5 w-3.5" />
-                             Unsuspend User
+                            <ShieldAlert className="h-3.5 w-3.5" />
+                            Unsuspend User
                           </DropdownMenuItem>
                         ) : (
                           <DropdownMenuItem onClick={() => { setSuspendUser(user); setModalMode("block"); }} className="py-2.5 px-4 text-xs font-bold text-emerald-600 focus:bg-emerald-50 cursor-pointer rounded-xl gap-2">
-                             <ShieldAlert className="h-3.5 w-3.5" />
-                             Unblock User
+                            <ShieldAlert className="h-3.5 w-3.5" />
+                            Unblock User
                           </DropdownMenuItem>
                         )}
                       </DropdownMenuContent>
                     </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              )) : (
-                <TableRow>
-                  <TableCell colSpan={8} className="py-20 text-center">
-                    <div className="flex flex-col items-center gap-2">
-                      {isLoading || isFetching ? (
-                        <>
-                          <Loader2 className="h-8 w-8 text-primary animate-spin" />
-                          <p className="text-sm font-medium text-slate/60">Loading users...</p>
-                        </>
-                      ) : (
-                        <>
-                          <Search className="h-8 w-8 text-slate/20" />
-                          <p className="text-sm font-medium text-slate/40">No users found matching your criteria.</p>
-                        </>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={8} className="py-20 text-center">
+                  <div className="flex flex-col items-center gap-2">
+                    <Search className="h-8 w-8 text-slate/20" />
+                    <p className="text-sm font-semibold text-slate/50">No users match your search or filter criteria.</p>
+                  </div>
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Narrow Screen (< 1100px) Responsive Cards View */}
+      <div className="block min-[1100px]:hidden space-y-3">
+        {isLoading ? (
+          Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="p-4 bg-white border border-border/50 rounded-2xl shadow-sm animate-pulse space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-slate-200" />
+                <div className="space-y-1.5 flex-1">
+                  <div className="h-3 w-32 bg-slate-200 rounded" />
+                  <div className="h-2.5 w-44 bg-slate-100 rounded" />
+                </div>
+              </div>
+            </div>
+          ))
+        ) : isError ? (
+          <div className="p-8 text-center bg-white border border-border/50 rounded-2xl">
+            <AlertCircle className="h-8 w-8 text-red-500 mx-auto mb-2" />
+            <p className="text-sm font-bold text-dark">Failed to load users.</p>
+            <Button variant="outline" size="sm" onClick={() => refetch()} className="mt-3 text-xs font-bold text-primary">
+              Retry
+            </Button>
+          </div>
+        ) : displayedUsers.length > 0 ? (
+          displayedUsers.map((user: any) => (
+            <div 
+              key={user.id} 
+              className="p-4 bg-white border border-border/50 rounded-2xl shadow-sm hover:shadow transition-shadow"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div 
+                  className="flex items-center gap-3 min-w-0 cursor-pointer flex-1" 
+                  onClick={() => router.push(`/dashboard/users/${user.id}`)}
+                >
+                  <Avatar className="h-10 w-10 border-2 border-white shadow-sm ring-1 ring-border/10 shrink-0">
+                    <AvatarImage src={user.imageUrl || ""} />
+                    <AvatarFallback className="bg-primary/5 text-primary font-bold text-xs uppercase">
+                      {user.name?.charAt(0) || "U"}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex flex-col min-w-0 truncate">
+                    <span className="font-bold text-sm text-dark truncate" title={user.name}>{user.name}</span>
+                    <span className="text-xs text-slate/60 truncate" title={user.email}>{user.email}</span>
+                  </div>
+                </div>
+
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" className="h-8 w-8 p-0 hover:bg-surface rounded-full shrink-0">
+                      <MoreVertical className="h-4 w-4 text-slate/40" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-52 rounded-[16px] border-border/50 shadow-xl p-1">
+                    <DropdownMenuItem onClick={() => router.push(`/dashboard/users/${user.id}`)} className="py-2 px-3 text-xs font-bold">
+                      <Eye className="h-3.5 w-3.5 text-primary mr-2" /> View Account
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => router.push(`/dashboard/users/${user.id}/credentials`)} className="py-2 px-3 text-xs font-bold">
+                      <FileText className="h-3.5 w-3.5 text-blue-500 mr-2" /> KYC Credentials
+                    </DropdownMenuItem>
+                    {user.status === "Active" ? (
+                      <>
+                        <DropdownMenuItem onClick={() => { setSuspendUser(user); setModalMode("suspend"); }} className="py-2 px-3 text-xs font-bold text-orange-500">
+                          <Ban className="h-3.5 w-3.5 mr-2" /> Suspend User
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => { setSuspendUser(user); setModalMode("block"); }} className="py-2 px-3 text-xs font-bold text-red-700">
+                          <Lock className="h-3.5 w-3.5 mr-2" /> Block User
+                        </DropdownMenuItem>
+                      </>
+                    ) : user.status === "Suspended" ? (
+                      <DropdownMenuItem onClick={() => { setSuspendUser(user); setModalMode("suspend"); }} className="py-2 px-3 text-xs font-bold text-emerald-600">
+                        <ShieldAlert className="h-3.5 w-3.5 mr-2" /> Unsuspend User
+                      </DropdownMenuItem>
+                    ) : (
+                      <DropdownMenuItem onClick={() => { setSuspendUser(user); setModalMode("block"); }} className="py-2 px-3 text-xs font-bold text-emerald-600">
+                        <ShieldAlert className="h-3.5 w-3.5 mr-2" /> Unblock User
+                      </DropdownMenuItem>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-3 mt-3 border-t border-border/30 text-xs">
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-slate/50 block">Last Login</span>
+                  <span className="text-slate/70 font-medium text-xs">
+                    {user.lastLoginDate ? new Date(user.lastLoginDate).toLocaleDateString() : user.lastLogin || "Never"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-slate/50 block">Status</span>
+                  <Badge className={`${
+                    user.status === "Active" 
+                      ? "bg-emerald-50 text-emerald-600 border-emerald-100/50" 
+                      : user.status === "Blocked"
+                      ? "bg-slate-100 text-slate-700 border-slate-200"
+                      : "bg-red-50 text-red-500 border-red-100/50"
+                  } px-2 py-0.5 rounded-lg gap-1 font-bold text-[9px] items-center border shadow-none mt-0.5`}>
+                    <div className={`w-1 h-1 rounded-full ${
+                      user.status === "Active" ? "bg-emerald-500" : user.status === "Blocked" ? "bg-slate-500" : "bg-red-500"
+                    }`} />
+                    {user.status}
+                  </Badge>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-slate/50 block">KYC</span>
+                  <span onClick={() => router.push(`/dashboard/users/${user.id}/credentials`)} className="cursor-pointer">
+                    {user.kycStatus === "VERIFIED" || user.kycStatus === "verified" || user.kycVerified ? (
+                      <Badge className="bg-emerald-50 text-emerald-600 border border-emerald-100 px-2 py-0.5 rounded-lg text-[9px] font-bold mt-0.5">
+                        Level {user.kycLevel || 2}
+                      </Badge>
+                    ) : user.kycStatus === "REJECTED" ? (
+                      <Badge className="bg-red-50 text-red-600 border border-red-100 px-2 py-0.5 rounded-lg text-[9px] font-bold mt-0.5">
+                        Rejected
+                      </Badge>
+                    ) : (
+                      <Badge className="bg-amber-50 text-amber-600 border border-amber-100 px-2 py-0.5 rounded-lg text-[9px] font-bold mt-0.5">
+                        Pending
+                      </Badge>
+                    )}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-slate/50 block">Type</span>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded border inline-block mt-0.5 ${
+                    user.transactionType === 'Interest' 
+                      ? 'bg-[#E0F2FE] text-[#0369A1] border-[#BAE6FD]' 
+                      : user.transactionType === 'Impact Wealth' 
+                      ? 'bg-[#DCFCE7] text-[#15803D] border-[#BBF7D0]' 
+                      : 'bg-[#F3E8FF] text-[#7E22CE] border-[#E9D5FF]'
+                  }`}>
+                    {user.transactionType || "Mixed"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-slate/50 block">Total Savings</span>
+                  <span className="font-bold text-dark tabular-nums text-xs">
+                    ₦{(Number(user.totalSavings || 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-slate/50 block">Total Interest</span>
+                  <span className="font-bold text-emerald-600 tabular-nums text-xs">
+                    +₦{(Number(user.totalInterest || 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              </div>
+            </div>
+          ))
+        ) : (
+          <div className="p-8 text-center bg-white border border-border/50 rounded-2xl">
+            <Search className="h-8 w-8 text-slate/20 mx-auto mb-2" />
+            <p className="text-sm font-semibold text-slate/50">No users match your criteria.</p>
+          </div>
+        )}
+      </div>
+
+      {/* Pagination Footer */}
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-3 text-xs font-bold text-slate/50 pt-6 px-1 border-t border-border/30 mt-4">
+        <span>
+          Showing {displayFrom}-{displayTo} of {totalCount} &bull; Page {validCurrentPage} of {totalPages}
+        </span>
+        <div className="flex items-center gap-2">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => {
+              if (validCurrentPage <= 1) return;
+              setCurrentPage(p => Math.max(1, p - 1));
+              const main = document.getElementById('main-scroll-container');
+              if (main) main.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+            disabled={validCurrentPage <= 1 || isFetching}
+            className={`h-8 px-3 text-[11px] font-bold rounded-lg ${
+              validCurrentPage <= 1
+                ? 'text-slate/40 border-slate-200 cursor-not-allowed opacity-50'
+                : 'text-dark border-slate-200 hover:bg-[#E8F3F3] hover:text-[#155D5F]'
+            }`}
+          >
+            Prev
+          </Button>
+
+          <span className="px-2 text-xs font-bold text-dark">
+            Page {validCurrentPage} of {totalPages}
+          </span>
+
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => {
+              if (validCurrentPage >= totalPages) return;
+              setCurrentPage(p => Math.min(totalPages, p + 1));
+              const main = document.getElementById('main-scroll-container');
+              if (main) main.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+            disabled={validCurrentPage >= totalPages || isFetching}
+            className={`h-8 px-3 text-[11px] font-bold rounded-lg ${
+              validCurrentPage >= totalPages
+                ? 'text-slate/40 border-slate-200 cursor-not-allowed opacity-50'
+                : 'text-dark border-slate-200 hover:bg-[#E8F3F3] hover:text-[#155D5F]'
+            }`}
+          >
+            Next
+          </Button>
         </div>
       </div>
 
@@ -693,159 +1014,142 @@ export default function UsersPage() {
           <div className="relative bg-white rounded-[24px] w-full max-w-[460px] shadow-2xl border border-border/50 overflow-hidden animate-in zoom-in-95 duration-500">
             
             {suspendStep === 1 ? (
-              /* Step 1: Input Reason and Duration */
               <div className="p-8 space-y-6">
                 <div className="flex items-center justify-between">
-                   <div className={`h-10 w-10 rounded-xl flex items-center justify-center ${suspendUser.status === 'Active' ? 'bg-red-50' : 'bg-emerald-50'}`}>
-                      <ShieldAlert className={`h-5 w-5 ${suspendUser.status === 'Active' ? 'text-red-500' : 'text-emerald-600'}`} />
-                   </div>
-                   <button onClick={closeSuspendModal} className="h-9 w-9 rounded-full flex items-center justify-center bg-surface hover:bg-surface/80 transition-colors">
-                      <X className="h-4.5 w-4.5 text-slate/60" />
-                   </button>
+                  <div className={`h-12 w-12 rounded-2xl ${modalMode === 'block' ? 'bg-red-50 text-red-600' : 'bg-orange-50 text-orange-500'} flex items-center justify-center`}>
+                    {modalMode === 'block' ? <Lock className="h-6 w-6" /> : <Ban className="h-6 w-6" />}
+                  </div>
+                  <button 
+                    onClick={closeSuspendModal}
+                    className="h-8 w-8 rounded-full hover:bg-surface flex items-center justify-center text-slate/40 hover:text-dark transition-colors"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
                 </div>
 
                 <div className="space-y-1">
                   <h3 className="text-xl font-bold font-outfit text-dark tracking-tight">
-                    {suspendUser.status === 'Active' 
-                      ? (modalMode === "block" ? 'Block User' : 'Suspend User') 
-                      : 'Reactivate User'}
+                    {modalMode === 'block' ? 'Block' : 'Suspend'} {suspendUser.name}?
                   </h3>
-                  <p className="text-sm font-medium text-slate/50 leading-relaxed">
-                    Account management for <span className="text-dark font-bold">{suspendUser.name}</span>.
+                  <p className="text-xs font-medium text-slate/60 leading-relaxed">
+                    {modalMode === 'block' 
+                      ? 'Blocking will immediately restrict user access permanently until manually unblocked.'
+                      : 'Temporary suspension will prevent the user from executing transactions or managing plans.'}
                   </p>
                 </div>
 
-                <div className="space-y-5">
-                   <div className="space-y-2">
-                      <label className="text-[12px] font-bold text-dark/80 ml-1">Reason for {suspendUser.status === 'Active' ? (modalMode === 'block' ? 'Blocking' : 'Suspension') : 'Activation'}</label>
-                      <textarea 
-                        className="w-full min-h-[90px] p-4 bg-surface/50 border border-border/30 rounded-xl font-medium text-sm focus:ring-1 focus:ring-primary/20 outline-none transition-all resize-none shadow-inner"
-                        placeholder="Type the reason here..."
-                        value={suspendData.reason}
-                        onChange={(e) => setSuspendData({...suspendData, reason: e.target.value})}
-                      />
-                   </div>
+                <div className="space-y-4 pt-2">
+                  {modalMode === 'suspend' && (
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold text-dark/70">Suspension Duration</label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {["24 Hours", "7 Days", "30 Days"].map((dur) => (
+                          <button
+                            key={dur}
+                            onClick={() => setSuspendData({ ...suspendData, duration: dur })}
+                            className={`py-2 px-3 text-xs font-bold rounded-xl border transition-all ${
+                              suspendData.duration === dur 
+                                ? 'bg-primary text-white border-primary shadow-sm' 
+                                : 'bg-surface/50 border-border/40 text-slate hover:bg-surface'
+                            }`}
+                          >
+                            {dur}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
-                   {suspendUser.status === 'Active' && modalMode === "suspend" && (
-                     <div className="space-y-2">
-                        <label className="text-[12px] font-bold text-dark/80 ml-1">Duration</label>
-                        <div className="grid grid-cols-2 gap-2">
-                           {["24 Hours", "7 Days", "30 Days", "Permanent"].map(d => (
-                              <button 
-                                key={d}
-                                type="button"
-                                onClick={() => setSuspendData({...suspendData, duration: d})}
-                                className={`h-11 rounded-lg text-xs font-bold border transition-all flex items-center justify-center gap-2 ${suspendData.duration === d ? 'bg-primary/5 border-primary text-primary shadow-sm' : 'bg-surface/50 border-border/30 text-slate hover:border-slate/30'}`}
-                              >
-                                 <Calendar className="h-3 w-3" />
-                                 {d}
-                              </button>
-                           ))}
-                        </div>
-                     </div>
-                   )}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-dark/70">Reason for {modalMode === 'block' ? 'Block' : 'Suspension'}</label>
+                    <textarea 
+                      placeholder="Specify disciplinary reason (visible to user)..."
+                      value={suspendData.reason}
+                      onChange={(e) => setSuspendData({ ...suspendData, reason: e.target.value })}
+                      className="w-full min-h-[90px] p-4 bg-surface/50 border border-border/30 rounded-xl font-medium text-sm focus:ring-1 focus:ring-primary/20 outline-none transition-all resize-none shadow-inner"
+                    />
+                  </div>
                 </div>
 
-                <Button 
-                  onClick={() => { if(suspendData.reason) setSuspendStep(2); else toast.error("Please provide a reason") }}
-                  className={`w-full h-12 rounded-xl font-bold shadow-lg transition-all active:scale-95 ${suspendUser.status === 'Active' ? (modalMode === 'block' ? 'bg-[#991B1B] hover:bg-[#7F1D1D] text-white shadow-red-900/10' : 'bg-[#D93F3F] hover:bg-[#C23535] text-white shadow-red-900/10') : 'bg-[#155D5F] hover:bg-[#0F4A4C] text-white shadow-primary/10'}`}
-                >
-                  Proceed to Review
-                </Button>
+                <div className="flex items-center gap-3 pt-2">
+                  <Button 
+                    variant="outline" 
+                    onClick={closeSuspendModal}
+                    className="flex-1 h-12 rounded-xl font-bold text-slate border-border/50 text-xs"
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    onClick={() => setSuspendStep(2)}
+                    disabled={!suspendData.reason.trim()}
+                    className={`flex-1 h-12 rounded-xl font-bold text-white text-xs ${
+                      modalMode === 'block' ? 'bg-red-600 hover:bg-red-700' : 'bg-orange-500 hover:bg-orange-600'
+                    }`}
+                  >
+                    Continue
+                  </Button>
+                </div>
               </div>
             ) : (
-              /* Step 2: Confirmation Summary */
-              <div className="p-8 space-y-6 animate-in slide-in-from-right-5 duration-300">
-                 <div className="flex items-center justify-between">
-                    <button onClick={() => setSuspendStep(1)} className="text-[12px] font-bold text-primary hover:underline transition-all">← Edit Details</button>
-                    <div className="h-9 w-9 rounded-full flex items-center justify-center bg-surface">
-                       <AlertCircle className="h-4.5 w-4.5 text-slate/40" />
+              <div className="p-8 space-y-6 text-center">
+                <div className={`h-16 w-16 rounded-full ${modalMode === 'block' ? 'bg-red-100 text-red-600' : 'bg-orange-100 text-orange-500'} flex items-center justify-center mx-auto ring-8 ${modalMode === 'block' ? 'ring-red-50' : 'ring-orange-50'}`}>
+                  <ShieldAlert className="h-8 w-8" />
+                </div>
+
+                <div className="space-y-2">
+                  <h3 className="text-xl font-bold font-outfit text-dark tracking-tight">
+                    Confirm Action
+                  </h3>
+                  <p className="text-xs font-medium text-slate/60 leading-relaxed max-w-[320px] mx-auto">
+                    Are you sure you want to enforce this restriction on <span className="font-bold text-dark">{suspendUser.name}</span>?
+                  </p>
+                </div>
+
+                <div className="p-4 bg-surface rounded-2xl border border-border/40 text-left space-y-2">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate/50 font-medium">Target User:</span>
+                    <span className="font-bold text-dark">{suspendUser.email}</span>
+                  </div>
+                  {modalMode === 'suspend' && (
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate/50 font-medium">Duration:</span>
+                      <span className="font-bold text-primary">{suspendData.duration}</span>
                     </div>
-                 </div>
+                  )}
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate/50 font-medium">Reason:</span>
+                    <span className="font-bold text-dark truncate max-w-[200px]">{suspendData.reason}</span>
+                  </div>
+                </div>
 
-                 <div className="space-y-1">
-                    <h3 className="text-xl font-bold font-outfit text-dark tracking-tight">Confirm Action</h3>
-                    <p className="text-sm font-medium text-slate/50">Final check before processing.</p>
-                 </div>
-
-                 <div className="bg-surface/30 border border-border/30 rounded-xl p-5 space-y-4">
-                    <div className="flex items-center gap-3 pb-3 border-b border-border/20">
-                       <Avatar className="h-10 w-10 border-2 border-white shadow-sm ring-1 ring-border/5">
-                          <AvatarImage src={suspendUser.imageUrl || ""} />
-                          <AvatarFallback className="bg-primary/5 text-primary font-bold text-xs uppercase">
-                            {suspendUser.name?.charAt(0) || suspendUser.firstName?.charAt(0) || "U"}
-                          </AvatarFallback>
-                       </Avatar>
-                       <div>
-                          <p className="text-[10px] font-bold text-slate/30 uppercase tracking-tighter">User</p>
-                          <p className="text-sm font-bold text-dark leading-none mt-1">{suspendUser.firstName} {suspendUser.lastName} {suspendUser.name ? suspendUser.name : ""}</p>
-                       </div>
-                    </div>
-
-                                    <div className="space-y-3">
-                     <div className="flex justify-between items-start">
-                        <p className="text-[10px] font-bold text-slate/30 uppercase tracking-tighter">Action</p>
-                        <p className={`text-xs font-bold ${
-                          suspendUser.status === 'Active' ? 'text-red-500' :
-                          suspendUser.status === 'Blocked' ? 'text-emerald-600' :
-                          'text-emerald-600'
-                        }`}>
-                           {suspendUser.status === 'Active'
-                             ? (modalMode === "block" ? "Block (Permanent)" : `Suspend (${suspendData.duration})`)
-                             : suspendUser.status === 'Blocked'
-                             ? 'Unblock Account'
-                             : 'Lift Suspension'}
-                        </p>
-                     </div>
-                     <div className="space-y-1">
-                        <p className="text-[10px] font-bold text-slate/30 uppercase tracking-tighter">Reason</p>
-                        <p className="text-xs font-medium text-dark leading-relaxed line-clamp-3">"{suspendData.reason}"</p>
-                     </div>
-                   </div>
-                 </div>
-
-                 <Button 
-                   onClick={handleSuspendToggle}
-                   disabled={isSubmitting}
-                   className={`w-full h-12 rounded-xl font-bold shadow-lg transition-all active:scale-95 ${
-                     suspendUser.status === 'Active'
-                       ? (modalMode === 'block' ? 'bg-[#991B1B] hover:bg-[#7F1D1D] text-white shadow-red-900/10' : 'bg-[#D93F3F] hover:bg-[#C23535] text-white shadow-red-900/10')
-                       : 'bg-[#155D5F] hover:bg-[#0F4A4C] text-white shadow-primary/10'
-                   }`}
-                 >
-                   {isSubmitting ? (
-                     <Loader2 className="h-4 w-4 animate-spin mx-auto text-white/80" />
-                   ) : (
-                     `Confirm ${
-                       suspendUser.status === 'Active'
-                         ? (modalMode === 'block' ? 'Block' : 'Suspension')
-                         : suspendUser.status === 'Blocked'
-                         ? 'Unblock'
-                         : 'Unsuspend'
-                     }`
-                   )}
-                 </Button>
+                <div className="flex items-center gap-3 pt-2">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setSuspendStep(1)}
+                    disabled={isSubmitting}
+                    className="flex-1 h-12 rounded-xl font-bold text-slate border-border/50 text-xs"
+                  >
+                    Back
+                  </Button>
+                  <Button 
+                    onClick={handleSuspendToggle}
+                    disabled={isSubmitting}
+                    className={`flex-1 h-12 rounded-xl font-bold text-white text-xs ${
+                      modalMode === 'block' ? 'bg-red-600 hover:bg-red-700' : 'bg-orange-500 hover:bg-orange-600'
+                    }`}
+                  >
+                    {isSubmitting ? (
+                      <Loader2 className="h-4 w-4 animate-spin mx-auto" />
+                    ) : (
+                      `Confirm ${modalMode === 'block' ? 'Block' : 'Suspend'}`
+                    )}
+                  </Button>
+                </div>
               </div>
             )}
-
           </div>
         </div>
       )}
-      <style jsx global>{`
-        .custom-scrollbar::-webkit-scrollbar {
-          height: 6px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: transparent;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: rgba(0, 0, 0, 0.05);
-          border-radius: 10px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: rgba(0, 0, 0, 0.1);
-        }
-      `}</style>
     </div>
   );
 }
