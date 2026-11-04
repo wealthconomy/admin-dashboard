@@ -56,6 +56,7 @@ export const apiSlice = createApi({
     'Newsletter',
     'Assessment',
     'AssessmentSubmission',
+    'InterestTiers',
   ],
   endpoints: () => ({}),
 });

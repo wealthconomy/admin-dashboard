@@ -1,5 +1,98 @@
 import { apiSlice } from "../apiSlice";
 
+// --------------------------------------------------------
+// Interest Rate Tiers (types mirror the backend guide)
+// --------------------------------------------------------
+export type InterestTierPortfolioType =
+  | "WEALTH_FIX"
+  | "WEALTH_FLEX"
+  | "WEALTH_GOAL"
+  | "WEALTH_FAM"
+  | "WEALTH_FLOW"
+  | "WEALTH_GROUP";
+
+export interface InterestTier {
+  id: string;
+  name: string;
+  /** null = platform-wide fallback tier */
+  portfolioType: InterestTierPortfolioType | null;
+  minAmountKobo: string;
+  minAmountNaira: number;
+  /** null = unbounded */
+  maxAmountKobo: string | null;
+  maxAmountNaira: number | null;
+  /** null = flexible / open-ended */
+  minDurationDays: number | null;
+  maxDurationDays: number | null;
+  annualRatePct: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InterestTierListPage {
+  items: InterestTier[];
+  totalCount: number;
+  page: number;
+  pageCount: number;
+}
+
+export interface InterestTierListParams {
+  page?: number;
+  limit?: number;
+  portfolioType?: InterestTierPortfolioType;
+  isActive?: boolean;
+  q?: string;
+  period?: string;
+}
+
+export interface InterestTierPayload {
+  name: string;
+  portfolioType: InterestTierPortfolioType | null;
+  minAmountKobo: number;
+  maxAmountKobo: number | null;
+  minDurationDays: number | null;
+  maxDurationDays: number | null;
+  annualRatePct: number;
+  isActive: boolean;
+}
+
+/**
+ * The guide documents `{ data: { items, totalCount, page, pageCount } }`.
+ * Accept a double-wrapped `{ data: { data: ... } }` or a bare page defensively.
+ */
+export function unwrapInterestTierPage(res: unknown): InterestTierListPage {
+  const r = res as Record<string, unknown> | undefined;
+  const rData = r?.data as Record<string, unknown> | undefined;
+  const candidates = [rData?.data, r?.data, res];
+  const page = candidates.find(
+    (c): c is { items: InterestTier[]; totalCount?: number; page?: number; pageCount?: number } =>
+      Boolean(c && typeof c === "object" && Array.isArray((c as Record<string, unknown>).items)),
+  );
+  if (page) {
+    return {
+      items: page.items,
+      totalCount: Number(page.totalCount ?? page.items.length) || 0,
+      page: Number(page.page ?? 1) || 1,
+      pageCount: Number(page.pageCount ?? 1) || 1,
+    };
+  }
+  const arr = candidates.find((c): c is InterestTier[] => Array.isArray(c));
+  const items = arr ?? [];
+  return { items, totalCount: items.length, page: 1, pageCount: 1 };
+}
+
+export function unwrapInterestTier(res: unknown): InterestTier | null {
+  const r = res as Record<string, unknown> | undefined;
+  const rData = r?.data as Record<string, unknown> | undefined;
+  const candidates = [rData?.data, r?.data, res];
+  return (
+    (candidates.find((c): c is InterestTier =>
+      Boolean(c && typeof c === "object" && "id" in c),
+    ) as InterestTier) ?? null
+  );
+}
+
 export const adminApi = apiSlice.injectEndpoints({
   endpoints: (builder) => ({
     // --------------------------------------------------------
@@ -287,6 +380,60 @@ export const adminApi = apiSlice.injectEndpoints({
     }),
 
     // --------------------------------------------------------
+    // Interest Rate Tiers
+    // --------------------------------------------------------
+    getInterestTiers: builder.query<unknown, InterestTierListParams | void>({
+      query: (params) => {
+        const sp = new URLSearchParams();
+        if (params) {
+          Object.entries(params).forEach(([k, v]) => {
+            if (v !== undefined && v !== null && v !== "") sp.append(k, String(v));
+          });
+        }
+        const qs = sp.toString();
+        return `/admin/interest-tiers${qs ? `?${qs}` : ""}`;
+      },
+      providesTags: ["InterestTiers"],
+    }),
+    getInterestTier: builder.query<unknown, string>({
+      query: (id) => `/admin/interest-tiers/${id}`,
+      providesTags: (_r, _e, id) => [{ type: "InterestTiers", id }],
+    }),
+    createInterestTier: builder.mutation<unknown, InterestTierPayload>({
+      query: (body) => ({
+        url: "/admin/interest-tiers",
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ["InterestTiers"],
+    }),
+    updateInterestTier: builder.mutation<
+      unknown,
+      { id: string } & Partial<InterestTierPayload>
+    >({
+      query: ({ id, ...body }) => ({
+        url: `/admin/interest-tiers/${id}`,
+        method: "PUT",
+        body,
+      }),
+      invalidatesTags: ["InterestTiers"],
+    }),
+    deleteInterestTier: builder.mutation<unknown, string>({
+      query: (id) => ({
+        url: `/admin/interest-tiers/${id}`,
+        method: "DELETE",
+      }),
+      invalidatesTags: ["InterestTiers"],
+    }),
+    seedDefaultInterestTiers: builder.mutation<unknown, void>({
+      query: () => ({
+        url: "/admin/interest-tiers/seed-defaults",
+        method: "POST",
+      }),
+      invalidatesTags: ["InterestTiers"],
+    }),
+
+    // --------------------------------------------------------
     // File Uploads
     // --------------------------------------------------------
     uploadFile: builder.mutation({
@@ -338,4 +485,11 @@ export const {
   useGetEmailTemplateByKeyQuery,
   useUpdateEmailTemplateMutation,
   usePreviewEmailTemplateMutation,
+  useGetInterestTiersQuery,
+  useLazyGetInterestTiersQuery,
+  useGetInterestTierQuery,
+  useCreateInterestTierMutation,
+  useUpdateInterestTierMutation,
+  useDeleteInterestTierMutation,
+  useSeedDefaultInterestTiersMutation,
 } = adminApi;

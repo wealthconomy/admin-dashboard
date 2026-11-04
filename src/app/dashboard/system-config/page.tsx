@@ -8,8 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { 
-  useGetSettingsQuery, 
+import {
+  useGetSettingsQuery,
   useUpdateSettingsMutation,
   useGetEmailTemplatesQuery,
   useUpdateEmailTemplateMutation,
@@ -17,6 +17,7 @@ import {
   useGetSystemConfigQuery,
   useUpdateSystemConfigByKeyMutation,
 } from "@/lib/redux/features/adminApi";
+import { InterestRateTiersManager } from "@/components/dashboard/system-config/InterestRateTiersManager";
 
 // ─── App Release Helpers ───────────────────────────────────────────────────────
 
@@ -92,42 +93,48 @@ const RATE_FIELDS: Array<{
     label: "WealthGoal Interest Rate (% P.A.)",
     planName: "WealthGoal",
     badgeColor: "bg-pink-50 text-pink-600 border-pink-200",
-    description: "Annual percentage yield for goal-based milestone savings portfolios.",
+    description:
+      "Annual percentage yield for goal-based milestone savings portfolios.",
   },
   {
     key: "INTEREST_RATE_WEALTH_FIX",
     label: "WealthFix Interest Rate (% P.A.)",
     planName: "WealthFix",
     badgeColor: "bg-orange-50 text-orange-600 border-orange-200",
-    description: "Annual interest yield for strict fixed-term deposits locked until maturity.",
+    description:
+      "Annual interest yield for strict fixed-term deposits locked until maturity.",
   },
   {
     key: "INTEREST_RATE_WEALTH_FLEX",
     label: "WealthFlex Interest Rate (% P.A.)",
     planName: "WealthFlex",
     badgeColor: "bg-emerald-50 text-emerald-600 border-emerald-200",
-    description: "Annual interest yield for flexible savings with instant access and withdrawals.",
+    description:
+      "Annual interest yield for flexible savings with instant access and withdrawals.",
   },
   {
     key: "INTEREST_RATE_WEALTH_FAM",
     label: "WealthFam Interest Rate (% P.A.)",
     planName: "WealthFam",
     badgeColor: "bg-purple-50 text-purple-600 border-purple-200",
-    description: "Annual interest yield for joint family savings and shared goals.",
+    description:
+      "Annual interest yield for joint family savings and shared goals.",
   },
   {
     key: "INTEREST_RATE_WEALTH_FLOW",
     label: "WealthFlow Interest Rate (% P.A.)",
     planName: "WealthFlow",
     badgeColor: "bg-blue-50 text-blue-600 border-blue-200",
-    description: "Annual interest yield for recurring automated cashflow savings plans.",
+    description:
+      "Annual interest yield for recurring automated cashflow savings plans.",
   },
   {
     key: "INTEREST_RATE_WEALTH_GROUP",
     label: "WealthGroup Interest Rate (% P.A.)",
     planName: "WealthGroup",
     badgeColor: "bg-indigo-50 text-indigo-600 border-indigo-200",
-    description: "Annual interest yield for rotational and collaborative group savings plans.",
+    description:
+      "Annual interest yield for rotational and collaborative group savings plans.",
   },
 ];
 
@@ -150,35 +157,40 @@ const PENALTY_FIELDS: Array<{
     label: "WealthGoal Early Termination Penalty (%)",
     planName: "WealthGoal",
     badgeColor: "bg-pink-50 text-pink-600 border-pink-200",
-    description: "Penalty fee percentage deducted when liquidating a goal portfolio before target date.",
+    description:
+      "Penalty fee percentage deducted when liquidating a goal portfolio before target date.",
   },
   {
     key: "EARLY_TERMINATION_PENALTY_PCT",
     label: "WealthFix Early Termination Penalty (%)",
     planName: "WealthFix",
     badgeColor: "bg-orange-50 text-orange-600 border-orange-200",
-    description: "Penalty percentage deducted for breaking a fixed-term deposit before its official maturity date.",
+    description:
+      "Penalty percentage deducted for breaking a fixed-term deposit before its official maturity date.",
   },
   {
     key: "PENALTY_RATE_WEALTH_FAM",
     label: "WealthFam Early Termination Penalty (%)",
     planName: "WealthFam",
     badgeColor: "bg-purple-50 text-purple-600 border-purple-200",
-    description: "Penalty fee percentage applied when closing or withdrawing from a family savings plan prematurely.",
+    description:
+      "Penalty fee percentage applied when closing or withdrawing from a family savings plan prematurely.",
   },
   {
     key: "PENALTY_RATE_WEALTH_FLOW",
     label: "WealthFlow Early Termination Penalty (%)",
     planName: "WealthFlow",
     badgeColor: "bg-blue-50 text-blue-600 border-blue-200",
-    description: "Penalty fee percentage applied when terminating an automated cashflow savings plan before scheduled term.",
+    description:
+      "Penalty fee percentage applied when terminating an automated cashflow savings plan before scheduled term.",
   },
   {
     key: "PENALTY_RATE_WEALTH_GROUP",
     label: "WealthGroup Early Termination Penalty (%)",
     planName: "WealthGroup",
     badgeColor: "bg-indigo-50 text-indigo-600 border-indigo-200",
-    description: "Penalty fee percentage applied when a member exits or terminates a cooperative savings group before the target date.",
+    description:
+      "Penalty fee percentage applied when a member exits or terminates a cooperative savings group before the target date.",
   },
 ];
 
@@ -186,12 +198,19 @@ export default function SystemConfigPage() {
   const { data: settingsData, isLoading } = useGetSettingsQuery(undefined);
   const [updateSettings, { isLoading: isSaving }] = useUpdateSettingsMutation();
 
-  const { data: templatesData, isLoading: isLoadingTemplates } = useGetEmailTemplatesQuery({});
-  const [updateTemplate, { isLoading: isUpdatingTemplate }] = useUpdateEmailTemplateMutation();
-  const [previewTemplate, { isLoading: isPreviewing }] = usePreviewEmailTemplateMutation();
+  const { data: templatesData, isLoading: isLoadingTemplates } =
+    useGetEmailTemplatesQuery({});
+  const [updateTemplate, { isLoading: isUpdatingTemplate }] =
+    useUpdateEmailTemplateMutation();
+  const [previewTemplate, { isLoading: isPreviewing }] =
+    usePreviewEmailTemplateMutation();
 
   // Interest Rates (GET /admin/system-config and PUT /admin/system-config/{key})
-  const { data: systemConfigData, isLoading: isLoadingConfig, refetch: refetchConfig } = useGetSystemConfigQuery(undefined);
+  const {
+    data: systemConfigData,
+    isLoading: isLoadingConfig,
+    refetch: refetchConfig,
+  } = useGetSystemConfigQuery(undefined);
   const [updateSystemConfigByKey] = useUpdateSystemConfigByKeyMutation();
 
   const [formState, setFormState] = useState({
@@ -229,7 +248,9 @@ export default function SystemConfigPage() {
   const [updateMessage, setUpdateMessage] = useState("");
   const [originalUpdateMessage, setOriginalUpdateMessage] = useState("");
 
-  const [appReleaseUpdatedAts, setAppReleaseUpdatedAts] = useState<Record<string, string>>({});
+  const [appReleaseUpdatedAts, setAppReleaseUpdatedAts] = useState<
+    Record<string, string>
+  >({});
   const [appReleaseErrors, setAppReleaseErrors] = useState<{
     minVersion?: string;
     latestVersion?: string;
@@ -240,17 +261,24 @@ export default function SystemConfigPage() {
   const failedKeysRef = useRef<Set<string>>(new Set());
 
   // Confirmation Modal State
-  const [showAppReleaseConfirmModal, setShowAppReleaseConfirmModal] = useState(false);
-  const [appReleaseConfirmMessages, setAppReleaseConfirmMessages] = useState<string[]>([]);
+  const [showAppReleaseConfirmModal, setShowAppReleaseConfirmModal] =
+    useState(false);
+  const [appReleaseConfirmMessages, setAppReleaseConfirmMessages] = useState<
+    string[]
+  >([]);
   const [isSavingGeneral, setIsSavingGeneral] = useState(false);
   const [isSavingAppRelease, setIsSavingAppRelease] = useState(false);
 
-  const [originalRates, setOriginalRates] = useState<Partial<InterestRatesForm>>({});
+  const [originalRates, setOriginalRates] = useState<
+    Partial<InterestRatesForm>
+  >({});
   const [isSavingRates, setIsSavingRates] = useState(false);
   const [isSavingPenalties, setIsSavingPenalties] = useState(false);
 
-  const [activeTab, setActiveTab] = useState<"settings" | "app-release" | "interest-rates" | "penalties" | "email">("settings");
-  
+  const [activeTab, setActiveTab] = useState<
+    "settings" | "app-release" | "interest-rates" | "penalties" | "email"
+  >("settings");
+
   // Email Template Modal State
   const [editingTemplate, setEditingTemplate] = useState<any | null>(null);
   const [templateHtml, setTemplateHtml] = useState("");
@@ -259,10 +287,15 @@ export default function SystemConfigPage() {
   useEffect(() => {
     if (settingsData?.data) {
       setFormState({
-        REFERRAL_ENABLED: settingsData.data.REFERRAL_ENABLED === "true" || settingsData.data.REFERRAL_ENABLED === true,
+        REFERRAL_ENABLED:
+          settingsData.data.REFERRAL_ENABLED === "true" ||
+          settingsData.data.REFERRAL_ENABLED === true,
         REFERRAL_REWARD_KOBO: settingsData.data.REFERRAL_REWARD_KOBO || "50000",
-        MAINTENANCE_MODE: settingsData.data.MAINTENANCE_MODE === "true" || settingsData.data.MAINTENANCE_MODE === true,
-        ACTIVE_PAYMENT_PROVIDER: settingsData.data.ACTIVE_PAYMENT_PROVIDER || "PAGA",
+        MAINTENANCE_MODE:
+          settingsData.data.MAINTENANCE_MODE === "true" ||
+          settingsData.data.MAINTENANCE_MODE === true,
+        ACTIVE_PAYMENT_PROVIDER:
+          settingsData.data.ACTIVE_PAYMENT_PROVIDER || "PAGA",
       });
     }
   }, [settingsData]);
@@ -324,8 +357,10 @@ export default function SystemConfigPage() {
         PENALTY_RATE_WEALTH_FAM: map["PENALTY_RATE_WEALTH_FAM"] ?? "",
         PENALTY_RATE_WEALTH_FLOW: map["PENALTY_RATE_WEALTH_FLOW"] ?? "",
         PENALTY_RATE_WEALTH_GROUP: map["PENALTY_RATE_WEALTH_GROUP"] ?? "",
-        EARLY_TERMINATION_PENALTY_PCT: map["EARLY_TERMINATION_PENALTY_PCT"] ?? "",
-        INTEREST_DISBURSEMENT_FREQUENCY: map["INTEREST_DISBURSEMENT_FREQUENCY"] || "MONTHLY",
+        EARLY_TERMINATION_PENALTY_PCT:
+          map["EARLY_TERMINATION_PENALTY_PCT"] ?? "",
+        INTEREST_DISBURSEMENT_FREQUENCY:
+          map["INTEREST_DISBURSEMENT_FREQUENCY"] || "MONTHLY",
         WALLET_FEE_KOBO: map["WALLET_FEE_KOBO"] ?? "",
       };
 
@@ -357,25 +392,37 @@ export default function SystemConfigPage() {
 
     // a) Latest App Version format check (if set)
     if (trimmedLatest && !semverRegex.test(trimmedLatest)) {
-      errors.latestVersion = "Please enter a valid version format (e.g. 1.0.0).";
+      errors.latestVersion =
+        "Please enter a valid version format (e.g. 1.0.0).";
     }
 
     // b) Latest App Version must not be lower than Minimum App Version
-    if (!errors.minVersion && !errors.latestVersion && trimmedLatest && trimmedMin) {
+    if (
+      !errors.minVersion &&
+      !errors.latestVersion &&
+      trimmedLatest &&
+      trimmedMin
+    ) {
       if (compareVersions(trimmedLatest, trimmedMin) < 0) {
-        errors.latestVersion = "Latest App Version cannot be lower than Minimum App Version.";
+        errors.latestVersion =
+          "Latest App Version cannot be lower than Minimum App Version.";
       }
     }
 
     // c) Update Deadline
     if (trimmedDeadline) {
       if (!trimmedLatest) {
-        errors.deadline = "Update Deadline requires Latest App Version to be set.";
+        errors.deadline =
+          "Update Deadline requires Latest App Version to be set.";
       } else {
-        const deadlineChanged = trimmedDeadline !== originalUpdateDeadline.trim();
+        const deadlineChanged =
+          trimmedDeadline !== originalUpdateDeadline.trim();
         if (deadlineChanged) {
           const deadlineDate = new Date(trimmedDeadline);
-          if (isNaN(deadlineDate.getTime()) || deadlineDate.getTime() <= Date.now()) {
+          if (
+            isNaN(deadlineDate.getTime()) ||
+            deadlineDate.getTime() <= Date.now()
+          ) {
             errors.deadline = "Update Deadline must be a future date and time.";
           }
         }
@@ -398,7 +445,11 @@ export default function SystemConfigPage() {
         REFERRAL_ENABLED: String(formState.REFERRAL_ENABLED),
         REFERRAL_REWARD_KOBO: String(formState.REFERRAL_REWARD_KOBO),
         MAINTENANCE_MODE: String(formState.MAINTENANCE_MODE),
-        ACTIVE_PAYMENT_PROVIDER: String(formState.ACTIVE_PAYMENT_PROVIDER || "PAGA").toUpperCase().trim(),
+        ACTIVE_PAYMENT_PROVIDER: String(
+          formState.ACTIVE_PAYMENT_PROVIDER || "PAGA",
+        )
+          .toUpperCase()
+          .trim(),
       };
 
       await updateSettings(payload).unwrap();
@@ -420,7 +471,11 @@ export default function SystemConfigPage() {
       const trimmedDeadline = updateDeadline.trim();
       const trimmedMessage = updateMessage.trim();
 
-      const configUpdates: Array<{ key: string; value: string; onCommit: () => void }> = [];
+      const configUpdates: Array<{
+        key: string;
+        value: string;
+        onCommit: () => void;
+      }> = [];
 
       if (trimmedMin !== originalMinAppVersion.trim()) {
         configUpdates.push({
@@ -447,7 +502,9 @@ export default function SystemConfigPage() {
       if (trimmedDeadline !== originalUpdateDeadline.trim()) {
         // A cleared Update Deadline or Update Message is saved as an empty string "".
         // Note: The backend must treat empty as unset.
-        const isoValue = trimmedDeadline ? new Date(trimmedDeadline).toISOString() : "";
+        const isoValue = trimmedDeadline
+          ? new Date(trimmedDeadline).toISOString()
+          : "";
         configUpdates.push({
           key: "UPDATE_DEADLINE",
           value: isoValue,
@@ -491,7 +548,11 @@ export default function SystemConfigPage() {
             (typeof err?.data === "string" ? err.data : "") ||
             err?.message ||
             (err?.status ? `HTTP ${err.status}` : "Unknown error");
-          console.error(`Failed to update ${update.key}:`, errorMessage, err?.data || err);
+          console.error(
+            `Failed to update ${update.key}:`,
+            errorMessage,
+            err?.data || err,
+          );
           failedKeysRef.current.add(update.key);
           failedKeys.push({ key: update.key, message: errorMessage });
         }
@@ -511,7 +572,9 @@ export default function SystemConfigPage() {
       }
     } catch (err: any) {
       console.error("Error saving app release settings:", err);
-      toast.error(err?.data?.message || "Failed to update app release settings");
+      toast.error(
+        err?.data?.message || "Failed to update app release settings",
+      );
     } finally {
       setIsSavingAppRelease(false);
     }
@@ -530,21 +593,23 @@ export default function SystemConfigPage() {
     const trimmedLatest = latestAppVersion.trim();
     const trimmedDeadline = updateDeadline.trim();
 
-    const isMinRaised = compareVersions(trimmedMin, originalMinAppVersion.trim()) > 0;
+    const isMinRaised =
+      compareVersions(trimmedMin, originalMinAppVersion.trim()) > 0;
     const isDeadlineSetOrChanged =
-      trimmedDeadline !== "" && trimmedDeadline !== originalUpdateDeadline.trim();
+      trimmedDeadline !== "" &&
+      trimmedDeadline !== originalUpdateDeadline.trim();
 
     if (isMinRaised || isDeadlineSetOrChanged) {
       const messages: string[] = [];
       if (isMinRaised) {
         messages.push(
-          `Users on any version below ${trimmedMin} will be blocked from using the app until they update. Make sure ${trimmedMin} is already live in BOTH the App Store and Google Play. Continue?`
+          `Users on any version below ${trimmedMin} will be blocked from using the app until they update. Make sure ${trimmedMin} is already live in BOTH the App Store and Google Play. Continue?`,
         );
       }
       if (isDeadlineSetOrChanged) {
         const localFormatted = formatLocalDateTime(trimmedDeadline);
         messages.push(
-          `After ${localFormatted}, users on a version older than ${trimmedLatest} will be blocked until they update. Make sure ${trimmedLatest} is live in BOTH stores. Continue?`
+          `After ${localFormatted}, users on a version older than ${trimmedLatest} will be blocked until they update. Make sure ${trimmedLatest} is live in BOTH stores. Continue?`,
         );
       }
       setAppReleaseConfirmMessages(messages);
@@ -568,11 +633,13 @@ export default function SystemConfigPage() {
     ];
 
     const changedKeys = rateKeys.filter(
-      (key) => String(ratesForm[key] ?? "").trim() !== String(originalRates[key] ?? "").trim()
+      (key) =>
+        String(ratesForm[key] ?? "").trim() !==
+        String(originalRates[key] ?? "").trim(),
     );
 
     if (changedKeys.length === 0) {
-      toast.info("No interest rate changes to save.");
+      toast.info("No disbursement or fee changes to save.");
       return;
     }
 
@@ -592,7 +659,7 @@ export default function SystemConfigPage() {
           console.error(`Failed to update ${key}:`, err);
           failedKeys.push(key);
         }
-      })
+      }),
     );
 
     setIsSavingRates(false);
@@ -601,7 +668,8 @@ export default function SystemConfigPage() {
       setOriginalRates((prev) => {
         const next = { ...prev };
         succeededKeys.forEach((k) => {
-          next[k as keyof InterestRatesForm] = ratesForm[k as keyof InterestRatesForm];
+          next[k as keyof InterestRatesForm] =
+            ratesForm[k as keyof InterestRatesForm];
         });
         return next;
       });
@@ -609,7 +677,7 @@ export default function SystemConfigPage() {
     }
 
     if (failedKeys.length === 0) {
-      toast.success("Interest rates and fees updated successfully");
+      toast.success("Disbursement and fee settings updated successfully");
     } else {
       toast.error(`Failed to update: ${failedKeys.join(", ")}`);
     }
@@ -625,7 +693,9 @@ export default function SystemConfigPage() {
     ];
 
     const changedKeys = penaltyKeys.filter(
-      (key) => String(ratesForm[key] ?? "").trim() !== String(originalRates[key] ?? "").trim()
+      (key) =>
+        String(ratesForm[key] ?? "").trim() !==
+        String(originalRates[key] ?? "").trim(),
     );
 
     if (changedKeys.length === 0) {
@@ -649,7 +719,7 @@ export default function SystemConfigPage() {
           console.error(`Failed to update ${key}:`, err);
           failedKeys.push(key);
         }
-      })
+      }),
     );
 
     setIsSavingPenalties(false);
@@ -658,7 +728,8 @@ export default function SystemConfigPage() {
       setOriginalRates((prev) => {
         const next = { ...prev };
         succeededKeys.forEach((k) => {
-          next[k as keyof InterestRatesForm] = ratesForm[k as keyof InterestRatesForm];
+          next[k as keyof InterestRatesForm] =
+            ratesForm[k as keyof InterestRatesForm];
         });
         return next;
       });
@@ -680,11 +751,12 @@ export default function SystemConfigPage() {
             System Configuration
           </h1>
           <p className="text-slate/60 text-sm mt-1 font-medium">
-            Manage system-wide parameters, interest rates, referral rewards, and email templates.
+            Manage system-wide parameters, interest rates, referral rewards, and
+            email templates.
           </p>
         </div>
         {activeTab === "settings" && (
-          <Button 
+          <Button
             onClick={handleSaveGeneral}
             disabled={isLoading || isSaving || isSavingGeneral}
             className="bg-[#155D5F] hover:bg-[#155D5F]/90 text-white rounded-xl h-11 px-8 font-bold text-sm shadow-lg shadow-primary/10 transition-all active:scale-95 cursor-pointer"
@@ -698,7 +770,7 @@ export default function SystemConfigPage() {
           </Button>
         )}
         {activeTab === "app-release" && (
-          <Button 
+          <Button
             onClick={handleSaveAppRelease}
             disabled={isLoadingConfig || isSavingAppRelease}
             className="bg-[#155D5F] hover:bg-[#155D5F]/90 text-white rounded-xl h-11 px-8 font-bold text-sm shadow-lg shadow-primary/10 transition-all active:scale-95 cursor-pointer"
@@ -712,7 +784,7 @@ export default function SystemConfigPage() {
           </Button>
         )}
         {activeTab === "interest-rates" && (
-          <Button 
+          <Button
             onClick={handleSaveInterestRates}
             disabled={isLoadingConfig || isSavingRates}
             className="bg-[#155D5F] hover:bg-[#155D5F]/90 text-white rounded-xl h-11 px-8 font-bold text-sm shadow-lg shadow-primary/10 transition-all active:scale-95 cursor-pointer"
@@ -722,11 +794,11 @@ export default function SystemConfigPage() {
             ) : (
               <Save className="h-4 w-4 mr-2" />
             )}
-            Save Interest Rates
+            Save Disbursement & Fees
           </Button>
         )}
         {activeTab === "penalties" && (
-          <Button 
+          <Button
             onClick={handleSavePenalties}
             disabled={isLoadingConfig || isSavingPenalties}
             className="bg-[#155D5F] hover:bg-[#155D5F]/90 text-white rounded-xl h-11 px-8 font-bold text-sm shadow-lg shadow-primary/10 transition-all active:scale-95 cursor-pointer"
@@ -745,7 +817,9 @@ export default function SystemConfigPage() {
         <button
           onClick={() => setActiveTab("settings")}
           className={`pb-3 text-sm font-bold transition-all relative cursor-pointer ${
-            activeTab === "settings" ? "text-[#155D5F]" : "text-slate/60 hover:text-dark"
+            activeTab === "settings"
+              ? "text-[#155D5F]"
+              : "text-slate/60 hover:text-dark"
           }`}
         >
           General Settings
@@ -756,7 +830,9 @@ export default function SystemConfigPage() {
         <button
           onClick={() => setActiveTab("app-release")}
           className={`pb-3 text-sm font-bold transition-all relative cursor-pointer ${
-            activeTab === "app-release" ? "text-[#155D5F]" : "text-slate/60 hover:text-dark"
+            activeTab === "app-release"
+              ? "text-[#155D5F]"
+              : "text-slate/60 hover:text-dark"
           }`}
         >
           App Release
@@ -767,7 +843,9 @@ export default function SystemConfigPage() {
         <button
           onClick={() => setActiveTab("interest-rates")}
           className={`pb-3 text-sm font-bold transition-all relative cursor-pointer ${
-            activeTab === "interest-rates" ? "text-[#155D5F]" : "text-slate/60 hover:text-dark"
+            activeTab === "interest-rates"
+              ? "text-[#155D5F]"
+              : "text-slate/60 hover:text-dark"
           }`}
         >
           Interest Rates
@@ -778,7 +856,9 @@ export default function SystemConfigPage() {
         <button
           onClick={() => setActiveTab("penalties")}
           className={`pb-3 text-sm font-bold transition-all relative cursor-pointer ${
-            activeTab === "penalties" ? "text-[#155D5F]" : "text-slate/60 hover:text-dark"
+            activeTab === "penalties"
+              ? "text-[#155D5F]"
+              : "text-slate/60 hover:text-dark"
           }`}
         >
           Termination Penalties
@@ -789,7 +869,9 @@ export default function SystemConfigPage() {
         <button
           onClick={() => setActiveTab("email")}
           className={`pb-3 text-sm font-bold transition-all relative cursor-pointer ${
-            activeTab === "email" ? "text-[#155D5F]" : "text-slate/60 hover:text-dark"
+            activeTab === "email"
+              ? "text-[#155D5F]"
+              : "text-slate/60 hover:text-dark"
           }`}
         >
           Email Templates
@@ -799,18 +881,19 @@ export default function SystemConfigPage() {
         </button>
       </div>
 
-      {((activeTab === "settings" && isLoading) ||
-        (activeTab === "app-release" && isLoadingConfig) ||
-        (activeTab === "email" && isLoadingTemplates) ||
-        (activeTab === "interest-rates" && isLoadingConfig) ||
-        (activeTab === "penalties" && isLoadingConfig)) ? (
+      {(activeTab === "settings" && isLoading) ||
+      (activeTab === "app-release" && isLoadingConfig) ||
+      (activeTab === "email" && isLoadingTemplates) ||
+      (activeTab === "interest-rates" && isLoadingConfig) ||
+      (activeTab === "penalties" && isLoadingConfig) ? (
         <div className="flex flex-col items-center justify-center py-32 flex-1">
           <Loader2 className="h-8 w-8 animate-spin text-primary/40 mx-auto mb-4" />
-          <p className="text-sm font-medium text-slate/40">Loading configuration...</p>
+          <p className="text-sm font-medium text-slate/40">
+            Loading configuration...
+          </p>
         </div>
       ) : (
         <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
-          
           {activeTab === "settings" && (
             <>
               {/* General Platform Settings */}
@@ -826,12 +909,15 @@ export default function SystemConfigPage() {
                         Maintenance Mode
                       </Label>
                       <span className="text-xs font-medium text-slate/60">
-                        When enabled, the application will be temporarily unavailable for all regular users.
+                        When enabled, the application will be temporarily
+                        unavailable for all regular users.
                       </span>
                     </div>
-                    <Switch 
+                    <Switch
                       checked={formState.MAINTENANCE_MODE}
-                      onCheckedChange={(val) => setFormState({ ...formState, MAINTENANCE_MODE: val })}
+                      onCheckedChange={(val) =>
+                        setFormState({ ...formState, MAINTENANCE_MODE: val })
+                      }
                     />
                   </div>
 
@@ -847,7 +933,8 @@ export default function SystemConfigPage() {
                     </div>
                     <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 font-bold px-3 py-1.5 rounded-xl text-xs flex items-center gap-2">
                       <span className="h-2 w-2 rounded-full bg-emerald-500" />
-                      Paga Gateway ({formState.ACTIVE_PAYMENT_PROVIDER || "PAGA"})
+                      Paga Gateway (
+                      {formState.ACTIVE_PAYMENT_PROVIDER || "PAGA"})
                     </Badge>
                   </div>
                 </div>
@@ -858,7 +945,7 @@ export default function SystemConfigPage() {
                 <h3 className="text-lg font-bold text-dark font-outfit mb-6">
                   Referral Program
                 </h3>
-                
+
                 <div className="space-y-6">
                   <div className="flex items-center justify-between p-4 bg-white border border-border/50 rounded-xl">
                     <div>
@@ -869,9 +956,11 @@ export default function SystemConfigPage() {
                         Toggle the referral program on or off globally.
                       </span>
                     </div>
-                    <Switch 
+                    <Switch
                       checked={formState.REFERRAL_ENABLED}
-                      onCheckedChange={(val) => setFormState({ ...formState, REFERRAL_ENABLED: val })}
+                      onCheckedChange={(val) =>
+                        setFormState({ ...formState, REFERRAL_ENABLED: val })
+                      }
                     />
                   </div>
 
@@ -880,14 +969,19 @@ export default function SystemConfigPage() {
                       Referral Reward Amount
                     </Label>
                     <span className="text-xs font-medium text-slate/60 block mb-3">
-                      The amount of money rewarded to users for a successful referral (in Kobo). 
-                      For example, 50000 kobo = ₦500.
+                      The amount of money rewarded to users for a successful
+                      referral (in Kobo). For example, 50000 kobo = ₦500.
                     </span>
                     <div className="relative max-w-sm">
-                      <Input 
+                      <Input
                         type="number"
                         value={formState.REFERRAL_REWARD_KOBO}
-                        onChange={(e) => setFormState({ ...formState, REFERRAL_REWARD_KOBO: e.target.value })}
+                        onChange={(e) =>
+                          setFormState({
+                            ...formState,
+                            REFERRAL_REWARD_KOBO: e.target.value,
+                          })
+                        }
                         className="h-12 bg-surface/50 border-border/30 rounded-xl px-5 text-sm font-medium focus-visible:ring-primary/20 transition-all border shadow-none pl-12"
                       />
                       <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate/40">
@@ -895,7 +989,10 @@ export default function SystemConfigPage() {
                       </span>
                       {formState.REFERRAL_REWARD_KOBO && (
                         <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-[#155D5F]">
-                          = ₦{(parseInt(formState.REFERRAL_REWARD_KOBO) / 100).toLocaleString()}
+                          = ₦
+                          {(
+                            parseInt(formState.REFERRAL_REWARD_KOBO) / 100
+                          ).toLocaleString()}
                         </span>
                       )}
                     </div>
@@ -912,7 +1009,7 @@ export default function SystemConfigPage() {
                 <h3 className="text-lg font-bold text-dark font-outfit mb-6">
                   App Release
                 </h3>
-                
+
                 <div className="space-y-6">
                   {/* Minimum App Version */}
                   <div className="space-y-3 p-4 bg-white border border-border/50 rounded-xl">
@@ -920,10 +1017,11 @@ export default function SystemConfigPage() {
                       Minimum App Version
                     </Label>
                     <span className="text-xs font-medium text-slate/60 block mb-3">
-                      Users on an app version below this are blocked until they update.
+                      Users on an app version below this are blocked until they
+                      update.
                     </span>
                     <div className="relative max-w-sm">
-                      <Input 
+                      <Input
                         type="text"
                         placeholder="1.0.0"
                         value={minAppVersion}
@@ -931,7 +1029,10 @@ export default function SystemConfigPage() {
                           setMinAppVersion(e.target.value);
                           failedKeysRef.current.delete("MIN_APP_VERSION");
                           if (appReleaseErrors.minVersion) {
-                            setAppReleaseErrors((prev) => ({ ...prev, minVersion: undefined }));
+                            setAppReleaseErrors((prev) => ({
+                              ...prev,
+                              minVersion: undefined,
+                            }));
                           }
                         }}
                         className="h-12 bg-surface/50 border-border/30 rounded-xl px-5 text-sm font-medium focus-visible:ring-primary/20 transition-all border shadow-none"
@@ -944,7 +1045,10 @@ export default function SystemConfigPage() {
                     )}
                     {appReleaseUpdatedAts["MIN_APP_VERSION"] && (
                       <span className="text-[11px] text-slate/40 block mt-1">
-                        Last updated: {formatLocalDateTime(appReleaseUpdatedAts["MIN_APP_VERSION"])}
+                        Last updated:{" "}
+                        {formatLocalDateTime(
+                          appReleaseUpdatedAts["MIN_APP_VERSION"],
+                        )}
                       </span>
                     )}
                   </div>
@@ -955,10 +1059,11 @@ export default function SystemConfigPage() {
                       Latest App Version
                     </Label>
                     <span className="text-xs font-medium text-slate/60 block mb-3">
-                      The newest version in the app stores. Users on an older version are asked to update.
+                      The newest version in the app stores. Users on an older
+                      version are asked to update.
                     </span>
                     <div className="relative max-w-sm">
-                      <Input 
+                      <Input
                         type="text"
                         placeholder="1.0.1"
                         value={latestAppVersion}
@@ -966,7 +1071,10 @@ export default function SystemConfigPage() {
                           setLatestAppVersion(e.target.value);
                           failedKeysRef.current.delete("LATEST_APP_VERSION");
                           if (appReleaseErrors.latestVersion) {
-                            setAppReleaseErrors((prev) => ({ ...prev, latestVersion: undefined }));
+                            setAppReleaseErrors((prev) => ({
+                              ...prev,
+                              latestVersion: undefined,
+                            }));
                           }
                         }}
                         className="h-12 bg-surface/50 border-border/30 rounded-xl px-5 text-sm font-medium focus-visible:ring-primary/20 transition-all border shadow-none"
@@ -979,7 +1087,10 @@ export default function SystemConfigPage() {
                     )}
                     {appReleaseUpdatedAts["LATEST_APP_VERSION"] && (
                       <span className="text-[11px] text-slate/40 block mt-1">
-                        Last updated: {formatLocalDateTime(appReleaseUpdatedAts["LATEST_APP_VERSION"])}
+                        Last updated:{" "}
+                        {formatLocalDateTime(
+                          appReleaseUpdatedAts["LATEST_APP_VERSION"],
+                        )}
                       </span>
                     )}
                   </div>
@@ -990,17 +1101,22 @@ export default function SystemConfigPage() {
                       Update Deadline
                     </Label>
                     <span className="text-xs font-medium text-slate/60 block mb-3">
-                      Optional. After this time, users on a version older than the latest must update before they can use the app. Shown in your computer's local time; saved in UTC.
+                      Optional. After this time, users on a version older than
+                      the latest must update before they can use the app. Shown
+                      in your computer's local time; saved in UTC.
                     </span>
                     <div className="flex items-center gap-2 max-w-sm">
-                      <Input 
+                      <Input
                         type="datetime-local"
                         value={updateDeadline}
                         onChange={(e) => {
                           setUpdateDeadline(e.target.value);
                           failedKeysRef.current.delete("UPDATE_DEADLINE");
                           if (appReleaseErrors.deadline) {
-                            setAppReleaseErrors((prev) => ({ ...prev, deadline: undefined }));
+                            setAppReleaseErrors((prev) => ({
+                              ...prev,
+                              deadline: undefined,
+                            }));
                           }
                         }}
                         className="h-12 bg-surface/50 border-border/30 rounded-xl px-5 text-sm font-medium focus-visible:ring-primary/20 transition-all border shadow-none"
@@ -1014,7 +1130,10 @@ export default function SystemConfigPage() {
                             setUpdateDeadline("");
                             failedKeysRef.current.delete("UPDATE_DEADLINE");
                             if (appReleaseErrors.deadline) {
-                              setAppReleaseErrors((prev) => ({ ...prev, deadline: undefined }));
+                              setAppReleaseErrors((prev) => ({
+                                ...prev,
+                                deadline: undefined,
+                              }));
                             }
                           }}
                           className="h-12 px-3 rounded-xl border-border/50 text-xs font-semibold text-slate hover:text-dark hover:bg-surface"
@@ -1030,7 +1149,10 @@ export default function SystemConfigPage() {
                     )}
                     {appReleaseUpdatedAts["UPDATE_DEADLINE"] && (
                       <span className="text-[11px] text-slate/40 block mt-1">
-                        Last updated: {formatLocalDateTime(appReleaseUpdatedAts["UPDATE_DEADLINE"])}
+                        Last updated:{" "}
+                        {formatLocalDateTime(
+                          appReleaseUpdatedAts["UPDATE_DEADLINE"],
+                        )}
                       </span>
                     )}
                   </div>
@@ -1051,7 +1173,10 @@ export default function SystemConfigPage() {
                             setUpdateMessage(e.target.value);
                             failedKeysRef.current.delete("UPDATE_MESSAGE");
                             if (appReleaseErrors.message) {
-                              setAppReleaseErrors((prev) => ({ ...prev, message: undefined }));
+                              setAppReleaseErrors((prev) => ({
+                                ...prev,
+                                message: undefined,
+                              }));
                             }
                           }
                         }}
@@ -1073,7 +1198,10 @@ export default function SystemConfigPage() {
                     )}
                     {appReleaseUpdatedAts["UPDATE_MESSAGE"] && (
                       <span className="text-[11px] text-slate/40 block mt-1">
-                        Last updated: {formatLocalDateTime(appReleaseUpdatedAts["UPDATE_MESSAGE"])}
+                        Last updated:{" "}
+                        {formatLocalDateTime(
+                          appReleaseUpdatedAts["UPDATE_MESSAGE"],
+                        )}
                       </span>
                     )}
                   </div>
@@ -1087,14 +1215,23 @@ export default function SystemConfigPage() {
                       </span>
                     </div>
                     <div className="text-xs text-slate/70 space-y-1 font-medium pl-6">
-                      <p>Versions below {minAppVersion.trim() || "1.0.0"}: blocked until they update.</p>
+                      <p>
+                        Versions below {minAppVersion.trim() || "1.0.0"}:
+                        blocked until they update.
+                      </p>
                       {latestAppVersion.trim() ? (
                         <>
                           <p>
-                            Versions from {minAppVersion.trim() || "1.0.0"} up to below {latestAppVersion.trim()}: asked to update
-                            {updateDeadline.trim() ? ` by ${formatLocalDateTime(updateDeadline.trim())}; after the deadline they are blocked.` : "."}
+                            Versions from {minAppVersion.trim() || "1.0.0"} up
+                            to below {latestAppVersion.trim()}: asked to update
+                            {updateDeadline.trim()
+                              ? ` by ${formatLocalDateTime(updateDeadline.trim())}; after the deadline they are blocked.`
+                              : "."}
                           </p>
-                          <p>Version {latestAppVersion.trim()} and newer: no prompt.</p>
+                          <p>
+                            Version {latestAppVersion.trim()} and newer: no
+                            prompt.
+                          </p>
                         </>
                       ) : (
                         <p>No update prompt is scheduled.</p>
@@ -1108,57 +1245,8 @@ export default function SystemConfigPage() {
 
           {activeTab === "interest-rates" && (
             <div className="space-y-8">
-              {/* Portfolio Savings Plans Interest Rates */}
-              <div className="bg-surface/30 border border-border/50 rounded-[20px] p-8">
-                <div className="mb-6">
-                  <h3 className="text-lg font-bold text-dark font-outfit">
-                    Portfolio Savings Interest Rates
-                  </h3>
-                  <p className="text-xs font-medium text-slate/60 mt-1">
-                    Annual percentage yield (% Per Annum) applied to savings portfolios. Enter numeric percentages (e.g. 12 for 12% P.A.).
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {RATE_FIELDS.map((field) => (
-                    <div
-                      key={field.key}
-                      className="p-5 bg-white border border-border/50 rounded-xl space-y-2 hover:border-border transition-colors"
-                    >
-                      <div className="flex items-center justify-between">
-                        <Label className="text-sm font-bold text-dark">
-                          {field.label}
-                        </Label>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${field.badgeColor}`}>
-                          {field.planName}
-                        </span>
-                      </div>
-                      <span className="text-xs font-medium text-slate/50 block min-h-[32px] leading-relaxed">
-                        {field.description}
-                      </span>
-                      <div className="relative max-w-sm mt-2">
-                        <Input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          placeholder="e.g. 12"
-                          value={ratesForm[field.key]}
-                          onChange={(e) =>
-                            setRatesForm({
-                              ...ratesForm,
-                              [field.key]: e.target.value,
-                            })
-                          }
-                          className="h-12 bg-surface/50 border-border/30 rounded-xl px-4 pr-10 text-sm font-semibold focus-visible:ring-primary/20 transition-all border shadow-none"
-                        />
-                        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate/40 pointer-events-none">
-                          %
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              {/* Dynamic tiered interest rates by amount and duration */}
+              <InterestRateTiersManager />
 
               {/* Disbursement & Transaction Fees */}
               <div className="bg-surface/30 border border-border/50 rounded-[20px] p-8">
@@ -1167,7 +1255,8 @@ export default function SystemConfigPage() {
                     Disbursement & Wallet Fees
                   </h3>
                   <p className="text-xs font-medium text-slate/60 mt-1">
-                    Configure interest calculation cadence and flat transaction charges on primary wallets.
+                    Configure interest calculation cadence and flat transaction
+                    charges on primary wallets.
                   </p>
                 </div>
 
@@ -1178,7 +1267,8 @@ export default function SystemConfigPage() {
                       Interest Disbursement Frequency
                     </Label>
                     <span className="text-xs font-medium text-slate/50 block min-h-[32px] leading-relaxed">
-                      Frequency at which accumulated interest earnings are calculated and disbursed to user balances.
+                      Frequency at which accumulated interest earnings are
+                      calculated and disbursed to user balances.
                     </span>
                     <div className="relative max-w-sm mt-2">
                       <select
@@ -1205,7 +1295,8 @@ export default function SystemConfigPage() {
                       Wallet Transaction Fee (Kobo)
                     </Label>
                     <span className="text-xs font-medium text-slate/50 block min-h-[32px] leading-relaxed">
-                      Flat transaction fee charged on wallet operations in kobo (e.g. 10000 kobo = ₦100.00).
+                      Flat transaction fee charged on wallet operations in kobo
+                      (e.g. 10000 kobo = ₦100.00).
                     </span>
                     <div className="relative max-w-sm mt-2">
                       <Input
@@ -1224,11 +1315,18 @@ export default function SystemConfigPage() {
                       <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate/40 pointer-events-none">
                         ₦
                       </span>
-                      {ratesForm.WALLET_FEE_KOBO && !isNaN(Number(ratesForm.WALLET_FEE_KOBO)) && (
-                        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-[#155D5F] pointer-events-none">
-                          = ₦{(Number(ratesForm.WALLET_FEE_KOBO) / 100).toLocaleString("en-NG", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </span>
-                      )}
+                      {ratesForm.WALLET_FEE_KOBO &&
+                        !isNaN(Number(ratesForm.WALLET_FEE_KOBO)) && (
+                          <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-[#155D5F] pointer-events-none">
+                            = ₦
+                            {(
+                              Number(ratesForm.WALLET_FEE_KOBO) / 100
+                            ).toLocaleString("en-NG", {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
+                          </span>
+                        )}
                     </div>
                   </div>
                 </div>
@@ -1246,7 +1344,8 @@ export default function SystemConfigPage() {
                         Early Termination Penalties
                       </h3>
                       <p className="text-xs font-medium text-slate/60 mt-1">
-                        Penalty percentage deducted when liquidating or breaking a savings plan before its scheduled maturity date.
+                        Penalty percentage deducted when liquidating or breaking
+                        a savings plan before its scheduled maturity date.
                       </p>
                     </div>
                     <span className="text-xs font-semibold text-slate/50 bg-slate/10 px-3 py-1.5 rounded-full border border-border/40">
@@ -1265,7 +1364,9 @@ export default function SystemConfigPage() {
                         <Label className="text-sm font-bold text-dark">
                           {field.label}
                         </Label>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${field.badgeColor}`}>
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${field.badgeColor}`}
+                        >
                           {field.planName}
                         </span>
                       </div>
@@ -1303,38 +1404,46 @@ export default function SystemConfigPage() {
               <h3 className="text-lg font-bold text-dark font-outfit mb-6">
                 Email Templates
               </h3>
-              
+
               <div className="space-y-4">
                 {(templatesData?.data || templatesData?.items)?.length > 0 ? (
-                  (templatesData.data || templatesData.items).map((tpl: any) => (
-                    <div key={tpl.id} className="flex items-center justify-between p-4 bg-white border border-border/50 rounded-xl">
-                      <div>
-                        <Label className="text-sm font-bold text-dark block mb-1">
-                          {tpl.name || tpl.key}
-                        </Label>
-                        <span className="text-xs font-medium text-slate/60 block">
-                          Subject: {tpl.subject || "N/A"}
-                        </span>
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setEditingTemplate(tpl);
-                          setTemplateHtml(tpl.htmlBody || tpl.htmlContent || "");
-                        }}
+                  (templatesData.data || templatesData.items).map(
+                    (tpl: any) => (
+                      <div
+                        key={tpl.id}
+                        className="flex items-center justify-between p-4 bg-white border border-border/50 rounded-xl"
                       >
-                        Edit Template
-                      </Button>
-                    </div>
-                  ))
+                        <div>
+                          <Label className="text-sm font-bold text-dark block mb-1">
+                            {tpl.name || tpl.key}
+                          </Label>
+                          <span className="text-xs font-medium text-slate/60 block">
+                            Subject: {tpl.subject || "N/A"}
+                          </span>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setEditingTemplate(tpl);
+                            setTemplateHtml(
+                              tpl.htmlBody || tpl.htmlContent || "",
+                            );
+                          }}
+                        >
+                          Edit Template
+                        </Button>
+                      </div>
+                    ),
+                  )
                 ) : (
-                  <p className="text-sm text-slate/60 p-4 text-center">No email templates found.</p>
+                  <p className="text-sm text-slate/60 p-4 text-center">
+                    No email templates found.
+                  </p>
                 )}
               </div>
             </div>
           )}
-
         </div>
       )}
 
@@ -1347,27 +1456,38 @@ export default function SystemConfigPage() {
                 <h3 className="text-xl font-bold font-outfit text-dark">
                   Edit Template: {editingTemplate.name || editingTemplate.key}
                 </h3>
-                <p className="text-sm text-slate/60 mt-1">Make changes to the raw HTML structure.</p>
+                <p className="text-sm text-slate/60 mt-1">
+                  Make changes to the raw HTML structure.
+                </p>
               </div>
-              <button 
+              <button
                 onClick={() => setEditingTemplate(null)}
                 className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface text-slate/40 transition-colors"
               >
                 ✕
               </button>
             </div>
-            
+
             <div className="p-6 overflow-y-auto flex-1 space-y-6">
               <div>
-                <Label className="text-sm font-bold text-dark block mb-2">Subject Line</Label>
-                <Input 
+                <Label className="text-sm font-bold text-dark block mb-2">
+                  Subject Line
+                </Label>
+                <Input
                   value={editingTemplate.subject}
-                  onChange={(e) => setEditingTemplate({ ...editingTemplate, subject: e.target.value })}
+                  onChange={(e) =>
+                    setEditingTemplate({
+                      ...editingTemplate,
+                      subject: e.target.value,
+                    })
+                  }
                 />
               </div>
 
               <div>
-                <Label className="text-sm font-bold text-dark block mb-2">HTML Content</Label>
+                <Label className="text-sm font-bold text-dark block mb-2">
+                  HTML Content
+                </Label>
                 <textarea
                   className="w-full h-[300px] p-4 text-sm font-mono bg-slate-900 text-slate-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20"
                   value={templateHtml}
@@ -1377,27 +1497,47 @@ export default function SystemConfigPage() {
               </div>
 
               <div className="p-4 bg-surface/50 rounded-xl border border-border/50">
-                <Label className="text-sm font-bold text-dark block mb-2">Send Preview</Label>
+                <Label className="text-sm font-bold text-dark block mb-2">
+                  Send Preview
+                </Label>
                 <div className="flex gap-4">
-                  <Input 
-                    placeholder="Enter email to send preview..." 
+                  <Input
+                    placeholder="Enter email to send preview..."
                     value={previewEmail}
                     onChange={(e) => setPreviewEmail(e.target.value)}
                   />
-                  <Button 
+                  <Button
                     variant="outline"
                     disabled={!previewEmail || isPreviewing}
                     onClick={async () => {
                       try {
-                        const dummyVariables = (editingTemplate.variables || []).reduce((acc: any, v: string) => ({ ...acc, [v]: `Test ${v}` }), { dummy: "value" });
-                        await previewTemplate({ email: previewEmail, key: editingTemplate.key, variables: dummyVariables }).unwrap();
+                        const dummyVariables = (
+                          editingTemplate.variables || []
+                        ).reduce(
+                          (acc: any, v: string) => ({
+                            ...acc,
+                            [v]: `Test ${v}`,
+                          }),
+                          { dummy: "value" },
+                        );
+                        await previewTemplate({
+                          email: previewEmail,
+                          key: editingTemplate.key,
+                          variables: dummyVariables,
+                        }).unwrap();
                         toast.success("Preview email sent successfully!");
                       } catch (err: any) {
-                        toast.error(err?.data?.message || "Failed to send preview");
+                        toast.error(
+                          err?.data?.message || "Failed to send preview",
+                        );
                       }
                     }}
                   >
-                    {isPreviewing ? <Loader2 className="w-4 h-4 animate-spin" /> : "Send Preview"}
+                    {isPreviewing ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      "Send Preview"
+                    )}
                   </Button>
                 </div>
               </div>
@@ -1419,17 +1559,21 @@ export default function SystemConfigPage() {
                       id: editingTemplate.id,
                       subject: editingTemplate.subject,
                       htmlContent: templateHtml,
-                      htmlBody: templateHtml
+                      htmlBody: templateHtml,
                     }).unwrap();
                     toast.success("Template updated successfully!");
                     setEditingTemplate(null);
                   } catch (err: any) {
-                    toast.error(err?.data?.message || "Failed to update template");
+                    toast.error(
+                      err?.data?.message || "Failed to update template",
+                    );
                   }
                 }}
                 className="bg-[#155D5F] hover:bg-[#155D5F]/90 text-white rounded-xl h-11 px-6 font-bold shadow-lg shadow-primary/10"
               >
-                {isUpdatingTemplate && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                {isUpdatingTemplate && (
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                )}
                 Save Changes
               </Button>
             </div>
