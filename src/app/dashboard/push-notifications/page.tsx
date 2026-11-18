@@ -13,11 +13,15 @@ import {
   Eye,
   Radio,
   Mail,
+  Bell,
   Users,
   Layers,
   Sparkles,
   FileText,
   AlertCircle,
+  Smartphone,
+  Play,
+  Loader2,
 } from "lucide-react";
 import { useGetUsersQuery } from "@/lib/redux/features/usersApi";
 import {
@@ -48,7 +52,7 @@ export default function PushNotificationsPage() {
   const [isScheduled, setIsScheduled] = useState(false);
   const [scheduledDate, setScheduledDate] = useState("");
 
-  const { data: usersData, isLoading: isUsersLoading } = useGetUsersQuery(undefined);
+  const { data: usersData, isLoading: isUsersLoading } = useGetUsersQuery({ limit: 1000 });
   const { data: groupsData, isLoading: isGroupsLoading } = useGetWealthGroupsQuery({ status: "ACTIVE" });
   const { data: historyData, isLoading: isHistoryLoading, refetch: refetchHistory } = useGetBroadcastHistoryQuery(undefined);
   const [broadcastNotification] = useBroadcastNotificationMutation();
@@ -67,6 +71,13 @@ export default function PushNotificationsPage() {
 
   // History detail preview modal
   const [selectedBroadcast, setSelectedBroadcast] = useState<any | null>(null);
+
+  // Quick Test Push Modal State
+  const [showTestPushModal, setShowTestPushModal] = useState(false);
+  const [testPushUserId, setTestPushUserId] = useState("");
+  const [testPushTitle, setTestPushTitle] = useState("Test Push Notification");
+  const [testPushBody, setTestPushBody] = useState("This is a live test push notification verifying Firebase Cloud Messaging.");
+  const [isSendingTestPush, setIsSendingTestPush] = useState(false);
 
   // Safely extract users
   const actualUsers: any[] = Array.isArray(usersData?.data)
@@ -174,12 +185,11 @@ export default function PushNotificationsPage() {
   });
 
   const SYSTEM_PLANS = [
-    { id: "wealthflex", name: "WealthFlex Users" },
-    { id: "wealthfix", name: "WealthFix Users" },
-    { id: "wealthgoal", name: "WealthGoal Users" },
-    { id: "wealthfam", name: "WealthFam Users" },
-    { id: "wealthflow", name: "WealthFlow Users" },
-    { id: "wealthgroup", name: "WealthGroup Users" },
+    { id: "WEALTH_FLEX", name: "WealthFlex Users" },
+    { id: "WEALTH_FIX", name: "WealthFix Users" },
+    { id: "WEALTH_GOAL", name: "WealthGoal Users" },
+    { id: "WEALTH_FAM", name: "WealthFam Users" },
+    { id: "WEALTH_FLOW", name: "WealthFlow Users" },
   ];
 
   const toggleTarget = (id: string) => {
@@ -211,6 +221,36 @@ export default function PushNotificationsPage() {
     setIsSubmitting(true);
 
     try {
+      const targetPayload: any = {
+        type:
+          targetType === "individual"
+            ? "USERS"
+            : targetType === "group"
+            ? "GROUPS"
+            : targetType === "plan"
+            ? "WEALTH_PLAN"
+            : "ALL",
+      };
+
+      if (targetType === "individual") {
+        targetPayload.userIds = targetIds;
+      } else if (targetType === "group") {
+        targetPayload.groupIds = targetIds;
+      } else if (targetType === "plan") {
+        const mappedPlans = targetIds.map((id) => {
+          const upper = id.toUpperCase();
+          if (upper.includes("FIX")) return "WEALTH_FIX";
+          if (upper.includes("FLEX")) return "WEALTH_FLEX";
+          if (upper.includes("GOAL")) return "WEALTH_GOAL";
+          if (upper.includes("FAM")) return "WEALTH_FAM";
+          if (upper.includes("FLOW")) return "WEALTH_FLOW";
+          return upper;
+        });
+        targetPayload.portfolioTypes = mappedPlans;
+        targetPayload.plans = mappedPlans;
+        targetPayload.wealthPlan = mappedPlans[0];
+      }
+
       const payload = {
         channels: selectedChannels,
         title: title.trim(),
@@ -219,12 +259,7 @@ export default function PushNotificationsPage() {
           isScheduled && scheduledDate
             ? new Date(scheduledDate).toISOString()
             : undefined,
-        target: {
-          type: targetType.toUpperCase(),
-          ...(targetType === "individual" && { userIds: targetIds }),
-          ...(targetType === "group" && { groupIds: targetIds }),
-          ...(targetType === "plan" && { plans: targetIds }),
-        },
+        target: targetPayload,
       };
 
       await broadcastNotification(payload).unwrap();
@@ -251,6 +286,38 @@ export default function PushNotificationsPage() {
     }, 2500);
   };
 
+  const handleSendTestPush = async () => {
+    if (!testPushUserId) {
+      toast.error("Please select or specify a recipient user for the test push.");
+      return;
+    }
+    if (!testPushTitle.trim() || !testPushBody.trim()) {
+      toast.error("Please provide both a title and message for the test push.");
+      return;
+    }
+
+    setIsSendingTestPush(true);
+    try {
+      await broadcastNotification({
+        channels: ["push"],
+        title: testPushTitle.trim(),
+        body: testPushBody.trim(),
+        target: {
+          type: "USERS",
+          userIds: [testPushUserId],
+        },
+      }).unwrap();
+
+      toast.success("Test push notification queued! Check the user device for incoming alert.");
+      setShowTestPushModal(false);
+      refetchHistory();
+    } catch (err: any) {
+      toast.error(err?.data?.message || "Failed to deliver test push notification.");
+    } finally {
+      setIsSendingTestPush(false);
+    }
+  };
+
   // Strip HTML tags for clean preview
   const stripHtml = (htmlStr: string) => {
     if (!htmlStr) return "";
@@ -261,24 +328,43 @@ export default function PushNotificationsPage() {
     if (!target && !targetTypeFallback) return "All Users";
     if (typeof target === "string") return target;
 
-    const type = target?.type || targetTypeFallback;
-    if (type === "ALL") return "All Users";
-    if (type === "GROUP") {
+    const rawType = (target?.type || targetTypeFallback || "").toUpperCase();
+    if (rawType === "ALL") return "All Users";
+    if (
+      rawType === "GROUP" ||
+      rawType === "GROUPS" ||
+      rawType === "WEALTH_GROUP" ||
+      rawType === "WEALTH_GROUPS" ||
+      (Array.isArray(target?.groupIds) && target.groupIds.length > 0)
+    ) {
       const count = target?.groupIds?.length;
       return count ? `Wealth Groups (${count})` : "Wealth Groups";
     }
-    if (type === "INDIVIDUAL") {
+    if (
+      rawType === "INDIVIDUAL" ||
+      rawType === "USERS" ||
+      rawType === "USER" ||
+      (Array.isArray(target?.userIds) && target.userIds.length > 0)
+    ) {
       const count = target?.userIds?.length;
       return count ? `Specific Users (${count})` : "Individual Users";
     }
-    if (type === "PLAN") {
-      const count = target?.plans?.length;
+    if (
+      rawType === "PLAN" ||
+      rawType === "PLANS" ||
+      rawType === "WEALTH_PLAN" ||
+      rawType === "WEALTH_PLANS" ||
+      (Array.isArray(target?.portfolioTypes) && target.portfolioTypes.length > 0) ||
+      (Array.isArray(target?.plans) && target.plans.length > 0)
+    ) {
+      const plans = target?.portfolioTypes || target?.plans || [];
+      const count = plans.length;
       return count ? `Wealth Plans (${count})` : "Wealth Plans";
     }
     if (target?.segment === "SUBSCRIBERS_ONLY") {
       return `Subscribers (${target?.recipientCount ?? 4})`;
     }
-    return type || "All Users";
+    return rawType || "All Users";
   };
 
   return (
@@ -297,34 +383,46 @@ export default function PushNotificationsPage() {
           </p>
         </div>
 
-        {/* Tab Buttons */}
-        <div className="flex items-center gap-1.5 bg-surface p-1 rounded-xl border border-border/50">
-          <button
-            onClick={() => setActiveTab("send")}
-            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-              activeTab === "send"
-                ? "bg-white text-primary shadow-sm"
-                : "text-slate/60 hover:text-dark"
-            }`}
+        {/* Actions & Tab Buttons */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setShowTestPushModal(true)}
+            className="h-10 px-3.5 rounded-xl border-[#155D5F]/30 text-[#155D5F] hover:bg-[#155D5F]/10 font-bold text-xs flex items-center gap-2 cursor-pointer shadow-none transition-all"
           >
-            Send Notification
-          </button>
-          <button
-            onClick={() => setActiveTab("history")}
-            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-              activeTab === "history"
-                ? "bg-white text-primary shadow-sm"
-                : "text-slate/60 hover:text-dark"
-            }`}
-          >
-            <History className="h-3.5 w-3.5" />
-            Broadcast History
-            {actualHistory.length > 0 && (
-              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-primary/10 text-primary font-bold">
-                {actualHistory.length}
-              </span>
-            )}
-          </button>
+            <Smartphone className="h-4 w-4" />
+            Test FCM Push
+          </Button>
+
+          <div className="flex items-center gap-1.5 bg-surface p-1 rounded-xl border border-border/50">
+            <button
+              onClick={() => setActiveTab("send")}
+              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                activeTab === "send"
+                  ? "bg-white text-primary shadow-sm"
+                  : "text-slate/60 hover:text-dark"
+              }`}
+            >
+              Send Notification
+            </button>
+            <button
+              onClick={() => setActiveTab("history")}
+              className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === "history"
+                  ? "bg-white text-primary shadow-sm"
+                  : "text-slate/60 hover:text-dark"
+              }`}
+            >
+              <History className="h-3.5 w-3.5" />
+              Broadcast History
+              {actualHistory.length > 0 && (
+                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-primary/10 text-primary font-bold">
+                  {actualHistory.length}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -350,10 +448,11 @@ export default function PushNotificationsPage() {
                 <label className="text-xs font-bold text-dark block">
                   Delivery Channels <span className="text-red-500">*</span>
                 </label>
-                <div className="grid grid-cols-2 gap-3 max-w-md">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-w-lg">
                   {[
                     { id: "push", label: "Push Notification", icon: Radio },
                     { id: "email", label: "Email", icon: Mail },
+                    { id: "inapp", label: "In-App Alert", icon: Bell },
                   ].map((channel) => {
                     const isChecked = selectedChannels.includes(channel.id);
                     const Icon = channel.icon;
@@ -989,6 +1088,120 @@ export default function PushNotificationsPage() {
                 className="rounded-xl text-xs font-bold px-5"
               >
                 Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Test FCM Push Modal */}
+      {showTestPushModal && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative bg-white rounded-[24px] w-full max-w-[540px] max-h-[90vh] shadow-2xl border border-border/50 flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+            {/* Modal Header */}
+            <div className="p-6 pb-4 border-b border-border/30 flex items-center justify-between bg-surface/30">
+              <div className="flex items-center gap-2.5">
+                <div className="h-10 w-10 rounded-full bg-[#155D5F]/10 text-[#155D5F] flex items-center justify-center">
+                  <Smartphone className="h-5 w-5" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-dark font-outfit">Test Firebase Push Notification</h2>
+                  <p className="text-xs text-slate/50 font-medium">
+                    Send an instant FCM push to verify mobile device push receipt
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowTestPushModal(false)}
+                className="text-slate/40 hover:text-red-500 p-1.5 rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto space-y-4 text-xs">
+              <div className="p-3.5 bg-amber-50 border border-amber-200/60 rounded-xl flex items-start gap-2.5 text-amber-800">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
+                <div className="text-[11px] leading-relaxed">
+                  <span className="font-bold">FCM Prerequisite:</span> Ensure your test device/account has registered its FCM push token via{" "}
+                  <code className="bg-amber-100/80 px-1 py-0.5 rounded font-mono font-semibold">POST /api/v1/users/me/push-token</code>.
+                </div>
+              </div>
+
+              {/* Target User Selector */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-dark block">
+                  Select Target Test User <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={testPushUserId}
+                  onChange={(e) => setTestPushUserId(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-surface border border-border/60 rounded-xl text-xs font-semibold text-dark focus:ring-1 focus:ring-primary/30 transition-all outline-none cursor-pointer"
+                >
+                  <option value="">-- Choose a user --</option>
+                  {actualUsers.map((u: any) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name || `${u.firstName || ""} ${u.lastName || ""}`.trim() || u.email || u.id} ({u.email || u.id})
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-slate/50">
+                  Select your test user account that has the active mobile app or web session.
+                </p>
+              </div>
+
+              {/* Push Title */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-dark block">Push Title</label>
+                <Input
+                  value={testPushTitle}
+                  onChange={(e) => setTestPushTitle(e.target.value)}
+                  placeholder="e.g. Test Push Notification"
+                  className="h-10 text-xs font-medium"
+                />
+              </div>
+
+              {/* Push Body */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-dark block">Push Message Body</label>
+                <textarea
+                  value={testPushBody}
+                  onChange={(e) => setTestPushBody(e.target.value)}
+                  rows={3}
+                  placeholder="e.g. This is a live test push notification..."
+                  className="w-full p-3 bg-surface/50 border border-border/60 rounded-xl text-xs font-medium text-dark focus:ring-1 focus:ring-primary/30 transition-all outline-none resize-none"
+                />
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-border/30 flex items-center justify-end gap-2.5 bg-surface/20">
+              <Button
+                variant="outline"
+                type="button"
+                onClick={() => setShowTestPushModal(false)}
+                className="rounded-xl text-xs font-bold px-4"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={handleSendTestPush}
+                disabled={isSendingTestPush || !testPushUserId || !testPushTitle.trim() || !testPushBody.trim()}
+                className="rounded-xl text-xs font-bold px-5 bg-[#155D5F] hover:bg-[#155D5F]/90 text-white gap-2 cursor-pointer shadow-sm"
+              >
+                {isSendingTestPush ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Sending Test...
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-3.5 w-3.5" />
+                    Send Test Push
+                  </>
+                )}
               </Button>
             </div>
           </div>

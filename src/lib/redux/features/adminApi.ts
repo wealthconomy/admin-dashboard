@@ -434,6 +434,33 @@ export const adminApi = apiSlice.injectEndpoints({
     }),
 
     // --------------------------------------------------------
+    // Interest Disbursements
+    // --------------------------------------------------------
+    getInterestDisbursements: builder.query({
+      query: (params?: { page?: number; limit?: number; year?: number; month?: number; portfolioId?: string; sortBy?: string; sortDir?: string }) => {
+        const sp = new URLSearchParams();
+        if (params) {
+          Object.entries(params).forEach(([k, v]) => {
+            if (v !== undefined && v !== null && v !== "") sp.append(k, String(v));
+          });
+        }
+        const qs = sp.toString();
+        return `/admin/interest/disbursements${qs ? `?${qs}` : ""}`;
+      },
+      providesTags: ["InterestDisbursements" as any],
+    }),
+    triggerManualInterestDisbursement: builder.mutation<
+      { data?: { ok: boolean; message: string }; message?: string },
+      void
+    >({
+      query: () => ({
+        url: "/admin/interest/trigger-manual",
+        method: "POST",
+      }),
+      invalidatesTags: ["InterestDisbursements" as any, "Portfolio", "Dashboard"],
+    }),
+
+    // --------------------------------------------------------
     // File Uploads
     // --------------------------------------------------------
     uploadFile: builder.mutation({
@@ -492,4 +519,7 @@ export const {
   useUpdateInterestTierMutation,
   useDeleteInterestTierMutation,
   useSeedDefaultInterestTiersMutation,
+  useGetInterestDisbursementsQuery,
+  useLazyGetInterestDisbursementsQuery,
+  useTriggerManualInterestDisbursementMutation,
 } = adminApi;

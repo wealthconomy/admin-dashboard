@@ -18,6 +18,7 @@ import {
   useUpdateSystemConfigByKeyMutation,
 } from "@/lib/redux/features/adminApi";
 import { InterestRateTiersManager } from "@/components/dashboard/system-config/InterestRateTiersManager";
+import { InterestDisbursementManager } from "@/components/dashboard/system-config/InterestDisbursementManager";
 
 // ─── App Release Helpers ───────────────────────────────────────────────────────
 
@@ -1247,6 +1248,9 @@ export default function SystemConfigPage() {
             <div className="space-y-8">
               {/* Dynamic tiered interest rates by amount and duration */}
               <InterestRateTiersManager />
+
+              {/* Daily & Periodic Interest Disbursement Trigger & Logs */}
+              <InterestDisbursementManager />
 
               {/* Disbursement & Transaction Fees */}
               <div className="bg-surface/30 border border-border/50 rounded-[20px] p-8">
