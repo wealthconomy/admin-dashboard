@@ -437,7 +437,19 @@ export const adminApi = apiSlice.injectEndpoints({
     // Interest Disbursements
     // --------------------------------------------------------
     getInterestDisbursements: builder.query({
-      query: (params?: { page?: number; limit?: number; year?: number; month?: number; portfolioId?: string; sortBy?: string; sortDir?: string }) => {
+      query: (params?: {
+        page?: number;
+        limit?: number;
+        year?: number;
+        month?: number;
+        portfolioId?: string;
+        sortBy?: string;
+        sortDir?: string;
+        after?: string;
+        before?: string;
+        q?: string;
+        [key: string]: any;
+      }) => {
         const sp = new URLSearchParams();
         if (params) {
           Object.entries(params).forEach(([k, v]) => {

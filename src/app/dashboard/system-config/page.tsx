@@ -277,7 +277,7 @@ export default function SystemConfigPage() {
   const [isSavingPenalties, setIsSavingPenalties] = useState(false);
 
   const [activeTab, setActiveTab] = useState<
-    "settings" | "app-release" | "interest-rates" | "penalties" | "email"
+    "settings" | "app-release" | "interest-rates" | "disbursement-engine" | "penalties" | "email"
   >("settings");
 
   // Email Template Modal State
@@ -784,7 +784,7 @@ export default function SystemConfigPage() {
             Save App Release
           </Button>
         )}
-        {activeTab === "interest-rates" && (
+        {activeTab === "disbursement-engine" && (
           <Button
             onClick={handleSaveInterestRates}
             disabled={isLoadingConfig || isSavingRates}
@@ -814,7 +814,7 @@ export default function SystemConfigPage() {
         )}
       </div>
 
-      <div className="flex border-b border-border/50 mb-8 gap-8">
+      <div className="flex border-b border-border/50 mb-8 gap-8 overflow-x-auto scrollbar-none">
         <button
           onClick={() => setActiveTab("settings")}
           className={`pb-3 text-sm font-bold transition-all relative cursor-pointer ${
@@ -843,7 +843,7 @@ export default function SystemConfigPage() {
         </button>
         <button
           onClick={() => setActiveTab("interest-rates")}
-          className={`pb-3 text-sm font-bold transition-all relative cursor-pointer ${
+          className={`pb-3 text-sm font-bold transition-all relative cursor-pointer shrink-0 ${
             activeTab === "interest-rates"
               ? "text-[#155D5F]"
               : "text-slate/60 hover:text-dark"
@@ -856,7 +856,7 @@ export default function SystemConfigPage() {
         </button>
         <button
           onClick={() => setActiveTab("penalties")}
-          className={`pb-3 text-sm font-bold transition-all relative cursor-pointer ${
+          className={`pb-3 text-sm font-bold transition-all relative cursor-pointer shrink-0 ${
             activeTab === "penalties"
               ? "text-[#155D5F]"
               : "text-slate/60 hover:text-dark"
@@ -864,6 +864,19 @@ export default function SystemConfigPage() {
         >
           Termination Penalties
           {activeTab === "penalties" && (
+            <span className="absolute bottom-[-1px] left-0 right-0 h-0.5 bg-[#155D5F] rounded-t-full" />
+          )}
+        </button>
+        <button
+          onClick={() => setActiveTab("disbursement-engine")}
+          className={`pb-3 text-sm font-bold transition-all relative cursor-pointer shrink-0 ${
+            activeTab === "disbursement-engine"
+              ? "text-[#155D5F]"
+              : "text-slate/60 hover:text-dark"
+          }`}
+        >
+          Disbursement Engine
+          {activeTab === "disbursement-engine" && (
             <span className="absolute bottom-[-1px] left-0 right-0 h-0.5 bg-[#155D5F] rounded-t-full" />
           )}
         </button>
@@ -886,7 +899,8 @@ export default function SystemConfigPage() {
       (activeTab === "app-release" && isLoadingConfig) ||
       (activeTab === "email" && isLoadingTemplates) ||
       (activeTab === "interest-rates" && isLoadingConfig) ||
-      (activeTab === "penalties" && isLoadingConfig) ? (
+      (activeTab === "penalties" && isLoadingConfig) ||
+      (activeTab === "disbursement-engine" && isLoadingConfig) ? (
         <div className="flex flex-col items-center justify-center py-32 flex-1">
           <Loader2 className="h-8 w-8 animate-spin text-primary/40 mx-auto mb-4" />
           <p className="text-sm font-medium text-slate/40">
@@ -1245,10 +1259,79 @@ export default function SystemConfigPage() {
           )}
 
           {activeTab === "interest-rates" && (
-            <div className="space-y-8">
+            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
               {/* Dynamic tiered interest rates by amount and duration */}
               <InterestRateTiersManager />
+            </div>
+          )}
 
+          {activeTab === "penalties" && (
+            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="bg-surface/30 border border-border/50 rounded-[20px] p-8">
+                <div className="mb-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg font-bold text-dark font-outfit">
+                        Early Termination Penalties
+                      </h3>
+                      <p className="text-xs font-medium text-slate/60 mt-1">
+                        Penalty percentage deducted when liquidating or breaking
+                        a savings plan before its scheduled maturity date.
+                      </p>
+                    </div>
+                    <span className="text-xs font-semibold text-slate/50 bg-slate/10 px-3 py-1.5 rounded-full border border-border/40">
+                      WealthFlex exempt (anytime withdrawals)
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {PENALTY_FIELDS.map((field) => (
+                    <div
+                      key={field.key}
+                      className="p-5 bg-white border border-border/50 rounded-xl space-y-2 hover:border-border transition-colors"
+                    >
+                      <div className="flex items-center justify-between">
+                        <Label className="text-sm font-bold text-dark">
+                          {field.label}
+                        </Label>
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${field.badgeColor}`}
+                        >
+                          {field.planName}
+                        </span>
+                      </div>
+                      <span className="text-xs font-medium text-slate/50 block min-h-[32px] leading-relaxed">
+                        {field.description}
+                      </span>
+                      <div className="relative max-w-sm mt-2">
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          placeholder="e.g. 5"
+                          value={ratesForm[field.key]}
+                          onChange={(e) =>
+                            setRatesForm({
+                              ...ratesForm,
+                              [field.key]: e.target.value,
+                            })
+                          }
+                          className="h-12 bg-surface/50 border-border/30 rounded-xl px-4 pr-10 text-sm font-semibold focus-visible:ring-primary/20 transition-all border shadow-none"
+                        />
+                        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate/40 pointer-events-none">
+                          %
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === "disbursement-engine" && (
+            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
               {/* Daily & Periodic Interest Disbursement Trigger & Logs */}
               <InterestDisbursementManager />
 
@@ -1333,71 +1416,6 @@ export default function SystemConfigPage() {
                         )}
                     </div>
                   </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {activeTab === "penalties" && (
-            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <div className="bg-surface/30 border border-border/50 rounded-[20px] p-8">
-                <div className="mb-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-lg font-bold text-dark font-outfit">
-                        Early Termination Penalties
-                      </h3>
-                      <p className="text-xs font-medium text-slate/60 mt-1">
-                        Penalty percentage deducted when liquidating or breaking
-                        a savings plan before its scheduled maturity date.
-                      </p>
-                    </div>
-                    <span className="text-xs font-semibold text-slate/50 bg-slate/10 px-3 py-1.5 rounded-full border border-border/40">
-                      WealthFlex exempt (anytime withdrawals)
-                    </span>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {PENALTY_FIELDS.map((field) => (
-                    <div
-                      key={field.key}
-                      className="p-5 bg-white border border-border/50 rounded-xl space-y-2 hover:border-border transition-colors"
-                    >
-                      <div className="flex items-center justify-between">
-                        <Label className="text-sm font-bold text-dark">
-                          {field.label}
-                        </Label>
-                        <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${field.badgeColor}`}
-                        >
-                          {field.planName}
-                        </span>
-                      </div>
-                      <span className="text-xs font-medium text-slate/50 block min-h-[32px] leading-relaxed">
-                        {field.description}
-                      </span>
-                      <div className="relative max-w-sm mt-2">
-                        <Input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          placeholder="e.g. 5"
-                          value={ratesForm[field.key]}
-                          onChange={(e) =>
-                            setRatesForm({
-                              ...ratesForm,
-                              [field.key]: e.target.value,
-                            })
-                          }
-                          className="h-12 bg-surface/50 border-border/30 rounded-xl px-4 pr-10 text-sm font-semibold focus-visible:ring-primary/20 transition-all border shadow-none"
-                        />
-                        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate/40 pointer-events-none">
-                          %
-                        </span>
-                      </div>
-                    </div>
-                  ))}
                 </div>
               </div>
             </div>

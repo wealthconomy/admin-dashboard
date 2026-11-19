@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import {
   Coins,
   Play,
@@ -11,6 +12,8 @@ import {
   Clock,
   ArrowUpRight,
   ShieldCheck,
+  ArrowRight,
+  FileSpreadsheet,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -49,6 +52,30 @@ export function InterestDisbursementManager() {
     ? rawData
     : [];
 
+  // Check if disbursement has run for today
+  const today = new Date();
+  const todayDateString = today.toDateString();
+
+  const hasRunToday = logs.some((log: any) => {
+    if (log.createdAt) {
+      const d = new Date(log.createdAt);
+      if (d.toDateString() === todayDateString) return true;
+    }
+    if (log.year && log.month && log.day !== undefined && log.day !== null) {
+      return (
+        log.year === today.getFullYear() &&
+        log.month === today.getMonth() + 1 &&
+        log.day === today.getDate()
+      );
+    }
+    return false;
+  });
+
+  const latestLog = logs.length > 0 ? logs[0] : null;
+  const lastProcessedTime = latestLog?.createdAt
+    ? format(new Date(latestLog.createdAt), "HH:mm, dd MMM")
+    : null;
+
   const handleTrigger = async () => {
     try {
       const res = await triggerDisbursement().unwrap();
@@ -83,11 +110,22 @@ export function InterestDisbursementManager() {
               <Coins className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-dark font-outfit flex items-center gap-2">
+              <h3 className="text-lg font-bold text-dark font-outfit flex flex-wrap items-center gap-2">
                 Interest Disbursement Engine
                 <Badge className="bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded-full">
                   Automated Daily Cron Active
                 </Badge>
+                {hasRunToday ? (
+                  <Badge className="bg-emerald-100 text-emerald-800 border border-emerald-300 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                    Today's Run Complete {lastProcessedTime ? `(${lastProcessedTime})` : ""}
+                  </Badge>
+                ) : (
+                  <Badge className="bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <Clock className="w-3 h-3 text-amber-600" />
+                    Today's Run Pending
+                  </Badge>
+                )}
               </h3>
               <p className="text-xs font-medium text-slate/60 mt-0.5">
                 Calculates and credits daily yield to user portfolio balances based on active tiers and rates.
@@ -111,13 +149,27 @@ export function InterestDisbursementManager() {
           <Button
             type="button"
             onClick={() => setIsConfirmOpen(true)}
-            disabled={isTriggering}
-            className="h-10 px-4 rounded-xl text-xs font-bold bg-[#155D5F] hover:bg-[#155D5F]/90 text-white gap-2 cursor-pointer shadow-sm transition-all"
+            disabled={isTriggering || hasRunToday}
+            title={
+              hasRunToday
+                ? "Interest has already been disbursed for today. The midnight cron will execute next cycle."
+                : "Manually execute interest calculation and balance credits for eligible portfolios."
+            }
+            className={`h-10 px-4 rounded-xl text-xs font-bold gap-2 transition-all shadow-sm ${
+              hasRunToday
+                ? "bg-emerald-50 text-emerald-700 border border-emerald-200 cursor-not-allowed hover:bg-emerald-50 opacity-90"
+                : "bg-[#155D5F] hover:bg-[#155D5F]/90 text-white cursor-pointer"
+            }`}
           >
             {isTriggering ? (
               <>
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 Disbursing...
+              </>
+            ) : hasRunToday ? (
+              <>
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                Disbursed for Today
               </>
             ) : (
               <>
@@ -164,13 +216,23 @@ export function InterestDisbursementManager() {
 
       {/* Disbursement Logs Table */}
       <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-slate/70">
-            Recent Disbursement Logs ({logs.length})
-          </h4>
-          <span className="text-[11px] font-medium text-slate/50">
-            Showing latest disbursement history
-          </span>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate/70">
+              Recent Disbursement Logs ({logs.length})
+            </h4>
+            <span className="text-[11px] font-medium text-slate/40">
+              Showing latest 10 runs
+            </span>
+          </div>
+          <Link
+            href="/dashboard/system-config/interest-disbursements"
+            className="text-xs font-bold text-[#155D5F] hover:underline flex items-center gap-1.5 transition-all group"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-[#155D5F]" />
+            View All Logs & Download Report
+            <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+          </Link>
         </div>
 
         <div className="bg-white border border-border/60 rounded-xl overflow-hidden shadow-sm">
