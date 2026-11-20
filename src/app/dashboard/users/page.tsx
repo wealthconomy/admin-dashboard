@@ -23,7 +23,8 @@ import {
   Wallet,
   TrendingUp,
   Layers,
-  RotateCw
+  RotateCw,
+  Trash2
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -130,8 +131,19 @@ export default function UsersPage() {
     .map((u: any) => {
       // Determine effective status
       let status = "Active";
-      if (u.blockedAt || u.disciplineStatus === "BLOCKED") status = "Blocked";
-      else if (u.suspendedUntil || u.disciplineStatus === "SUSPENDED") status = "Suspended";
+      if (
+        u.deletedAt ||
+        u.status === "DELETED" ||
+        u.status === "Deleted" ||
+        u.disciplineStatus === "DELETED" ||
+        u.isDeleted
+      ) {
+        status = "Deleted";
+      } else if (u.blockedAt || u.disciplineStatus === "BLOCKED") {
+        status = "Blocked";
+      } else if (u.suspendedUntil || u.disciplineStatus === "SUSPENDED") {
+        status = "Suspended";
+      }
 
       // Determine transaction type visually from wealthPreference or transactionType
       let tType = "Mixed";
@@ -259,7 +271,9 @@ export default function UsersPage() {
 
   const totalUserCount = userList.length;
   const activeUserCount = userList.filter((u: any) => u.status === "Active").length;
-  const suspendedUserCount = userList.filter((u: any) => u.status !== "Active").length;
+  const suspendedUserCount = userList.filter((u: any) => u.status === "Suspended" || u.status === "Blocked").length;
+  const deletedUserCount = userList.filter((u: any) => u.status === "Deleted").length;
+  const restrictedTotal = suspendedUserCount + deletedUserCount;
   const interestUserCount = userList.filter((u: any) => u.transactionType === "Interest").length;
   const impactUserCount = userList.filter((u: any) => u.transactionType === "Impact Wealth").length;
   const mixedUserCount = userList.filter((u: any) => u.transactionType === "Mixed").length;
@@ -325,7 +339,7 @@ export default function UsersPage() {
               <div className="flex flex-col">
                 <h4 className="text-[10px] font-bold text-slate/50 uppercase tracking-wider mb-2 px-2">User Status</h4>
                 <div className="flex flex-col gap-1">
-                  {["All Status", "Active", "Suspended", "Blocked"].map(status => (
+                  {["All Status", "Active", "Suspended", "Blocked", "Deleted"].map(status => (
                     <button 
                       key={status}
                       onClick={() => setSelectedStatus(status)} 
@@ -447,7 +461,7 @@ export default function UsersPage() {
             </div>
           </div>
 
-          {/* Suspended / Blocked */}
+          {/* Suspended / Blocked / Deleted */}
           <div className="h-[135px] bg-[#F2FFFF] border border-[#155D5F4D] rounded-[20px] p-5 flex flex-col justify-between hover:bg-[#E8FAFA] hover:shadow-md hover:scale-[1.01] transition-all duration-300">
             <div className="flex items-start justify-between">
               <div>
@@ -457,20 +471,22 @@ export default function UsersPage() {
                   </div>
                 ) : (
                   <p className="text-2xl font-bold font-outfit text-primary leading-none">
-                    {suspendedUserCount}
+                    {restrictedTotal}
                   </p>
                 )}
                 <p className="text-[11px] font-semibold text-primary/80 mt-2">
-                  Suspended / Blocked
+                  Suspended / Deleted
                 </p>
               </div>
               <div className="h-9 w-9 rounded-full bg-[#155D5F] flex items-center justify-center shrink-0 shadow-sm">
                 <XCircle className="h-4 w-4 text-white" />
               </div>
             </div>
-            <div className="pt-2 border-t border-[#155D5F1A] flex items-center gap-1.5 text-[10px] text-slate/50 font-bold">
-              <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
-              {suspendedUserCount} accounts restricted
+            <div className="pt-2 border-t border-[#155D5F1A] flex items-center gap-1.5 text-[10px] text-slate/50 font-bold truncate">
+              <span className="h-1.5 w-1.5 rounded-full bg-red-500 shrink-0" />
+              {deletedUserCount > 0 ? `${deletedUserCount} deleted` : ""}
+              {deletedUserCount > 0 && suspendedUserCount > 0 ? " • " : ""}
+              {suspendedUserCount > 0 ? `${suspendedUserCount} suspended/blocked` : (deletedUserCount === 0 ? "0 accounts restricted" : "")}
             </div>
           </div>
 
@@ -676,14 +692,18 @@ export default function UsersPage() {
                           ? "bg-emerald-50 text-emerald-600 border-emerald-100/50" 
                           : user.status === "Blocked"
                           ? "bg-slate-100 text-slate-700 border-slate-200"
-                          : "bg-red-50 text-red-500 border-red-100/50"
+                          : user.status === "Deleted"
+                          ? "bg-rose-50 text-rose-600 border-rose-200"
+                          : "bg-amber-50 text-amber-600 border-amber-100/50"
                       } px-2 py-0.5 rounded-lg gap-1 font-bold text-[9px] items-center border shadow-none transition-all`}>
                         <div className={`w-1 h-1 rounded-full ${
                           user.status === "Active" 
                             ? "bg-emerald-500" 
                             : user.status === "Blocked"
                             ? "bg-slate-500"
-                            : "bg-red-500"
+                            : user.status === "Deleted"
+                            ? "bg-rose-500"
+                            : "bg-amber-500"
                         }`} />
                         {user.status}
                       </Badge>
@@ -860,7 +880,11 @@ export default function UsersPage() {
                     <DropdownMenuItem onClick={() => router.push(`/dashboard/users/${user.id}/credentials`)} className="py-2 px-3 text-xs font-bold">
                       <FileText className="h-3.5 w-3.5 text-blue-500 mr-2" /> KYC Credentials
                     </DropdownMenuItem>
-                    {user.status === "Active" ? (
+                    {user.status === "Deleted" ? (
+                      <DropdownMenuItem disabled className="py-2 px-3 text-xs font-bold text-slate/40 cursor-not-allowed">
+                        <Trash2 className="h-3.5 w-3.5 mr-2" /> Account Deleted
+                      </DropdownMenuItem>
+                    ) : user.status === "Active" ? (
                       <>
                         <DropdownMenuItem onClick={() => { setSuspendUser(user); setModalMode("suspend"); }} className="py-2 px-3 text-xs font-bold text-orange-500">
                           <Ban className="h-3.5 w-3.5 mr-2" /> Suspend User
@@ -896,10 +920,12 @@ export default function UsersPage() {
                       ? "bg-emerald-50 text-emerald-600 border-emerald-100/50" 
                       : user.status === "Blocked"
                       ? "bg-slate-100 text-slate-700 border-slate-200"
-                      : "bg-red-50 text-red-500 border-red-100/50"
+                      : user.status === "Deleted"
+                      ? "bg-rose-50 text-rose-600 border-rose-200"
+                      : "bg-amber-50 text-amber-600 border-amber-100/50"
                   } px-2 py-0.5 rounded-lg gap-1 font-bold text-[9px] items-center border shadow-none mt-0.5`}>
                     <div className={`w-1 h-1 rounded-full ${
-                      user.status === "Active" ? "bg-emerald-500" : user.status === "Blocked" ? "bg-slate-500" : "bg-red-500"
+                      user.status === "Active" ? "bg-emerald-500" : user.status === "Blocked" ? "bg-slate-500" : user.status === "Deleted" ? "bg-rose-500" : "bg-amber-500"
                     }`} />
                     {user.status}
                   </Badge>

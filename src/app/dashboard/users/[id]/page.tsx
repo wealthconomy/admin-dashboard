@@ -198,7 +198,14 @@ export default function UserDetailPage({ params }: { params?: Promise<{ id: stri
     duration: "30 Days",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const userStatus = user?.blockedAt || user?.disciplineStatus === "BLOCKED" ? "Blocked" : (user?.suspendedUntil || user?.disciplineStatus === "SUSPENDED" ? "Suspended" : "Active");
+  const userStatus =
+    user?.deletedAt || user?.status === "DELETED" || user?.disciplineStatus === "DELETED"
+      ? "Deleted"
+      : user?.blockedAt || user?.disciplineStatus === "BLOCKED"
+      ? "Blocked"
+      : user?.suspendedUntil || user?.disciplineStatus === "SUSPENDED"
+      ? "Suspended"
+      : "Active";
 
   const handleSuspendToggle = async () => {
     setIsSubmitting(true);
@@ -363,17 +370,25 @@ export default function UserDetailPage({ params }: { params?: Promise<{ id: stri
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-52 rounded-[16px] border-border/50 shadow-xl p-1 animate-in slide-in-from-top-1 duration-200 bg-white">
-                {userStatus === "Active" ? (
+                {userStatus === "Deleted" ? (
+                  <DropdownMenuItem 
+                    disabled 
+                    className="py-2.5 px-4 text-xs font-bold text-slate/40 cursor-not-allowed rounded-xl gap-2"
+                  >
+                     <Trash2 className="h-3.5 w-3.5 text-rose-500" />
+                     Account Deleted
+                  </DropdownMenuItem>
+                ) : userStatus === "Active" ? (
                   <>
                     <DropdownMenuItem 
-                      onClick={() => { setSuspendUser({ id: resolvedId, name: "Simon Smith", status: userStatus }); setModalMode("suspend"); }} 
+                      onClick={() => { setSuspendUser({ id: resolvedId, name: `${user?.firstName || ""} ${user?.lastName || ""}`.trim() || "User", status: userStatus }); setModalMode("suspend"); }} 
                       className="py-2.5 px-4 text-xs font-bold text-red-500 focus:bg-red-50 cursor-pointer rounded-xl gap-2"
                     >
                        <Ban className="h-3.5 w-3.5" />
                        Suspend User
                     </DropdownMenuItem>
                     <DropdownMenuItem 
-                      onClick={() => { setSuspendUser({ id: resolvedId, name: "Simon Smith", status: userStatus }); setModalMode("block"); }} 
+                      onClick={() => { setSuspendUser({ id: resolvedId, name: `${user?.firstName || ""} ${user?.lastName || ""}`.trim() || "User", status: userStatus }); setModalMode("block"); }} 
                       className="py-2.5 px-4 text-xs font-bold text-red-700 focus:bg-red-100 cursor-pointer rounded-xl gap-2"
                     >
                        <Lock className="h-3.5 w-3.5" />
@@ -382,7 +397,7 @@ export default function UserDetailPage({ params }: { params?: Promise<{ id: stri
                   </>
                 ) : (
                   <DropdownMenuItem 
-                    onClick={() => { setSuspendUser({ id: resolvedId, name: "Simon Smith", status: userStatus }); setModalMode(userStatus === "Blocked" ? "block" : "suspend"); }} 
+                    onClick={() => { setSuspendUser({ id: resolvedId, name: `${user?.firstName || ""} ${user?.lastName || ""}`.trim() || "User", status: userStatus }); setModalMode(userStatus === "Blocked" ? "block" : "suspend"); }} 
                     className="py-2.5 px-4 text-xs font-bold text-emerald-600 focus:bg-emerald-50 cursor-pointer rounded-xl gap-2"
                   >
                      <ShieldAlert className="h-3.5 w-3.5" />

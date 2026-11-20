@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useGetDashboardStatsQuery } from "@/lib/redux/features/dashboardApi";
+import { useGetUsersQuery } from "@/lib/redux/features/usersApi";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,6 +32,10 @@ const filters = ["Today", "Last Week", "Last Month", "6 Months", "A Year", "All 
 
 export function DashboardStats({ timeFilter, setTimeFilter }: DashboardStatsProps) {
   const { data: rawData, isLoading, isError } = useGetDashboardStatsQuery(mapFilterToPeriod(timeFilter));
+  const { data: usersResponse } = useGetUsersQuery({ limit: 1 });
+  const rawUsersData = usersResponse?.data || usersResponse;
+  const userRegistryTotal = rawUsersData?.total ?? rawUsersData?.totalCount;
+
   const data = rawData?.data; // Extract nested data
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -63,7 +68,9 @@ export function DashboardStats({ timeFilter, setTimeFilter }: DashboardStatsProp
   const stats = [
     {
       title: "Total registered users",
-      value: formatValue(data?.totalRegisteredUsers, "0"),
+      value: userRegistryTotal !== undefined 
+        ? Number(userRegistryTotal).toLocaleString() 
+        : formatValue(data?.totalRegisteredUsers, "0"),
       subtext: formatSubtext(data?.totalRegisteredUsers, "all time"),
       trend: data?.totalRegisteredUsers?.trend,
       icon: ClipboardList,
