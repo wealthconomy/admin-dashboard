@@ -5,10 +5,11 @@ import {
   ArrowLeft, Wallet, Target, Crosshair, Users, Activity,
   Briefcase, TrendingUp, Minus, Calendar, FileText, FileSpreadsheet,
   ShieldCheck, ChevronDown, ChevronUp, Leaf, BarChart2, Blend, Loader2,
-  AlertCircle, RotateCw
+  AlertCircle, RotateCw, ChevronLeft, ChevronRight
 } from "lucide-react";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import { 
   useGetPortfoliosByTypeQuery, 
   useGetTribesQuery,
@@ -106,8 +107,8 @@ function PlanStatusBadge({ status, isDeletedUser }: { status?: string; isDeleted
   const s = String(status || "").toUpperCase();
   if (isDeletedUser || s.includes("DELET") || s === "DELETED") {
     return (
-      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
-        <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-600 border border-rose-200">
+        <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
         Deleted Account
       </span>
     );
@@ -511,12 +512,12 @@ export default function PlanUsersPage() {
 
   // Data Fetching
   const { data: portfoliosRes, isLoading: isLoadingPortfolios, isFetching: isFetchingPortfolios, refetch: refetchPortfolios } = useGetPortfoliosByTypeQuery(
-    { type: meta?.backendType || "", period: dateFilter, status: "ALL" },
+    { type: meta?.backendType || "", period: dateFilter, status: "ALL", limit: 500 },
     { skip: !meta?.backendType || isWealthGroup, refetchOnMountOrArgChange: true }
   );
 
   const { data: tribesRes, isLoading: isLoadingTribes, isFetching: isFetchingTribes, refetch: refetchTribes } = useGetTribesQuery(
-    { period: dateFilter, status: "ALL" },
+    { period: dateFilter, status: "ALL", limit: 500 },
     { skip: !isWealthGroup, refetchOnMountOrArgChange: true }
   );
 
@@ -585,7 +586,19 @@ export default function PlanUsersPage() {
       const userObj = (typeof u.user === "object" && u.user !== null ? u.user : null) || (typeof u.customer === "object" && u.customer !== null ? u.customer : null) || {};
       const memberObj = (typeof u.member === "object" && u.member !== null ? u.member : null) || {};
 
-      const userIdKey = String(u.userId || u.user_id || userObj.id || userObj._id || memberObj.id || u.id || "");
+      const userIdKey = String(
+        u.userId ||
+        u.user_id ||
+        u.customerId ||
+        u.customer_id ||
+        userObj.id ||
+        userObj._id ||
+        userObj.userId ||
+        memberObj.id ||
+        memberObj.userId ||
+        u.id ||
+        ""
+      );
       const userEmailKey = String(u.email || userObj.email || memberObj.email || "").toLowerCase();
       const matchedUser = userMap.get(userIdKey) || userMap.get(userEmailKey) || {};
 
@@ -712,8 +725,17 @@ export default function PlanUsersPage() {
         userObj.isDeleted === true ||
         memberObj.isDeleted === true ||
         matchedUser.isDeleted === true ||
-        rawStatus.includes("DELET") ||
-        (userMap.size > 0 && !matchedUser.id && !matchedUser._id && !matchedUser.email);
+        Boolean(u.deletedAt) ||
+        Boolean(userObj.deletedAt) ||
+        Boolean(memberObj.deletedAt) ||
+        Boolean(matchedUser.deletedAt) ||
+        String(u.disciplineStatus || "").toUpperCase() === "DELETED" ||
+        String(userObj.disciplineStatus || "").toUpperCase() === "DELETED" ||
+        String(matchedUser.disciplineStatus || "").toUpperCase() === "DELETED" ||
+        String(u.status || "").toUpperCase() === "DELETED" ||
+        String(userObj.status || "").toUpperCase() === "DELETED" ||
+        String(matchedUser.status || "").toUpperCase() === "DELETED" ||
+        rawStatus.includes("DELET");
 
       let status: "ACTIVE" | "COMPLETED" | "MATURED" | "WITHDRAWN" | "CLOSED" | "TERMINATED" | "DELETED" = "ACTIVE";
 
@@ -939,6 +961,21 @@ export default function PlanUsersPage() {
   const completedCount = isWealthGroup ? completedGroups.length : completedUsers.length;
   const terminatedCount = isWealthGroup ? terminatedGroups.length : isWealthFlex ? deletedUsers.length : terminatedUsers.length;
   const allCount = isWealthGroup ? validGroups.length : users.length;
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [planTab, dateFilter, planKey]);
+
+  const totalPages = Math.max(1, Math.ceil(displayedUsers.length / pageSize));
+  const validCurrentPage = Math.min(Math.max(1, currentPage), totalPages);
+  const startIndex = (validCurrentPage - 1) * pageSize;
+  const paginatedUsers = displayedUsers.slice(startIndex, startIndex + pageSize);
+  const displayFrom = displayedUsers.length === 0 ? 0 : startIndex + 1;
+  const displayTo = Math.min(startIndex + pageSize, displayedUsers.length);
 
   if (!meta) {
     return (
@@ -1178,11 +1215,11 @@ export default function PlanUsersPage() {
               onClick={() => setPlanTab("terminated")}
               className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 planTab === "terminated"
-                  ? "bg-white text-slate-700 shadow-sm"
+                  ? "bg-white text-rose-600 shadow-sm"
                   : "text-slate/60 hover:text-dark hover:bg-white/50"
               }`}
             >
-              <span className="w-2 h-2 rounded-full bg-slate-500" />
+              <span className="w-2 h-2 rounded-full bg-rose-500" />
               Deleted Accounts ({terminatedCount})
             </button>
           ) : (
@@ -1212,7 +1249,7 @@ export default function PlanUsersPage() {
         </div>
 
         <div className="text-xs font-semibold text-slate/50">
-          Showing {isWealthGroup ? displayedGroups.length : displayedUsers.length}{" "}
+          Showing {isWealthGroup ? displayedGroups.length : `${displayFrom}–${displayTo} of ${displayedUsers.length}`}{" "}
           {isWealthFlex
             ? planTab === "active"
               ? "active account(s)"
@@ -1273,7 +1310,7 @@ export default function PlanUsersPage() {
             </thead>
 
             <tbody className="divide-y divide-border/15">
-              {displayedUsers.map((user) => {
+              {paginatedUsers.map((user) => {
                 const matDays = user.maturityDate ? getDaysRemaining(user.maturityDate) : null;
 
                 return (
@@ -1369,6 +1406,70 @@ export default function PlanUsersPage() {
               })}
             </tbody>
           </table>
+
+          {/* Pagination Controls */}
+          {displayedUsers.length > 0 && (
+            <div className="flex flex-col sm:flex-row justify-between items-center gap-3 text-xs font-bold text-slate/50 p-4 border-t border-border/20 bg-surface/30">
+              <div className="flex items-center gap-3">
+                <span>
+                  Showing {displayFrom}–{displayTo} of {displayedUsers.length} accounts
+                </span>
+                <div className="flex items-center gap-1.5 text-[11px] text-slate/50">
+                  <span>Per page:</span>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                    className="bg-white border border-border/40 rounded-lg px-2 py-1 text-xs font-bold text-dark focus:outline-none focus:ring-1 focus:ring-primary/30"
+                  >
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={validCurrentPage <= 1}
+                  className={`h-8 px-3 text-[11px] font-bold rounded-lg gap-1 ${
+                    validCurrentPage <= 1
+                      ? "text-slate/40 border-slate-200 cursor-not-allowed opacity-50"
+                      : "text-dark border-slate-200 hover:bg-[#E8F3F3] hover:text-[#155D5F]"
+                  }`}
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                  Prev
+                </Button>
+
+                <span className="px-2 text-xs font-bold text-dark">
+                  Page {validCurrentPage} of {totalPages}
+                </span>
+
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={validCurrentPage >= totalPages}
+                  className={`h-8 px-3 text-[11px] font-bold rounded-lg gap-1 ${
+                    validCurrentPage >= totalPages
+                      ? "text-slate/40 border-slate-200 cursor-not-allowed opacity-50"
+                      : "text-dark border-slate-200 hover:bg-[#E8F3F3] hover:text-[#155D5F]"
+                  }`}
+                >
+                  Next
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+          )}
+
           {displayedUsers.length === 0 && (
             <div className="py-20 text-center flex flex-col items-center gap-2 text-slate/40">
               <Users className="w-8 h-8" />
